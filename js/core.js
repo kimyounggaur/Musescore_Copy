@@ -556,6 +556,9 @@ window.SF = window.SF || {};
         if (ev.lyric) next.lyric = ev.lyric;
         if (ev.dynamic) next.dynamic = ev.dynamic;
         if (ev.artics) next.artics = [...ev.artics];
+        if (ev.tempo) next.tempo = ev.tempo;
+        if (ev.rehearsal) next.rehearsal = ev.rehearsal;
+        if (ev.staffText) next.staffText = ev.staffText;
       }
       ids.push(next.id);
       return next;
@@ -686,6 +689,9 @@ window.SF = window.SF || {};
               lyric: ev.lyric,
               dynamic: ev.dynamic,
               artics: ev.artics ? [...ev.artics] : null,
+              tempo: ev.tempo,
+              rehearsal: ev.rehearsal,
+              staffText: ev.staffText,
             });
           } else {
             items.push({ type: "rest", len, fromFull: !!ev.full });
@@ -729,6 +735,9 @@ window.SF = window.SF || {};
               if (first && it.lyric) ev.lyric = it.lyric;
               if (first && it.dynamic) ev.dynamic = it.dynamic;
               if (first && it.artics) ev.artics = [...it.artics];
+              if (first && it.tempo) ev.tempo = it.tempo;
+              if (first && it.rehearsal) ev.rehearsal = it.rehearsal;
+              if (first && it.staffText) ev.staffText = it.staffText;
               replaceRange(score, m, t, durValue(d), () => [ev], ctx);
             } else {
               replaceRange(score, m, t, durValue(d), () =>

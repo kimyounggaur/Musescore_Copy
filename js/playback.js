@@ -313,33 +313,82 @@
    */
   const VELS = { pp: 0.38, p: 0.48, mp: 0.58, mf: 0.68, f: 0.8, ff: 0.92 };
 
+  function buildTempoMap(score, refs) {
+    const L = C.measureLen(score);
+    const maxMeasures = Math.max(1, ...refs.map(r => r.measures.length));
+    const totalAbs = L.mul(new Fraction(maxMeasures, 1));
+    const changes = [{ abs: Fraction.ZERO, tempo: Math.max(30, Math.min(280, score.tempo || 100)) }];
+    const seen = new Set(["0/1"]);
+    for (const ref of refs) {
+      for (let m = 0; m < ref.measures.length; m++) {
+        let tick = Fraction.ZERO;
+        for (const ev of ref.measures[m].events) {
+          if (ev.tempo && !isNaN(+ev.tempo)) {
+            const abs = L.mul(new Fraction(m, 1)).add(tick);
+            const key = abs.toString();
+            const tempo = Math.max(30, Math.min(280, Math.round(+ev.tempo)));
+            if (key === "0/1") changes[0].tempo = tempo;
+            else if (!seen.has(key)) { changes.push({ abs, tempo }); seen.add(key); }
+          }
+          tick = tick.add(C.durValue(ev.dur));
+        }
+      }
+    }
+    changes.sort((a, b) => a.abs.cmp(b.abs));
+    const seconds = [0];
+    for (let i = 1; i < changes.length; i++) {
+      const prev = changes[i - 1], cur = changes[i];
+      seconds[i] = seconds[i - 1] + cur.abs.sub(prev.abs).value * 4 * 60 / prev.tempo;
+    }
+    const secondsAt = (abs) => {
+      let i = 0;
+      while (i + 1 < changes.length && changes[i + 1].abs.lte(abs)) i++;
+      return seconds[i] + abs.sub(changes[i].abs).value * 4 * 60 / changes[i].tempo;
+    };
+    const durationSec = (abs, len) => secondsAt(abs.add(len)) - secondsAt(abs);
+    const beatLen = new Fraction(1, score.timeSig.den);
+    const beatTimes = [];
+    let beatAbs = Fraction.ZERO, beatIdx = 0;
+    while (beatAbs.lt(totalAbs)) {
+      beatTimes.push({ t: secondsAt(beatAbs), accent: beatIdx % score.timeSig.num === 0 });
+      beatAbs = beatAbs.add(beatLen);
+      beatIdx++;
+    }
+    const measureTimes = [];
+    for (let m = 0; m <= maxMeasures; m++) measureTimes.push(secondsAt(L.mul(new Fraction(m, 1))));
+    return { changes, secondsAt, durationSec, beatTimes, measureTimes, totalSec: secondsAt(totalAbs), maxMeasures };
+  }
+
   function compile(score) {
     C.ensureParts(score);
-    const spw = 4 * 60 / score.tempo; // 온음표 1개의 초
+    const refs = C.staffRefs(score);
+    const tempoMap = buildTempoMap(score, refs);
+    const spw = 4 * 60 / (tempoMap.changes[0]?.tempo || score.tempo || 100); // 호환용 초기 온음표 초
     const L = C.measureLen(score);
-    const mLenSec = L.value * spw;
     const events = [];
+    const timelineEvents = [];
     const consumed = new Set(); // "m:e:midi" 타이로 흡수된 음
     const slurCover = C.slurCoverMap ? C.slurCoverMap(score) : new Set();
     const dynList = []; // 명시적 셈여림 [{t, v}] — 헤어핀 목표 탐색용
     const posById = new Map(); // 이벤트 id → {t, vel} (쉼표 포함)
-    let maxMeasures = 0;
 
-    for (const ref of C.staffRefs(score)) {
+    for (const ref of refs) {
       let vel = VELS.mf;
-      maxMeasures = Math.max(maxMeasures, ref.measures.length);
       for (let m = 0; m < ref.measures.length; m++) {
         const evs = ref.measures[m].events;
         let tick = Fraction.ZERO;
         for (let e = 0; e < evs.length; e++) {
           const ev = evs[e];
-          const t = m * mLenSec + tick.value * spw;
-          const dval = C.durValue(ev.dur).value * spw;
+          const abs = L.mul(new Fraction(m, 1)).add(tick);
+          const evLen = C.durValue(ev.dur);
+          const t = tempoMap.secondsAt(abs);
+          const dval = tempoMap.durationSec(abs, evLen);
           if (ev.dynamic && VELS[ev.dynamic] !== undefined) {
             vel = VELS[ev.dynamic];
             dynList.push({ t, v: vel });
           }
           posById.set(ev.id, { t, vel });
+          timelineEvents.push({ id: ev.id, t, mIdx: m, partIdx: ref.partIdx, staffIdx: ref.staffIdx });
           if (ev.type === "note") {
             const midis = [];
             for (const note of ev.notes) {
@@ -347,7 +396,7 @@
               const key = ref.globalIdx + ":" + m + ":" + e + ":" + midi;
               if (consumed.has(key)) continue;
               // 타이 체인 길이 합산
-              let total = dval;
+              let totalLen = evLen;
               let cur = { ...ref, m, e, ev }, curNote = note;
               while (curNote.tie) {
                 const nx = C.nextEvent(score, cur.m, cur.e, ref);
@@ -355,10 +404,10 @@
                 const n2 = nx.ev.notes.find(n => C.midiOf(n) === midi && n.step === curNote.step);
                 if (!n2) break;
                 consumed.add(ref.globalIdx + ":" + nx.m + ":" + nx.e + ":" + midi);
-                total += C.durValue(nx.ev.dur).value * spw;
+                totalLen = totalLen.add(C.durValue(nx.ev.dur));
                 cur = nx; curNote = n2;
               }
-              midis.push({ midi, durSec: total });
+              midis.push({ midi, durSec: tempoMap.durationSec(abs, totalLen), durVal: totalLen });
             }
             if (midis.length) {
               const ar = ev.artics || [];
@@ -371,6 +420,7 @@
               if (ar.includes("marcato")) { boost += 0.2; if (!ar.includes("staccato")) gate = Math.min(gate, 0.92); }
               events.push({
                 id: ev.id, t, durSec: dval, midis, mIdx: m,
+                absVal: abs,
                 partIdx: ref.partIdx, staffIdx: ref.staffIdx,
                 channel: Math.min(15, ref.partIdx),
                 instrument: ref.instrument,
@@ -378,7 +428,7 @@
               });
             }
           }
-          tick = tick.add(C.durValue(ev.dur));
+          tick = tick.add(evLen);
         }
       }
     }
@@ -404,7 +454,16 @@
     for (const ev of events) ev.vel = Math.max(0.15, Math.min(1, ev.velBase + ev.boost));
 
     events.sort((a, b) => a.t - b.t || a.partIdx - b.partIdx || a.staffIdx - b.staffIdx);
-    return { events, spw, mLenSec, totalSec: Math.max(1, maxMeasures) * mLenSec };
+    timelineEvents.sort((a, b) => a.t - b.t || a.partIdx - b.partIdx || a.staffIdx - b.staffIdx);
+    return {
+      events, timelineEvents,
+      spw,
+      mLenSec: tempoMap.measureTimes[1] - tempoMap.measureTimes[0],
+      totalSec: Math.max(1, tempoMap.totalSec),
+      beatTimes: tempoMap.beatTimes,
+      measureTimes: tempoMap.measureTimes,
+      tempoChanges: tempoMap.changes,
+    };
   }
 
   /* ---------------- 재생 컨트롤 ---------------- */
@@ -446,8 +505,8 @@
     player.startCtxTime = ac.currentTime + 0.12;
     player.nextIdx = comp.events.findIndex(ev => ev.t >= player.startOffset - 1e-6);
     if (player.nextIdx < 0) player.nextIdx = comp.events.length;
-    const spb = comp.spw / score.timeSig.den; // 한 박(분모 기준)의 초
-    player.nextBeat = Math.ceil((player.startOffset - 1e-9) / spb);
+    player.nextBeat = comp.beatTimes.findIndex(b => b.t >= player.startOffset - 1e-6);
+    if (player.nextBeat < 0) player.nextBeat = comp.beatTimes.length;
     player.playing = true;
 
     const LOOKAHEAD = 0.18;
@@ -469,11 +528,11 @@
         player.nextIdx++;
       }
       if (player.metronome) {
-        const beats = score.timeSig.num;
-        while (player.nextBeat * spb <= horizon && player.nextBeat * spb < comp.totalSec) {
-          const bIdx = player.nextBeat;
-          const when = player.startCtxTime + (bIdx * spb - player.startOffset);
-          if (when >= now - 0.01) scheduleClick(when, bIdx % beats === 0);
+        const beats = comp.beatTimes;
+        while (player.nextBeat < beats.length && beats[player.nextBeat].t <= horizon) {
+          const beat = beats[player.nextBeat];
+          const when = player.startCtxTime + (beat.t - player.startOffset);
+          if (when >= now - 0.01) scheduleClick(when, beat.accent);
           player.nextBeat++;
         }
       }
@@ -537,11 +596,12 @@
   function exportMidi(score) {
     const PPQ = 480;
     const comp = compile(score);
-    const spq = comp.spw / 4; // 4분음표 초
-    const toTicks = (sec) => Math.round(sec / spq * PPQ);
+    const toTicks = (abs) => Math.round(abs.value * 4 * PPQ);
 
     const msgs = []; // {tick, data[]}
-    msgs.push({ tick: 0, data: [0xFF, 0x51, 0x03, ...u24(Math.round(60000000 / score.tempo))] });
+    for (const chg of comp.tempoChanges) {
+      msgs.push({ tick: toTicks(chg.abs), data: [0xFF, 0x51, 0x03, ...u24(Math.round(60000000 / chg.tempo))] });
+    }
     msgs.push({ tick: 0, data: [0xFF, 0x58, 0x04, score.timeSig.num, Math.log2(score.timeSig.den), 24, 8] });
     for (const part of score.parts || [{ instrument: score.instrument }]) {
       const ch = Math.min(15, (score.parts || []).indexOf(part));
@@ -553,8 +613,8 @@
       const gate = Math.min(ev.gate || 0.95, 0.98);
       for (const n of ev.midis) {
         const ch = ev.channel || 0;
-        msgs.push({ tick: toTicks(ev.t), data: [0x90 | ch, n.midi, v] });
-        msgs.push({ tick: toTicks(ev.t + n.durSec * gate), data: [0x80 | ch, n.midi, 0] });
+        msgs.push({ tick: toTicks(ev.absVal), data: [0x90 | ch, n.midi, v] });
+        msgs.push({ tick: toTicks(ev.absVal.add(n.durVal.mul(new Fraction(gate * 1000 | 0, 1000)))), data: [0x80 | ch, n.midi, 0] });
       }
     }
     msgs.sort((a, b) => a.tick - b.tick || noteOffFirst(a, b));

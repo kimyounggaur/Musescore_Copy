@@ -211,6 +211,9 @@
     if (src.lyric) f.ev.lyric = src.lyric; else delete f.ev.lyric;
     if (src.dynamic) f.ev.dynamic = src.dynamic; else delete f.ev.dynamic;
     if (src.artics && src.artics.length) f.ev.artics = [...src.artics]; else delete f.ev.artics;
+    if (src.tempo) f.ev.tempo = src.tempo; else delete f.ev.tempo;
+    if (src.rehearsal) f.ev.rehearsal = src.rehearsal; else delete f.ev.rehearsal;
+    if (src.staffText) f.ev.staffText = src.staffText; else delete f.ev.staffText;
     if (src.type === "note" && f.ev.type === "note") {
       for (let i = 0; i < f.ev.notes.length; i++) {
         f.ev.notes[i].tie = !!(f.ev.notes[i].tie || src.notes?.[i]?.tie);
@@ -610,6 +613,67 @@
     }
   }
 
+  function markerTarget() {
+    const found = selectedEvent() || targetEvent();
+    if (found) return found;
+    const ref = activeRef();
+    return ref.measures[0]?.events[0] ? { ...ref, m: 0, e: 0, ev: ref.measures[0].events[0] } : null;
+  }
+
+  function applyTempoMark() {
+    const found = markerTarget();
+    if (!found) { flashHint("템포를 붙일 위치를 먼저 선택하세요"); return; }
+    const cur = found.ev.tempo || C.state.score.tempo || 100;
+    const raw = prompt("템포 표시 ♩ =", String(cur));
+    if (raw === null) return;
+    const v = Math.max(30, Math.min(280, Math.round(+raw || cur)));
+    C.mutate("템포 표시", (score) => {
+      const f = C.findEvent(score, found.ev.id);
+      if (!f) return;
+      f.ev.tempo = v;
+      if (f.m === 0 && C.eventStartTick(f.measures[f.m], f.e).isZero()) score.tempo = v;
+    });
+    stopPlayback(); update(); toast(`템포 ♩=${v}`);
+  }
+
+  function nextRehearsalMark() {
+    const used = [];
+    for (const ref of C.staffRefs(C.state.score)) {
+      for (const mm of ref.measures) for (const ev of mm.events) if (ev.rehearsal) used.push(String(ev.rehearsal));
+    }
+    const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    for (const ch of letters) if (!used.includes(ch)) return ch;
+    return String(used.length + 1);
+  }
+
+  function applyRehearsalMark() {
+    const found = markerTarget();
+    if (!found) { flashHint("리허설 마크를 붙일 위치를 먼저 선택하세요"); return; }
+    const raw = prompt("리허설 마크", found.ev.rehearsal || nextRehearsalMark());
+    if (raw === null) return;
+    const text = raw.trim().slice(0, 12);
+    C.mutate("리허설 마크", (score) => {
+      const f = C.findEvent(score, found.ev.id);
+      if (!f) return;
+      if (text) f.ev.rehearsal = text; else delete f.ev.rehearsal;
+    });
+    update(); toast(text ? `리허설 ${text}` : "리허설 마크를 지웠어요");
+  }
+
+  function applyStaffText() {
+    const found = markerTarget();
+    if (!found) { flashHint("텍스트를 붙일 위치를 먼저 선택하세요"); return; }
+    const raw = prompt("스태프 텍스트", found.ev.staffText || "");
+    if (raw === null) return;
+    const text = raw.trim().slice(0, 48);
+    C.mutate("스태프 텍스트", (score) => {
+      const f = C.findEvent(score, found.ev.id);
+      if (!f) return;
+      if (text) f.ev.staffText = text; else delete f.ev.staffText;
+    });
+    update(); toast(text ? "스태프 텍스트를 붙였어요" : "스태프 텍스트를 지웠어요");
+  }
+
   /* ---------------- 입력 모드 ---------------- */
   function setInputMode(on) {
     ui.inputMode = on;
@@ -825,27 +889,19 @@
   function buildTimeline() {
     // 모든 이벤트(쉼표 포함)의 시각 → 레이아웃 x와 결합
     const score = C.state.score;
-    const spw = 4 * 60 / score.tempo;
-    const L = C.measureLen(score);
-    const mLenSec = L.value * spw;
+    const comp = P.compile(score);
     const pts = [];
     const layout = layoutCache || E.getLayout();
-    for (const ref of C.staffRefs(score)) {
-      for (let m = 0; m < ref.measures.length; m++) {
-        let tick = Fraction.ZERO;
-        for (const ev of ref.measures[m].events) {
-          const le = layout.eventsById.get(ev.id);
-          if (le) pts.push({ t: m * mLenSec + tick.value * spw, x: le.x, sys: le.sys, staff: le.staff, id: ev.id });
-          tick = tick.add(C.durValue(ev.dur));
-        }
-      }
+    for (const tev of comp.timelineEvents || []) {
+      const le = layout.eventsById.get(tev.id);
+      if (le) pts.push({ t: tev.t, x: le.x, sys: le.sys, staff: le.staff, id: tev.id });
     }
     for (let m = 0; m < score.measures.length; m++) {
       // 마디 끝점
       const sysM = layout.systems.find(S => S.measures.some(M => M.idx === m));
       if (sysM) {
         const M = sysM.measures.find(M2 => M2.idx === m);
-        pts.push({ t: (m + 1) * mLenSec, x: M.x1, sys: sysM, id: null });
+        pts.push({ t: comp.measureTimes?.[m + 1] ?? comp.totalSec, x: M.x1, sys: sysM, id: null });
       }
     }
     pts.sort((a, b) => a.t - b.t);
@@ -866,9 +922,9 @@
     let fromSec = 0;
     const found = selectedEvent();
     if (found) {
-      const spw = 4 * 60 / score.tempo;
-      const L = C.measureLen(score).value * spw;
-      fromSec = found.m * L + C.eventStartTick(found.measures[found.m], found.e).value * spw;
+      const comp = P.compile(score);
+      const tev = (comp.timelineEvents || []).find(ev => ev.id === found.ev.id);
+      fromSec = tev ? tev.t : 0;
     }
     startPlayback(fromSec);
   }
@@ -1123,10 +1179,12 @@
       const ev = found.ev;
       if (ev.type === "note") {
         const names = ev.notes.map(n => `${C.pitchName(n, "ko")}(${C.pitchName(n)})`).join("·");
-        const extra = (ev.artics && ev.artics.length ? " · " + ev.artics.join(",") : "") + (ev.dynamic ? " · " + ev.dynamic : "");
+        const marks = [ev.dynamic, ev.tempo ? `♩=${ev.tempo}` : "", ev.rehearsal ? `리허설 ${ev.rehearsal}` : "", ev.staffText || ""].filter(Boolean);
+        const extra = (ev.artics && ev.artics.length ? " · " + ev.artics.join(",") : "") + (marks.length ? " · " + marks.join(" · ") : "");
         text = `${found.name}${found.part.staves.length > 1 ? " " + (found.staffIdx + 1) : ""} · 마디 ${found.m + 1} · ${durName2(ev)} · ${names}${extra}`;
       } else {
-        text = `${found.name}${found.part.staves.length > 1 ? " " + (found.staffIdx + 1) : ""} · 마디 ${found.m + 1} · ${ev.full ? "온마디 쉼표" : durName2(ev) + " 쉼표"}`;
+        const marks = [ev.tempo ? `♩=${ev.tempo}` : "", ev.rehearsal ? `리허설 ${ev.rehearsal}` : "", ev.staffText || ""].filter(Boolean);
+        text = `${found.name}${found.part.staves.length > 1 ? " " + (found.staffIdx + 1) : ""} · 마디 ${found.m + 1} · ${ev.full ? "온마디 쉼표" : durName2(ev) + " 쉼표"}${marks.length ? " · " + marks.join(" · ") : ""}`;
       }
     } else if (ui.inputMode && ui.cursorId) {
       const f = C.findEvent(score, ui.cursorId);
@@ -1384,11 +1442,14 @@
       if (k === ">") { toggleHairpin("dim"); return; }
       if (e.shiftKey) {
         if (K === "S") { applyArticulation("staccato"); return; }
+        if (K === "T") { applyTempoMark(); return; }
+        if (K === "L") { applyStaffText(); return; }
         if (K === "V") { applyArticulation("accent"); return; }
         if (K === "N") { applyArticulation("tenuto"); return; }
         if (K === "O") { applyArticulation("marcato"); return; }
       }
       if (K === "S") { toggleSlur(); return; }
+      if (K === "R") { applyRehearsalMark(); return; }
       if (K === "N" && !e.repeat) { setInputMode(!ui.inputMode); return; }
       if (k in DUR_KEYS) { setDuration({ ...DURS[DUR_KEYS[k]], dots: ui.curDur.dots }); return; }
       if (k === ".") { toggleDot(); return; }
@@ -1482,6 +1543,9 @@
       if (found && found.ev.type === "note") { ui.selection = found.ev.id; update(); editLyric(found.ev.id); }
       else flashHint("가사를 붙일 음표를 먼저 선택하세요");
     });
+    $("#btn-tempo-mark").addEventListener("click", applyTempoMark);
+    $("#btn-rehearsal").addEventListener("click", applyRehearsalMark);
+    $("#btn-staff-text").addEventListener("click", applyStaffText);
     $("#btn-delete").addEventListener("click", deleteSelection);
     $("#btn-piano").addEventListener("click", () => {
       ui.pianoVisible = !ui.pianoVisible;

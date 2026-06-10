@@ -232,10 +232,11 @@
     const refs = C.staffRefs(score);
     const count = measureCount(score, refs);
     const hasLyrics = refs.some(ref => ref.measures.some(mm => mm.events.some(ev => ev.lyric)));
+    const hasAboveText = refs.some(ref => ref.measures.some(mm => mm.events.some(ev => ev.tempo || ev.rehearsal || ev.staffText)));
     const hasDyn = refs.some(ref => ref.measures.some(mm => mm.events.some(ev => ev.dynamic))) ||
       (score.spanners || []).some(sp => sp.type === "cresc" || sp.type === "dim");
     const groupH = staffGroupHeight(refs);
-    const PITCH = Math.max(150, groupH + 74 + (hasLyrics ? 24 : 0) + (hasDyn ? 16 : 0));
+    const PITCH = Math.max(150, groupH + 74 + (hasAboveText ? 18 : 0) + (hasLyrics ? 24 : 0) + (hasDyn ? 16 : 0));
     const lyricOff = STAFF_H + (hasDyn ? 52 : 34);
 
     // 마디 자연 폭
@@ -545,12 +546,30 @@
         body += `<text class="lyric" x="${r2(le.x)}" y="${S.yTop + S.lyricOff}" text-anchor="middle">${esc(ev.lyric)}</text>`;
       }
       if (ev.dynamic) body += renderDynamic(ev.dynamic, le.x, S.yTop + STAFF_H + 28);
+      body += renderEventText(ev, le, S);
       // 히트 영역
-      const hitX = le.x - 14, hitW = 28;
-      body += `<rect class="hit" x="${r2(hitX)}" y="${S.yTop - 30}" width="${hitW}" height="${STAFF_H + 60}" fill="transparent"/>`;
+      const hitX = le.x - 16, hitW = 32;
+      body += `<rect class="hit" x="${r2(hitX)}" y="${S.yTop - 46}" width="${hitW}" height="${STAFF_H + 82}" fill="transparent"/>`;
       s += `<g class="${cls}" data-ref="${ev.id}">${body}</g>`;
     }
     s += renderTuplets(score, M, S);
+    return s;
+  }
+
+  function renderEventText(ev, le, S) {
+    let s = "";
+    if (ev.rehearsal) {
+      const text = esc(ev.rehearsal);
+      const w = Math.max(22, text.length * 9 + 13), x = le.x - w / 2, y = S.yTop - 43;
+      s += `<g class="rehearsal-mark"><rect x="${r2(x)}" y="${r2(y)}" width="${r2(w)}" height="20" rx="3"/><text x="${r2(le.x)}" y="${r2(y + 15)}" text-anchor="middle">${text}</text></g>`;
+    }
+    if (ev.tempo) {
+      s += `<text class="tempo-mark" x="${r2(le.x)}" y="${r2(S.yTop - 20)}" text-anchor="middle">♩ = ${esc(String(ev.tempo))}</text>`;
+    }
+    if (ev.staffText) {
+      const y = S.yTop - (ev.tempo ? 6 : 10);
+      s += `<text class="staff-text" x="${r2(le.x)}" y="${r2(y)}" text-anchor="middle">${esc(ev.staffText)}</text>`;
+    }
     return s;
   }
 

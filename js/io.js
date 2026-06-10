@@ -146,6 +146,15 @@
             const timeMod = tp ? `<time-modification><actual-notes>${tp.actual}</actual-notes><normal-notes>${tp.normal}</normal-notes></time-modification>` : "";
             const tpStart = tp && (!mm.events[eIdx - 1] || mm.events[eIdx - 1].dur.tuplet?.id !== tp.id);
             const tpStop = tp && (!mm.events[eIdx + 1] || mm.events[eIdx + 1].dur.tuplet?.id !== tp.id);
+            if (ev.tempo) {
+              xml += `   <direction placement="above"><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${Math.round(+ev.tempo)}</per-minute></metronome></direction-type><sound tempo="${Math.round(+ev.tempo)}"/></direction>\n`;
+            }
+            if (ev.rehearsal) {
+              xml += `   <direction placement="above"><direction-type><rehearsal>${xmlEsc(ev.rehearsal)}</rehearsal></direction-type>${partRefs.length > 1 ? `<staff>${sIdx + 1}</staff>` : ""}</direction>\n`;
+            }
+            if (ev.staffText) {
+              xml += `   <direction placement="above"><direction-type><words>${xmlEsc(ev.staffText)}</words></direction-type>${partRefs.length > 1 ? `<staff>${sIdx + 1}</staff>` : ""}</direction>\n`;
+            }
             if (ev.dynamic && DYN_SOUND[ev.dynamic]) {
               xml += `   <direction placement="below"><direction-type><dynamics><${ev.dynamic}/></dynamics></direction-type>` +
                 `${partRefs.length > 1 ? `<staff>${sIdx + 1}</staff>` : ""}<sound dynamics="${DYN_SOUND[ev.dynamic]}"/></direction>\n`;
@@ -330,6 +339,7 @@
     let timeSig = null, keySig = null, clef = null, tempo = null;
     let chosenVoice = null, chosenStaff = null;
     let pendingDynamic = null;
+    let pendingTempo = null, pendingRehearsal = null, pendingStaffText = null;
     const pendingWedges = new Map(); // number → {type, startItem|null}
     const wedgePairs = [];
     const items = []; // 선택 성부의 음표들
@@ -375,10 +385,16 @@
           const soundEl = tag === "sound" ? el : el.querySelector("sound");
           const t = soundEl?.getAttribute("tempo") || textOf(el, "metronome > per-minute");
           if (t && !isNaN(+t)) {
-            if (tempo === null) tempo = Math.max(30, Math.min(280, Math.round(+t)));
-            else countWarn("tempo", "템포 변경은 첫 값만 사용");
+            const tv = Math.max(30, Math.min(280, Math.round(+t)));
+            if (tempo === null) tempo = tv;
+            pendingTempo = tv;
           }
           if (tag === "direction") {
+            const rehearsal = textOf(el, "direction-type rehearsal");
+            if (rehearsal) pendingRehearsal = rehearsal;
+            const words = [...el.querySelectorAll("direction-type words")]
+              .map(w => w.textContent.trim()).filter(Boolean).join(" ");
+            if (words) pendingStaffText = words;
             const dynEl = el.querySelector("direction-type dynamics > *");
             if (dynEl) {
               const mark = DYN_IMPORT[dynEl.tagName];
@@ -464,9 +480,11 @@
               mIdx, tick: cur, dur: dF,
               pitches: [{ ...pitch, tie: tieStart }],
               lyric: null, artics: [], dynamic: pendingDynamic,
+              tempo: pendingTempo, rehearsal: pendingRehearsal, staffText: pendingStaffText,
               slurStarts: [], slurStops: [],
             };
             pendingDynamic = null;
+            pendingTempo = null; pendingRehearsal = null; pendingStaffText = null;
             // 가사 (1절만)
             const lyrEl = el.querySelector(":scope > lyric");
             if (lyrEl) {
@@ -542,6 +560,9 @@
       if (item.lyric) evs[0].lyric = item.lyric;
       if (item.artics.length) evs[0].artics = [...new Set(item.artics)];
       if (item.dynamic) evs[0].dynamic = item.dynamic;
+      if (item.tempo) evs[0].tempo = item.tempo;
+      if (item.rehearsal) evs[0].rehearsal = item.rehearsal;
+      if (item.staffText) evs[0].staffText = item.staffText;
       C.replaceRange(score, item.mIdx, qTick, qDur, () => evs);
       item.firstId = evs[0].id;
       item.lastId = evs[evs.length - 1].id;
