@@ -8,3 +8,5 @@ Thumbs.db
 
 # Local server logs
 *.log
+
+.vercel
