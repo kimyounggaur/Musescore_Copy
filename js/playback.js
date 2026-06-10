@@ -1,5 +1,5 @@
 /* =========================================================================
- * ScoreForge playback — 악보 → 이벤트 컴파일 + Web Audio 재생/신스/메트로놈/MIDI
+ * ScoreForge playback — 악보 → 이벤트 컴파일 + Web Audio 재생/샘플러/신스/메트로놈/MIDI
  * 스케줄러는 "두 개의 시계" 패턴: setInterval 루프가 lookahead 안의 이벤트를
  * AudioContext 절대시각으로 예약한다.
  * ========================================================================= */
@@ -7,6 +7,7 @@
 (function (SF) {
   const C = SF.core;
   const { Fraction } = SF;
+  const SMPLR_URL = "https://unpkg.com/smplr/dist/index.mjs";
 
   /* ---------------- 악기 프리셋 ---------------- */
   const INSTRUMENTS = {
@@ -84,6 +85,125 @@
   /* ---------------- 신스 엔진 ---------------- */
   let ctx = null, master = null, limiter = null;
   const live = new Set(); // 정지 시 끊을 노드들
+  const sampleInstruments = new Map();
+  let smplrModule = null;
+  let smplrPromise = null;
+  let sampleStatus = { state: "idle", text: "샘플 대기", detail: "재생하면 smplr 실제 악기 샘플을 불러옵니다." };
+  let onSampleStatus = null;
+
+  const SAMPLE_MAP = {
+    piano: { kind: "splendid", label: "Splendid Grand Piano", volume: 98 },
+    epiano: { kind: "soundfont", instrument: "electric_piano_1", label: "Electric Piano", volume: 96 },
+    musicbox: { kind: "soundfont", instrument: "music_box", label: "Music Box", volume: 104 },
+    organ: { kind: "soundfont", instrument: "church_organ", label: "Church Organ", volume: 94 },
+    strings: { kind: "soundfont", instrument: "string_ensemble_1", label: "String Ensemble", volume: 90 },
+    flute: { kind: "soundfont", instrument: "flute", label: "Flute", volume: 96 },
+    chiptune: { kind: "soundfont", instrument: "lead_1_square", label: "Square Lead", volume: 92 },
+  };
+
+  function setSampleStatus(state, text, detail) {
+    sampleStatus = { state, text, detail: detail || text };
+    if (onSampleStatus) onSampleStatus(sampleStatus);
+  }
+
+  function getSampleStatus() {
+    return sampleStatus;
+  }
+
+  function setSampleStatusHandler(fn) {
+    onSampleStatus = typeof fn === "function" ? fn : null;
+    if (onSampleStatus) onSampleStatus(sampleStatus);
+  }
+
+  async function loadSmplrModule() {
+    if (smplrModule) return smplrModule;
+    if (!smplrPromise) {
+      setSampleStatus("loading", "샘플 로딩", "smplr 라이브러리를 불러오는 중입니다.");
+      smplrPromise = import(SMPLR_URL).then(mod => {
+        smplrModule = mod;
+        return mod;
+      }).catch(err => {
+        smplrPromise = null;
+        setSampleStatus("fallback", "신스 사용", "smplr를 불러오지 못해 내장 신스로 재생합니다.");
+        throw err;
+      });
+    }
+    return smplrPromise;
+  }
+
+  function sampleKey(instrument) {
+    return SAMPLE_MAP[instrument] ? instrument : "piano";
+  }
+
+  function createSampleInstrument(mod, key) {
+    const spec = SAMPLE_MAP[sampleKey(key)];
+    const opts = {
+      destination: master,
+      volume: spec.volume || 96,
+      onLoadProgress: ({ loaded, total }) => {
+        setSampleStatus("loading", `${loaded}/${total}`, `${spec.label} 샘플을 불러오는 중입니다.`);
+      },
+    };
+    if (spec.kind === "splendid" && mod.SplendidGrandPiano) return mod.SplendidGrandPiano(ctx, opts);
+    if (mod.Soundfont) return mod.Soundfont(ctx, { ...opts, instrument: spec.instrument });
+    throw new Error("smplr Soundfont factory is unavailable");
+  }
+
+  function ensureSampleInstrument(instrument) {
+    const key = sampleKey(instrument);
+    const cached = sampleInstruments.get(key);
+    if (cached) return cached.promise;
+    const rec = { instrument: null, ready: false, failed: false, promise: null };
+    rec.promise = (async () => {
+      const mod = await loadSmplrModule();
+      const inst = createSampleInstrument(mod, key);
+      rec.instrument = inst;
+      await (inst.ready || inst.load || Promise.resolve(inst));
+      rec.ready = true;
+      setSampleStatus("ready", "샘플 준비", `${(SAMPLE_MAP[key] || SAMPLE_MAP.piano).label} 샘플 음원 준비 완료`);
+      return rec;
+    })().catch(err => {
+      rec.failed = true;
+      setSampleStatus("fallback", "신스 사용", "샘플 음원을 불러오지 못해 내장 신스로 재생합니다.");
+      console.warn("[ScoreForge] smplr sample load failed:", err);
+      return rec;
+    });
+    sampleInstruments.set(key, rec);
+    return rec.promise;
+  }
+
+  function warmSamplesForScore(score) {
+    const keys = new Set();
+    for (const ref of C.staffRefs(score)) keys.add(sampleKey(ref.instrument || score.instrument));
+    return Promise.all([...keys].map(key => ensureSampleInstrument(key)));
+  }
+
+  function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  function scheduleSampleNote(instrument, midi, when, dur, vel) {
+    const rec = sampleInstruments.get(sampleKey(instrument));
+    if (!rec || !rec.ready || !rec.instrument || rec.failed) {
+      ensureSampleInstrument(instrument);
+      return false;
+    }
+    try {
+      rec.instrument.start({
+        note: midi,
+        velocity: Math.max(1, Math.min(127, Math.round((vel || 0.7) * 120))),
+        time: when,
+        duration: Math.max(0.03, dur),
+        stopId: `${midi}:${when.toFixed(3)}`,
+      });
+      return true;
+    } catch (err) {
+      rec.failed = true;
+      setSampleStatus("fallback", "신스 사용", "샘플 재생 중 문제가 생겨 내장 신스로 전환합니다.");
+      console.warn("[ScoreForge] smplr note failed:", err);
+      return false;
+    }
+  }
 
   function audio() {
     if (!ctx) {
@@ -295,6 +415,8 @@
     timer: null,
     raf: null,
     compiled: null,
+    loading: false,
+    startToken: 0,
     nextIdx: 0,
     nextBeat: 0,
     metronome: false,
@@ -303,8 +425,9 @@
     onEnd: null,
   };
 
-  function play(fromSec = 0) {
+  async function play(fromSec = 0) {
     stop(false);
+    const token = ++player.startToken;
     const score = C.state.score;
     const ac = audio();
     const comp = compile(score);
@@ -312,6 +435,13 @@
       // 빈 악보도 커서는 움직이게 재생은 허용
     }
     player.compiled = comp;
+    player.loading = true;
+    player.onState && player.onState(true);
+    try {
+      await Promise.race([warmSamplesForScore(score), delay(2200)]);
+    } catch (e) { }
+    if (token !== player.startToken) return;
+    player.loading = false;
     player.startOffset = Math.max(0, Math.min(fromSec, comp.totalSec - 0.001));
     player.startCtxTime = ac.currentTime + 0.12;
     player.nextIdx = comp.events.findIndex(ev => ev.t >= player.startOffset - 1e-6);
@@ -330,8 +460,12 @@
         const ev = evs[player.nextIdx];
         const when = player.startCtxTime + (ev.t - player.startOffset);
         const preset = INSTRUMENTS[ev.instrument] || INSTRUMENTS[score.instrument] || INSTRUMENTS.piano;
-        for (const n of ev.midis)
-          scheduleNote(preset, n.midi, when, Math.max(0.05, n.durSec * (ev.gate || 0.95)), ev.vel || 0.7);
+        for (const n of ev.midis) {
+          const dur = Math.max(0.05, n.durSec * (ev.gate || 0.95));
+          if (!scheduleSampleNote(ev.instrument || score.instrument, n.midi, when, dur, ev.vel || 0.7)) {
+            scheduleNote(preset, n.midi, when, dur, ev.vel || 0.7);
+          }
+        }
         player.nextIdx++;
       }
       if (player.metronome) {
@@ -363,12 +497,19 @@
   }
 
   function stop(notify = true) {
+    player.startToken++;
     if (player.timer) { clearInterval(player.timer); player.timer = null; }
     if (player.raf) { cancelAnimationFrame(player.raf); player.raf = null; }
-    const wasPlaying = player.playing;
+    const wasPlaying = player.playing || player.loading;
     player.playing = false;
+    player.loading = false;
     for (const node of live) { try { node.stop(); } catch (e) { } }
     live.clear();
+    for (const rec of sampleInstruments.values()) {
+      if (rec.instrument && rec.ready) {
+        try { rec.instrument.stop(); } catch (e) { }
+      }
+    }
     if (notify && wasPlaying && player.onState) player.onState(false);
   }
 
@@ -384,7 +525,12 @@
     const preset = INSTRUMENTS[ref?.instrument || score.instrument] || INSTRUMENTS.piano;
     const ac = audio();
     const arr = Array.isArray(midis) ? midis : [midis];
-    for (const m of arr) scheduleNote(preset, m, ac.currentTime + 0.01, durSec, 0.7);
+    const instrument = ref?.instrument || score.instrument;
+    for (const m of arr) {
+      if (!scheduleSampleNote(instrument, m, ac.currentTime + 0.01, durSec, 0.7)) {
+        scheduleNote(preset, m, ac.currentTime + 0.01, durSec, 0.7);
+      }
+    }
   }
 
   /* ---------------- MIDI 내보내기 (SMF type 0) ---------------- */
@@ -446,5 +592,6 @@
   SF.playback = {
     INSTRUMENTS, audio,
     play, stop, previewNote, pausePos, player, compile, exportMidi,
+    getSampleStatus, setSampleStatusHandler, ensureSampleInstrument,
   };
 })(window.SF);

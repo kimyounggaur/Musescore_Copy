@@ -824,7 +824,7 @@
 
   let pausedAt = 0;
   function togglePlay() {
-    if (P.player.playing) {
+    if (P.player.playing || P.player.loading) {
       pausedAt = P.pausePos();
       P.stop();
     } else {
@@ -921,6 +921,15 @@
       setActiveStaff(p, s);
       update();
     });
+    if (P.setSampleStatusHandler) {
+      P.setSampleStatusHandler((st) => {
+        const el = $("#sample-status");
+        if (!el) return;
+        el.className = `sample-status ${st.state || "idle"}`;
+        el.textContent = st.text || "샘플";
+        el.title = st.detail || "실제 악기 샘플 음원";
+      });
+    }
   }
 
   function refreshToolbar() {
@@ -1363,6 +1372,7 @@
         r.part.instrument = $("#instrument-select").value;
         if (r.partIdx === 0) s2.instrument = r.part.instrument;
       });
+      if (P.ensureSampleInstrument) P.ensureSampleInstrument($("#instrument-select").value);
       P.previewNote([60, 64, 67], 0.5);
       update();
     });
