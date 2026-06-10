@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ScoreForge — 쉬운 웹 악보 에디터</title>
+<meta name="description" content="브라우저에서 바로 쓰는 악보 만들기·재생 도구. 음표 입력, 재생, 가사, MusicXML/MIDI 내보내기까지.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎼</text></svg>">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ═══════════ 상단 메인 툴바 ═══════════ -->
+<header class="topbar">
+  <div class="brand"><span class="logo">🎼</span>ScoreForge&nbsp;<small>웹 악보 에디터</small></div>
+
+  <div class="menu-wrap">
+    <button id="btn-file" class="tbtn" title="파일 메뉴">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
+      <span class="lbl">파일</span> ▾
+    </button>
+    <div id="file-menu" class="menu">
+      <div class="mi" data-act="new">🆕 새 악보 만들기</div>
+      <div class="mi" data-act="open">📂 열기 <small>.json·.musicxml·.mxl</small></div>
+      <div class="mi" data-act="save">💾 저장 (.json) <small>Ctrl+S</small></div>
+      <hr>
+      <div class="mi" data-act="musicxml">🎼 MusicXML 내보내기 <small>MuseScore용</small></div>
+      <div class="mi" data-act="midi">🎵 MIDI 내보내기 (.mid)</div>
+      <div class="mi" data-act="print">🖨️ 인쇄 / PDF 저장</div>
+      <hr>
+      <div class="mtitle">데모 악보 열기</div>
+      <div class="mi" data-act="demo-butterfly">🦋 나비야 (가사 포함)</div>
+      <div class="mi" data-act="demo-star">⭐ 반짝반짝 작은 별</div>
+      <div class="mi" data-act="demo-airplane">✈️ 비행기</div>
+      <div class="mi" data-act="demo-rhythm">🥁 리듬 연습 (8분·점음표)</div>
+    </div>
+  </div>
+
+  <button id="btn-settings" class="tbtn" title="조표·박자·빠르기 등 악보 설정">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1"/></svg>
+    <span class="lbl">악보 설정</span>
+  </button>
+
+  <div class="tsep"></div>
+
+  <button id="btn-undo" class="tbtn" title="실행 취소 (Ctrl+Z)">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 7 4 11l4 4"/><path d="M4 11h10a5 5 0 0 1 0 10h-3"/></svg>
+  </button>
+  <button id="btn-redo" class="tbtn" title="다시 실행 (Ctrl+Shift+Z)">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 7 4 4-4 4"/><path d="M20 11H10a5 5 0 0 0 0 10h3"/></svg>
+  </button>
+
+  <div class="tsep"></div>
+
+  <button id="btn-rewind" class="tbtn" title="처음으로">
+    <svg class="ic" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="2.6" height="14" rx="1"/><path d="M19 5.8v12.4a1 1 0 0 1-1.6.8l-8-6.2a1 1 0 0 1 0-1.6l8-6.2a1 1 0 0 1 1.6.8Z"/></svg>
+  </button>
+  <button id="btn-play" class="tbtn play" title="재생/일시정지 (스페이스)">
+    <svg class="ic ic-play" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5.3v13.4a1 1 0 0 0 1.5.9l11-6.7a1 1 0 0 0 0-1.8l-11-6.7a1 1 0 0 0-1.5.9Z"/></svg>
+    <svg class="ic ic-pause" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg>
+  </button>
+  <button id="btn-stop" class="tbtn" title="정지 (Esc)">
+    <svg class="ic" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+  </button>
+  <button id="btn-metronome" class="tbtn" title="메트로놈 켜기/끄기">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9.5 3.5h5L18 20.5H6L9.5 3.5Z"/><path d="m12 14 5.5-8.5"/><circle cx="12" cy="14" r="1.3" fill="currentColor"/></svg>
+    <span class="lbl">메트로놈</span>
+  </button>
+
+  <div class="tempo-box" title="빠르기 (BPM)">
+    <svg viewBox="0 0 14 20" fill="currentColor"><ellipse cx="5" cy="15.5" rx="3.6" ry="2.8" transform="rotate(-20 5 15.5)"/><rect x="7.6" y="2" width="1.4" height="13.5" rx="0.7"/></svg>=
+    <input id="tempo-input" type="number" min="30" max="280" step="1" value="100">
+  </div>
+
+  <select id="instrument-select" class="tsel" title="재생 악기"></select>
+
+  <div class="tspacer"></div>
+
+  <button id="btn-piano" class="tbtn" title="화면 피아노 건반 보이기/숨기기">🎹 <span class="lbl">건반</span></button>
+  <button id="btn-help" class="tbtn" title="도움말·단축키">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.4 9.2a2.7 2.7 0 1 1 3.5 3.3c-.7.3-.9.8-.9 1.5v.4"/><circle cx="12" cy="17.3" r="0.6" fill="currentColor"/></svg>
+  </button>
+</header>
+
+<!-- ═══════════ 입력 팔레트 툴바 ═══════════ -->
+<div class="palette-bar">
+  <button id="btn-input" class="tbtn" title="음표 입력 모드 켜기/끄기 (N)">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m4 20 .8-3.2L16.6 5a1.8 1.8 0 0 1 2.6 0l.8.8a1.8 1.8 0 0 1 0 2.6L8.2 19.2 4 20Z"/><path d="m14.5 7 2.5 2.5"/></svg>
+    <span>입력 모드</span> <kbd>N</kbd>
+  </button>
+
+  <div class="tsep"></div>
+  <span id="dur-buttons" role="group" aria-label="음길이"></span>
+  <button id="btn-dot" class="tbtn" title="점음표 (.)" style="font-weight:900;font-size:18px">·</button>
+
+  <div class="tsep"></div>
+  <button id="btn-rest" class="tbtn" title="쉼표 입력 (0)"></button>
+
+  <div class="tsep"></div>
+  <button id="btn-sharp" class="tbtn" title="올림표 ♯"></button>
+  <button id="btn-flat" class="tbtn" title="내림표 ♭"></button>
+  <button id="btn-natural" class="tbtn" title="제자리표 ♮"></button>
+
+  <div class="tsep"></div>
+  <button id="btn-tie" class="tbtn" title="붙임줄(타이) — 같은 음 연결 (T)">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="4.5" cy="10" r="2" fill="currentColor" stroke="none"/><circle cx="19.5" cy="10" r="2" fill="currentColor" stroke="none"/><path d="M5.5 13.5q6.5 6 13 0"/></svg>
+    <span class="lbl">타이</span>
+  </button>
+  <button id="btn-slur" class="tbtn" title="이음줄(슬러) — 부드럽게 잇기 (S, 범위 선택 후)">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="4.5" cy="15" r="2" fill="currentColor" stroke="none"/><circle cx="19.5" cy="15" r="2" fill="currentColor" stroke="none"/><path d="M5 11.5q7-7.5 14 0"/></svg>
+    <span class="lbl">이음줄</span>
+  </button>
+  <button id="btn-lyric" class="tbtn" title="가사 입력 (L 또는 음표 더블클릭)">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16M4 10h16M4 15h9"/><path d="m16.5 19.5 1.2-3.6 3.6-1.2-2.4 4.8-2.4 0Z" fill="currentColor"/></svg>
+    <span class="lbl">가사</span>
+  </button>
+
+  <div class="tsep"></div>
+  <button class="tbtn artic-btn" data-artic="staccato" title="스타카토 — 짧게 끊어서 (Shift+S)">
+    <svg class="ic" viewBox="0 0 24 24"><ellipse cx="10" cy="9" rx="4.4" ry="3.2" fill="currentColor" transform="rotate(-21 10 9)"/><line x1="13.9" y1="8" x2="13.9" y2="-2" stroke="currentColor" stroke-width="1.6"/><circle cx="10" cy="17.5" r="2" fill="currentColor"/></svg>
+  </button>
+  <button class="tbtn artic-btn" data-artic="tenuto" title="테누토 — 음길이를 충분히 (Shift+N)">
+    <svg class="ic" viewBox="0 0 24 24"><ellipse cx="10" cy="9" rx="4.4" ry="3.2" fill="currentColor" transform="rotate(-21 10 9)"/><rect x="5.5" y="16.5" width="9" height="2" rx="1" fill="currentColor"/></svg>
+  </button>
+  <button class="tbtn artic-btn" data-artic="accent" title="악센트 — 세게 강조 (Shift+V)">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 7 L17 12 L5 17"/></svg>
+  </button>
+  <button class="tbtn artic-btn" data-artic="marcato" title="마르카토 — 매우 강하게 (Shift+O)">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 16 L12 6 L18 16"/></svg>
+  </button>
+  <button class="tbtn artic-btn" data-artic="fermata" title="페르마타 — 충분히 늘이기">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 15 A 8.2 8.2 0 0 1 20 15"/><circle cx="12" cy="13.5" r="1.7" fill="currentColor" stroke="none"/></svg>
+  </button>
+
+  <div class="tsep"></div>
+  <button class="tbtn dynbtn" data-dyn="pp" title="피아니시모 — 매우 여리게">pp</button>
+  <button class="tbtn dynbtn" data-dyn="p" title="피아노 — 여리게">p</button>
+  <button class="tbtn dynbtn" data-dyn="mp" title="메조피아노 — 조금 여리게">mp</button>
+  <button class="tbtn dynbtn" data-dyn="mf" title="메조포르테 — 조금 세게">mf</button>
+  <button class="tbtn dynbtn" data-dyn="f" title="포르테 — 세게">f</button>
+  <button class="tbtn dynbtn" data-dyn="ff" title="포르티시모 — 매우 세게">ff</button>
+  <button id="btn-cresc" class="tbtn" title="크레셴도 — 점점 세게 (범위 선택 후 <)">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M20 6 L4 12 L20 18"/></svg>
+  </button>
+  <button id="btn-dim" class="tbtn" title="디미누엔도 — 점점 여리게 (범위 선택 후 >)">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 6 L20 12 L4 18"/></svg>
+  </button>
+
+  <div class="tsep"></div>
+  <button id="btn-delete" class="tbtn" title="삭제 — 쉼표로 바꾸기 (Delete)">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 7h14M9.5 7V5.4A1.4 1.4 0 0 1 10.9 4h2.2a1.4 1.4 0 0 1 1.4 1.4V7M7 7l.8 12a1.6 1.6 0 0 0 1.6 1.5h5.2a1.6 1.6 0 0 0 1.6-1.5L17 7"/><path d="M10.2 11v5.5M13.8 11v5.5"/></svg>
+    <span class="lbl">삭제</span>
+  </button>
+</div>
+
+<!-- ═══════════ 악보 캔버스 ═══════════ -->
+<main id="canvas">
+  <div class="paper-sizer">
+    <div id="paper">
+      <div id="paper-head">
+        <h1 id="t-title" spellcheck="false" title="클릭해서 제목 수정"></h1>
+        <div id="t-composer" spellcheck="false" title="클릭해서 작곡가 수정"></div>
+      </div>
+      <div id="svg-host"></div>
+      <div id="lyric-editor">
+        <input type="text" placeholder="가사" autocomplete="off">
+        <div class="tip">Space=다음 · Esc=닫기</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- ═══════════ 화면 피아노 ═══════════ -->
+<div id="piano-bar"><div id="piano-keys"></div></div>
+
+<!-- ═══════════ 상태바 ═══════════ -->
+<footer class="statusbar">
+  <span id="status-sel"></span>
+  <span id="status-hint"></span>
+  <div class="zoom-ctrl">
+    <button id="btn-zoom-out" class="tbtn" title="축소">−</button>
+    <span id="zoom-label">100%</span>
+    <button id="btn-zoom-in" class="tbtn" title="확대">+</button>
+  </div>
+</footer>
+
+<div id="toast" role="status"></div>
+<div id="aria-live" class="visually-hidden" aria-live="polite"></div>
+
+<!-- ═══════════ 악보 설정 다이얼로그 ═══════════ -->
+<dialog id="dlg-settings">
+  <div class="dlg-head">
+    <h2>악보 설정</h2>
+    <form method="dialog"><button class="dlg-close" title="닫기">✕</button></form>
+  </div>
+  <div class="dlg-body">
+    <div class="form-grid">
+      <label for="set-title">제목</label>
+      <input id="set-title" class="full" type="text" placeholder="악보 제목">
+      <label for="set-composer">작곡가</label>
+      <input id="set-composer" class="full" type="text" placeholder="(선택)">
+      <label for="set-clef">음자리표</label>
+      <select id="set-clef">
+        <option value="treble">높은음자리표 𝄞</option>
+        <option value="bass">낮은음자리표 𝄢</option>
+      </select>
+      <label for="set-key">조표</label>
+      <select id="set-key"></select>
+      <label for="set-time">박자</label>
+      <select id="set-time">
+        <option value="2/4">2/4</option>
+        <option value="3/4">3/4</option>
+        <option value="4/4">4/4</option>
+        <option value="6/8">6/8</option>
+      </select>
+      <label for="set-tempo">빠르기 ♩=</label>
+      <input id="set-tempo" type="number" min="30" max="280">
+    </div>
+
+    <div class="form-row">
+      <span style="color:var(--text-dim);font-size:13px">마디</span>
+      <button id="set-add-measures" class="chip">＋ 마디 4개 추가</button>
+      <button id="set-del-measure" class="chip">－ 마지막 마디 삭제</button>
+    </div>
+    <div class="form-row">
+      <span style="color:var(--text-dim);font-size:13px">조옮김</span>
+      <div class="chiprow">
+        <button class="chip" data-transpose="1">반음 ↑</button>
+        <button class="chip" data-transpose="-1">반음 ↓</button>
+        <button class="chip" data-transpose="2">온음 ↑</button>
+        <button class="chip" data-transpose="-2">온음 ↓</button>
+        <button class="chip" data-transpose="12">옥타브 ↑</button>
+        <button class="chip" data-transpose="-12">옥타브 ↓</button>
+      </div>
+    </div>
+
+    <div class="dlg-actions">
+      <form method="dialog"><button class="tbtn">취소</button></form>
+      <button id="set-apply" class="tbtn primary">적용</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- ═══════════ 시작 다이얼로그 ═══════════ -->
+<dialog id="dlg-welcome">
+  <div class="dlg-head">
+    <h2>🎼 ScoreForge에 어서 오세요!</h2>
+    <form method="dialog"><button class="dlg-close" title="닫기">✕</button></form>
+  </div>
+  <div class="dlg-body">
+    <div style="color:var(--text-dim)">브라우저에서 바로 악보를 만들고, 듣고, 인쇄할 수 있어요. 딱 3가지만 기억하세요:</div>
+    <div class="steps">
+      <div class="step"><span class="big">✏️</span><kbd>N</kbd> 키 또는 입력 모드 버튼으로 <b>입력 모드</b> 켜기</div>
+      <div class="step"><span class="big">🖱️</span>보표를 <b>클릭</b>하거나 아래 <b>피아노 건반</b>을 눌러 음표 넣기</div>
+      <div class="step"><span class="big">▶️</span><kbd>스페이스</kbd> 키로 <b>재생</b>해서 들어보기</div>
+    </div>
+    <div class="demo-grid">
+      <button class="demo" data-start="blank"><span class="emoji">📄</span><span><b>빈 악보로 시작</b><small>조표·박자부터 직접 설정</small></span></button>
+      <button class="demo" data-start="butterfly"><span class="emoji">🦋</span><span><b>나비야</b><small>가사가 있는 동요 예제</small></span></button>
+      <button class="demo" data-start="star"><span class="emoji">⭐</span><span><b>반짝반짝 작은 별</b><small>계이름 가사 예제</small></span></button>
+      <button class="demo" data-start="rhythm"><span class="emoji">🥁</span><span><b>리듬 연습</b><small>8분음표·점음표·빔 예제</small></span></button>
+    </div>
+  </div>
+</dialog>
+
+<!-- ═══════════ 도움말 다이얼로그 ═══════════ -->
+<dialog id="dlg-help">
+  <div class="dlg-head">
+    <h2>도움말 · 단축키</h2>
+    <form method="dialog"><button class="dlg-close" title="닫기">✕</button></form>
+  </div>
+  <div class="dlg-body">
+    <div class="help-sec">음표 입력 (MuseScore 방식)</div>
+    <div class="help-grid">
+      <div class="hrow"><span>입력 모드 켜기/끄기</span><kbd>N</kbd></div>
+      <div class="hrow"><span>음 입력</span><kbd>A</kbd>~<kbd>G</kbd></div>
+      <div class="hrow"><span>음길이 선택</span><kbd>3</kbd>16분 ~ <kbd>7</kbd>온음표</div>
+      <div class="hrow"><span>점음표</span><kbd>.</kbd></div>
+      <div class="hrow"><span>쉼표</span><kbd>0</kbd></div>
+      <div class="hrow"><span>화음 쌓기</span><kbd>Shift</kbd>+<kbd>A~G</kbd>/클릭</div>
+      <div class="hrow"><span>반음 올리기/내리기</span><kbd>↑</kbd> <kbd>↓</kbd></div>
+      <div class="hrow"><span>옥타브 이동</span><kbd>Ctrl</kbd>+<kbd>↑/↓</kbd></div>
+      <div class="hrow"><span>붙임줄(타이)</span><kbd>T</kbd></div>
+      <div class="hrow"><span>입력 종료</span><kbd>Esc</kbd></div>
+    </div>
+    <div class="help-sec">선택·편집</div>
+    <div class="help-grid">
+      <div class="hrow"><span>이전/다음 음표 선택</span><kbd>←</kbd> <kbd>→</kbd></div>
+      <div class="hrow"><span>범위 선택(여러 음표)</span><kbd>Shift</kbd>+클릭 / <kbd>Shift</kbd>+<kbd>←→</kbd></div>
+      <div class="hrow"><span>선택 음표 음높이 변경</span><kbd>↑</kbd> <kbd>↓</kbd> 또는 드래그</div>
+      <div class="hrow"><span>음이름으로 재지정</span><kbd>A</kbd>~<kbd>G</kbd></div>
+      <div class="hrow"><span>삭제(쉼표로)</span><kbd>Delete</kbd></div>
+      <div class="hrow"><span>가사 입력</span><kbd>L</kbd> 또는 더블클릭</div>
+      <div class="hrow"><span>실행 취소/다시 실행</span><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></div>
+    </div>
+    <div class="help-sec">표현 기호 (선택 후)</div>
+    <div class="help-grid">
+      <div class="hrow"><span>이음줄(슬러)</span><kbd>S</kbd></div>
+      <div class="hrow"><span>스타카토</span><kbd>Shift</kbd>+<kbd>S</kbd></div>
+      <div class="hrow"><span>악센트</span><kbd>Shift</kbd>+<kbd>V</kbd></div>
+      <div class="hrow"><span>테누토</span><kbd>Shift</kbd>+<kbd>N</kbd></div>
+      <div class="hrow"><span>마르카토</span><kbd>Shift</kbd>+<kbd>O</kbd></div>
+      <div class="hrow"><span>크레셴도/디미누엔도</span><kbd>&lt;</kbd> / <kbd>&gt;</kbd> (범위 선택 후)</div>
+      <div class="hrow"><span>셈여림(pp~ff)</span>툴바 버튼 (다시 누르면 삭제)</div>
+      <div class="hrow"><span>페르마타</span>툴바 버튼</div>
+    </div>
+    <div class="help-sec">재생·기타</div>
+    <div class="help-grid">
+      <div class="hrow"><span>재생/일시정지</span><kbd>Space</kbd></div>
+      <div class="hrow"><span>선택한 음부터 재생</span>음표 선택 후 <kbd>Space</kbd></div>
+      <div class="hrow"><span>정지</span><kbd>Esc</kbd></div>
+      <div class="hrow"><span>저장</span><kbd>Ctrl</kbd>+<kbd>S</kbd></div>
+      <div class="hrow"><span>확대/축소</span><kbd>Ctrl</kbd>+휠</div>
+      <div class="hrow"><span>인쇄/PDF</span>파일 메뉴 → 인쇄</div>
+    </div>
+    <div style="margin-top:14px;color:var(--text-dim);font-size:12.5px">
+      💡 작업 내용은 브라우저에 자동 저장돼요. 다른 컴퓨터로 옮기려면 <b>파일 → 저장(.json)</b>으로 내려받고,
+      MuseScore 프로그램에서 열려면 <b>MusicXML 내보내기</b>를 쓰세요.
+    </div>
+  </div>
+</dialog>
+
+<!-- ═══════════ 가져오기 결과 다이얼로그 ═══════════ -->
+<dialog id="dlg-import">
+  <div class="dlg-head">
+    <h2>📂 가져오기 결과</h2>
+    <form method="dialog"><button class="dlg-close" title="닫기">✕</button></form>
+  </div>
+  <div class="dlg-body">
+    <div id="imp-summary" style="line-height:1.6"></div>
+    <ul id="imp-list" class="imp-list"></ul>
+    <div style="color:var(--text-dim);font-size:12.5px;margin-top:10px">
+      💡 가져온 악보는 자유롭게 수정한 뒤 <b>파일 → 저장(.json)</b>으로 보관하세요.
+    </div>
+    <div class="dlg-actions">
+      <form method="dialog"><button class="tbtn primary">확인</button></form>
+    </div>
+  </div>
+</dialog>
+
+<script src="js/core.js"></script>
+<script src="js/engrave.js"></script>
+<script src="js/playback.js"></script>
+<script src="js/io.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
