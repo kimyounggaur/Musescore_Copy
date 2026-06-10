@@ -80,9 +80,19 @@
   }
 
   /* ---------------- 입력 도우미 ---------------- */
-  function effectiveAlter(score, mIdx, beforeId, step, oct) {
+  function activeRef() { return C.activeRef(C.state.score); }
+  function setActiveStaff(partIdx, staffIdx, opts = {}) {
+    C.setActiveStaff(C.state.score, partIdx, staffIdx);
+    if (!opts.keepCursor) {
+      const ref = C.activeRef(C.state.score);
+      ui.cursorId = ref.measures[0]?.events[0]?.id || null;
+    }
+    refreshToolbar();
+    updateStatus();
+  }
+  function effectiveAlter(score, mIdx, beforeId, step, oct, ctx) {
     let alter = C.keyAlterFor(step, score.keySig);
-    const evs = score.measures[mIdx].events;
+    const evs = C.staffMeasures(score, ctx)[mIdx].events;
     for (const ev of evs) {
       if (ev.id === beforeId) break;
       if (ev.type !== "note") continue;
@@ -91,15 +101,15 @@
     return alter;
   }
 
-  function pitchFromStep(score, mIdx, beforeId, as) {
+  function pitchFromStep(score, mIdx, beforeId, as, ctx) {
     const step = ((as % 7) + 7) % 7;
     const oct = Math.floor(as / 7);
-    return { step, oct, alter: effectiveAlter(score, mIdx, beforeId, step, oct) };
+    return { step, oct, alter: effectiveAlter(score, mIdx, beforeId, step, oct, ctx) };
   }
 
   function nearestOctave(step, refPitch) {
     if (!refPitch) {
-      const mid = C.CLEFS[C.state.score.clef].middle;
+      const mid = C.CLEFS[C.activeClef(C.state.score)].middle;
       refPitch = { step: mid.step, oct: mid.oct };
     }
     const refAs = C.absStep(refPitch);
@@ -111,13 +121,13 @@
     return best;
   }
 
-  function findEventAtTick(score, mIdx, tick) {
+  function findEventAtTick(score, mIdx, tick, ctx) {
     const L = C.measureLen(score);
     while (tick.gte(L)) {
       tick = tick.sub(L); mIdx++;
-      if (mIdx >= score.measures.length) return null;
+      if (mIdx >= C.staffMeasures(score, ctx).length) return null;
     }
-    const evs = score.measures[mIdx].events;
+    const evs = C.staffMeasures(score, ctx)[mIdx].events;
     let t = Fraction.ZERO;
     for (const ev of evs) {
       const end = t.add(C.durValue(ev.dur));
@@ -128,11 +138,12 @@
   }
 
   /* 입력 실행 (커서/세그먼트 위치에) */
-  function doInput(mIdx, tick, pitches) {
+  function doInput(mIdx, tick, pitches, ctx = activeRef()) {
     const dur = { ...ui.curDur };
     let inserted = null;
     C.mutate(pitches ? "음표 입력" : "쉼표 입력", (score) => {
-      inserted = C.inputAt(score, mIdx, tick, dur, pitches);
+      C.setActiveStaff(score, ctx.partIdx, ctx.staffIdx);
+      inserted = C.inputAt(score, mIdx, tick, dur, pitches, ctx);
     });
     ui.lastInsertedId = inserted;
     if (pitches && pitches.length) {
@@ -141,7 +152,7 @@
     }
     // 커서 전진
     const nextTick = tick.add(C.durValue(dur));
-    const nid = findEventAtTick(C.state.score, mIdx, nextTick);
+    const nid = findEventAtTick(C.state.score, mIdx, nextTick, ctx);
     ui.cursorId = nid || inserted;
     ui.selection = null;
     update();
@@ -151,11 +162,13 @@
   function cursorPos() {
     const score = C.state.score;
     let found = ui.cursorId && C.findEvent(score, ui.cursorId);
+    const active = activeRef();
+    if (found && (found.partIdx !== active.partIdx || found.staffIdx !== active.staffIdx)) found = null;
     if (!found) {
-      ui.cursorId = score.measures[0].events[0].id;
+      ui.cursorId = active.measures[0].events[0].id;
       found = C.findEvent(score, ui.cursorId);
     }
-    const tick = C.eventStartTick(score.measures[found.m], found.e);
+    const tick = C.eventStartTick(found.measures[found.m], found.e);
     return { mIdx: found.m, tick, found };
   }
 
@@ -163,9 +176,10 @@
   function select(id, opts = {}) {
     ui.selection = id;
     if (!opts.extend || !ui.selAnchor) ui.selAnchor = id;
+    const found = id && C.findEvent(C.state.score, id);
+    if (found) C.setActiveStaff(C.state.score, found.partIdx, found.staffIdx);
     update();
     if (id && !opts.silent) {
-      const found = C.findEvent(C.state.score, id);
       if (found && found.ev.type === "note") {
         P.previewNote(found.ev.notes.map(C.midiOf), 0.3);
       }
@@ -213,12 +227,12 @@
     ui.curDur = { ...dur, dots: ui.curDur.dots && canDot(dur) ? ui.curDur.dots : 0 };
     const found = selectedEvent();
     if (found && !ui.inputMode) {
-      const tick = C.eventStartTick(C.state.score.measures[found.m], found.e);
+      const tick = C.eventStartTick(found.measures[found.m], found.e);
       const pitches = found.ev.type === "note" ? found.ev.notes.map(n => ({ step: n.step, alter: n.alter, oct: n.oct })) : null;
       const lyric = found.ev.lyric;
       let inserted = null;
       C.mutate("음길이 변경", (score) => {
-        inserted = C.inputAt(score, found.m, tick, { ...dur, dots: ui.curDur.dots }, pitches);
+        inserted = C.inputAt(score, found.m, tick, { ...dur, dots: ui.curDur.dots }, pitches, found);
         if (lyric && inserted) {
           const f2 = C.findEvent(score, inserted);
           if (f2) f2.ev.lyric = lyric;
@@ -237,10 +251,10 @@
       if (ev.full) return;
       const newDur = { n: ev.dur.n, d: ev.dur.d, dots: ev.dur.dots ? 0 : 1 };
       if (!canDot(newDur) && newDur.dots) return;
-      const tick = C.eventStartTick(C.state.score.measures[found.m], found.e);
+      const tick = C.eventStartTick(found.measures[found.m], found.e);
       const pitches = ev.type === "note" ? ev.notes.map(n => ({ step: n.step, alter: n.alter, oct: n.oct })) : null;
       let inserted = null;
-      C.mutate("점음표", (score) => { inserted = C.inputAt(score, found.m, tick, newDur, pitches); });
+      C.mutate("점음표", (score) => { inserted = C.inputAt(score, found.m, tick, newDur, pitches, found); });
       ui.selection = inserted;
       update();
     } else {
@@ -290,7 +304,7 @@
       C.mutate("범위 삭제", (score) => {
         for (const id of ids) {
           const f = C.findEvent(score, id);
-          if (f) C.deleteEvent(score, f.m, f.e);
+          if (f) C.deleteEvent(score, f.m, f.e, f);
         }
       });
       ui.selection = null; ui.selAnchor = null;
@@ -301,7 +315,7 @@
     if (!found) return;
     C.mutate("삭제", (score) => {
       const f = C.findEvent(score, found.ev.id);
-      if (f) C.deleteEvent(score, f.m, f.e);
+      if (f) C.deleteEvent(score, f.m, f.e, f);
     });
     ui.selection = null; ui.selAnchor = null;
     update();
@@ -329,7 +343,7 @@
     if (!found || found.ev.type !== "note") { flashHint("타이를 걸 음표를 선택하세요"); return; }
     const score = C.state.score;
     const f = C.findEvent(score, found.ev.id);
-    const nx = C.nextEvent(score, f.m, f.e);
+    const nx = C.nextEvent(score, f.m, f.e, f);
     if (!nx) return;
     if (nx.ev.type === "note" && f.ev.notes.every(n => nx.ev.notes.some(n2 => C.pitchEq(n, n2)))) {
       C.mutate("타이", (s2) => {
@@ -340,10 +354,10 @@
       });
     } else if (nx.ev.type === "rest") {
       // 다음이 쉼표면 같은 음을 만들어 연결 (MuseScore 동작)
-      const tick = C.eventStartTick(score.measures[nx.m], nx.e);
+      const tick = C.eventStartTick(nx.measures[nx.m], nx.e);
       const pitches = f.ev.notes.map(n => ({ step: n.step, alter: n.alter, oct: n.oct }));
       C.mutate("타이", (s2) => {
-        C.inputAt(s2, nx.m, tick, { ...f.ev.dur }, pitches);
+        C.inputAt(s2, nx.m, tick, { ...f.ev.dur }, pitches, nx);
         const ff = C.findEvent(s2, found.ev.id);
         if (ff) ff.ev.notes.forEach(n => n.tie = true);
         C.normalizeTies(s2);
@@ -409,8 +423,8 @@
     if (!ends) { flashHint("이음줄을 걸 음표를 먼저 선택하세요"); return; }
     if (ends.count === 1 || ends.firstId === ends.lastId) {
       const f = C.findEvent(score, ends.firstId);
-      let nx = C.nextEvent(score, f.m, f.e);
-      while (nx && nx.ev.type !== "note") nx = C.nextEvent(score, nx.m, nx.e);
+      let nx = C.nextEvent(score, f.m, f.e, f);
+      while (nx && nx.ev.type !== "note") nx = C.nextEvent(score, nx.m, nx.e, nx);
       if (!nx) { flashHint("이음줄을 이을 다음 음표가 없어요"); return; }
       ends = { firstId: ends.firstId, lastId: nx.ev.id };
     }
@@ -511,10 +525,11 @@
     if (ui.inputMode) {
       const hit = E.hitTest(pt.x, pt.y);
       if (!hit || !hit.le) return;
+      C.setActiveStaff(C.state.score, hit.le.partIdx, hit.le.staffIdx);
       if (ui.restMode) {
-        doInput(hit.le.mIdx, hit.le.tick, null);
+        doInput(hit.le.mIdx, hit.le.tick, null, hit.le);
       } else {
-        const pitch = pitchFromStep(C.state.score, hit.le.mIdx, hit.le.ev.id, clampStep(hit.step));
+        const pitch = pitchFromStep(C.state.score, hit.le.mIdx, hit.le.ev.id, clampStep(hit.step, hit.le), hit.le);
         if (evt.shiftKey) {
           // Shift+클릭: 해당 위치 화음에 음 추가
           const id = hit.le.ev.id;
@@ -532,7 +547,7 @@
             return;
           }
         }
-        doInput(hit.le.mIdx, hit.le.tick, [pitch]);
+        doInput(hit.le.mIdx, hit.le.tick, [pitch], hit.le);
       }
     } else {
       if (refEl) {
@@ -544,8 +559,9 @@
     }
   }
 
-  function clampStep(as) {
-    const bottom = C.CLEFS[C.state.score.clef].bottomStep;
+  function clampStep(as, ctx) {
+    const ref = ctx ? C.staffRef(C.state.score, ctx) : activeRef();
+    const bottom = C.CLEFS[ref.clef].bottomStep;
     return Math.max(bottom - 11, Math.min(bottom + 19, as));
   }
 
@@ -557,6 +573,7 @@
     const id = refEl.getAttribute("data-ref");
     const found = C.findEvent(C.state.score, id);
     if (!found || found.ev.type !== "note") return;
+    C.setActiveStaff(C.state.score, found.partIdx, found.staffIdx);
     const pt = svgPoint(evt);
     ui.dragging = { id, startY: evt.clientY, startPt: pt, moved: false, lastDelta: 0 };
   }
@@ -573,10 +590,10 @@
     if (!le) return;
     const score = C.state.score;
     const baseAs = C.absStep(C.findEvent(score, d.id).ev.notes[0]);
-    const targetAs = E.stepForY(le.sys, score, pt.y);
-    d.lastDelta = clampStep(targetAs) - baseAs;
+    const targetAs = E.stepForY(le.staff, score, pt.y);
+    d.lastDelta = clampStep(targetAs, le) - baseAs;
     // 고스트 미리보기
-    E.drawGhost({ sys: le.sys, le, step: clampStep(targetAs) }, C.findEvent(score, d.id).ev.dur, false);
+    E.drawGhost({ sys: le.sys, staff: le.staff, le, step: clampStep(targetAs, le) }, C.findEvent(score, d.id).ev.dur, false);
   }
   function onPointerUp(evt) {
     const d = ui.dragging;
@@ -611,7 +628,7 @@
     const box = $("#lyric-editor");
     const svg = $("#score-svg");
     const headH = $("#paper-head").offsetHeight;
-    const yPx = le.sys.yTop + (le.sys.lyricOff || E.STAFF_H + 34) - 10;
+    const yPx = le.staff.yTop + (le.staff.lyricOff || E.STAFF_H + 34) - 10;
     box.style.display = "block";
     box.style.left = (le.x - 44) + "px";
     box.style.top = (headH + yPx) + "px";
@@ -632,8 +649,8 @@
       update();
       if (advance) {
         const f = C.findEvent(C.state.score, id);
-        let nx = f && C.nextEvent(C.state.score, f.m, f.e);
-        while (nx && nx.ev.type !== "note") nx = C.nextEvent(C.state.score, nx.m, nx.e);
+        let nx = f && C.nextEvent(C.state.score, f.m, f.e, f);
+        while (nx && nx.ev.type !== "note") nx = C.nextEvent(C.state.score, nx.m, nx.e, nx);
         if (nx) { select(nx.ev.id, { silent: true }); editLyric(nx.ev.id); }
       }
     };
@@ -660,13 +677,17 @@
     const mLenSec = L.value * spw;
     const pts = [];
     const layout = layoutCache || E.getLayout();
-    for (let m = 0; m < score.measures.length; m++) {
-      let tick = Fraction.ZERO;
-      for (const ev of score.measures[m].events) {
-        const le = layout.eventsById.get(ev.id);
-        if (le) pts.push({ t: m * mLenSec + tick.value * spw, x: le.x, sys: le.sys, id: ev.id });
-        tick = tick.add(C.durValue(ev.dur));
+    for (const ref of C.staffRefs(score)) {
+      for (let m = 0; m < ref.measures.length; m++) {
+        let tick = Fraction.ZERO;
+        for (const ev of ref.measures[m].events) {
+          const le = layout.eventsById.get(ev.id);
+          if (le) pts.push({ t: m * mLenSec + tick.value * spw, x: le.x, sys: le.sys, staff: le.staff, id: ev.id });
+          tick = tick.add(C.durValue(ev.dur));
+        }
       }
+    }
+    for (let m = 0; m < score.measures.length; m++) {
       // 마디 끝점
       const sysM = layout.systems.find(S => S.measures.some(M => M.idx === m));
       if (sysM) {
@@ -694,7 +715,7 @@
     if (found) {
       const spw = 4 * 60 / score.tempo;
       const L = C.measureLen(score).value * spw;
-      fromSec = found.m * L + C.eventStartTick(score.measures[found.m], found.e).value * spw;
+      fromSec = found.m * L + C.eventStartTick(found.measures[found.m], found.e).value * spw;
     }
     startPlayback(fromSec);
   }
@@ -711,7 +732,9 @@
         x = a.x + (b.x - a.x) * (sec - a.t) / (b.t - a.t);
       }
       cursor.setAttribute("x1", x); cursor.setAttribute("x2", x);
-      cursor.setAttribute("y1", sys.yTop - 14); cursor.setAttribute("y2", sys.yTop + E.STAFF_H + 14);
+      const y1 = Math.min(...sys.staffLayouts.map(st => st.yTop)) - 14;
+      const y2 = Math.max(...sys.staffLayouts.map(st => st.yTop + E.STAFF_H)) + 14;
+      cursor.setAttribute("y1", y1); cursor.setAttribute("y2", y2);
       cursor.setAttribute("opacity", "0.85");
       autoScroll(sys);
     }
@@ -763,8 +786,10 @@
     const canvas = $("#canvas");
     const headH = $("#paper-head").offsetHeight;
     const s = ui.fitScale * ui.zoom;
-    const yTop = (sys.yTop + headH) * s;
-    const yBot = (sys.yTop + E.STAFF_H + headH) * s;
+    const yTopRaw = Math.min(...sys.staffLayouts.map(st => st.yTop));
+    const yBotRaw = Math.max(...sys.staffLayouts.map(st => st.yTop + E.STAFF_H));
+    const yTop = (yTopRaw + headH) * s;
+    const yBot = (yBotRaw + headH) * s;
     const vTop = canvas.scrollTop, vBot = vTop + canvas.clientHeight;
     if (yTop < vTop + 20 || yBot > vBot - 60) {
       scrollLock = now;
@@ -866,10 +891,17 @@
     // 악기 select
     const sel = $("#instrument-select");
     sel.innerHTML = Object.entries(P.INSTRUMENTS).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("");
+    $("#staff-select").addEventListener("change", () => {
+      const [p, s] = $("#staff-select").value.split(":").map(Number);
+      setActiveStaff(p, s);
+      update();
+    });
   }
 
   function refreshToolbar() {
     const score = C.state.score;
+    const refs = C.staffRefs(score);
+    const active = C.activeRef(score);
     $("#btn-input").classList.toggle("on", ui.inputMode);
     $("#btn-rest").classList.toggle("on", ui.restMode);
     $("#btn-metronome").classList.toggle("on", P.player.metronome);
@@ -902,7 +934,15 @@
     $("#btn-undo").disabled = !C.canUndo();
     $("#btn-redo").disabled = !C.canRedo();
     $("#tempo-input").value = score.tempo;
-    $("#instrument-select").value = score.instrument;
+    const staffSel = $("#staff-select");
+    const staffValue = `${active.partIdx}:${active.staffIdx}`;
+    const staffOptions = refs.map(ref => {
+      const suffix = ref.part.staves.length > 1 ? ` ${ref.staffIdx + 1}` : "";
+      return `<option value="${ref.partIdx}:${ref.staffIdx}">${ref.name}${suffix}</option>`;
+    }).join("");
+    if (staffSel.innerHTML !== staffOptions) staffSel.innerHTML = staffOptions;
+    staffSel.value = staffValue;
+    $("#instrument-select").value = active.instrument;
     $("#piano-bar").style.display = ui.pianoVisible ? "" : "none";
   }
 
@@ -910,6 +950,8 @@
   function updateStatus() {
     const score = C.state.score;
     const el = $("#status-sel");
+    const active = C.activeRef(score);
+    const activeName = active ? `${active.name}${active.part.staves.length > 1 ? " " + (active.staffIdx + 1) : ""}` : "";
     let text = "";
     const found = selectedEvent();
     const ids = selectedIds();
@@ -920,15 +962,15 @@
       if (ev.type === "note") {
         const names = ev.notes.map(n => `${C.pitchName(n, "ko")}(${C.pitchName(n)})`).join("·");
         const extra = (ev.artics && ev.artics.length ? " · " + ev.artics.join(",") : "") + (ev.dynamic ? " · " + ev.dynamic : "");
-        text = `마디 ${found.m + 1} · ${durName2(ev)} · ${names}${extra}`;
+        text = `${found.name}${found.part.staves.length > 1 ? " " + (found.staffIdx + 1) : ""} · 마디 ${found.m + 1} · ${durName2(ev)} · ${names}${extra}`;
       } else {
-        text = `마디 ${found.m + 1} · ${ev.full ? "온마디 쉼표" : durName2(ev) + " 쉼표"}`;
+        text = `${found.name}${found.part.staves.length > 1 ? " " + (found.staffIdx + 1) : ""} · 마디 ${found.m + 1} · ${ev.full ? "온마디 쉼표" : durName2(ev) + " 쉼표"}`;
       }
     } else if (ui.inputMode && ui.cursorId) {
       const f = C.findEvent(score, ui.cursorId);
-      if (f) text = `입력 위치: 마디 ${f.m + 1} · ${C.durName(ui.curDur)}로 입력`;
+      if (f) text = `입력 위치: ${activeName} · 마디 ${f.m + 1} · ${C.durName(ui.curDur)}로 입력`;
     } else {
-      text = `${score.measures.length}마디 · ${C.KEY_NAMES[String(score.keySig)] || ""} · ${score.timeSig.num}/${score.timeSig.den}`;
+      text = `${score.measures.length}마디 · ${C.staffRefs(score).length}보표 · ${C.KEY_NAMES[String(score.keySig)] || ""} · ${score.timeSig.num}/${score.timeSig.den}`;
     }
     el.textContent = text;
     $("#aria-live").textContent = text;
@@ -1043,9 +1085,11 @@
 
   function openSettings() {
     const score = C.state.score;
+    const active = C.activeRef(score);
     $("#set-title").value = score.meta.title || "";
     $("#set-composer").value = score.meta.composer || "";
-    $("#set-clef").value = score.clef;
+    $("#set-ensemble").value = C.ensembleKey(score) === "custom" ? "solo" : C.ensembleKey(score);
+    $("#set-clef").value = active.clef;
     $("#set-key").innerHTML = Object.keys(C.KEY_NAMES)
       .sort((a, b) => +a - +b)
       .map(k => `<option value="${k}">${C.KEY_NAMES[k]}</option>`).join("");
@@ -1063,11 +1107,18 @@
       const [num, den] = $("#set-time").value.split("/").map(Number);
       const newKey = +$("#set-key").value;
       const newClef = $("#set-clef").value;
+      const newEnsemble = $("#set-ensemble").value;
       const newTempo = Math.max(30, Math.min(280, +$("#set-tempo").value || 100));
       C.mutate("악보 설정", (s2) => {
         s2.meta.title = $("#set-title").value.trim() || "제목 없음";
         s2.meta.composer = $("#set-composer").value.trim();
-        s2.clef = newClef;
+        const ensembleChanged = C.ensembleKey(s2) !== newEnsemble;
+        if (ensembleChanged) C.applyEnsemble(s2, newEnsemble);
+        else {
+          const active = C.activeRef(s2);
+          active.staff.clef = newClef;
+          if (active.partIdx === 0 && active.staffIdx === 0) s2.clef = newClef;
+        }
         s2.keySig = newKey;
         s2.tempo = newTempo;
         if (s2.timeSig.num !== num || s2.timeSig.den !== den) C.rebar(s2, { num, den });
@@ -1079,14 +1130,18 @@
     $("#set-add-measures").addEventListener("click", (e) => {
       e.preventDefault();
       C.mutate("마디 추가", (s2) => {
-        for (let i = 0; i < 4; i++) s2.measures.push({ events: [C.fullRest(s2)] });
+        for (const ref of C.staffRefs(s2))
+          for (let i = 0; i < 4; i++) ref.measures.push({ events: [C.fullRest(s2)] });
+        C.ensureParts(s2);
       });
       update(); toast("마디 4개를 추가했어요");
     });
     $("#set-del-measure").addEventListener("click", (e) => {
       e.preventDefault();
       C.mutate("마디 삭제", (s2) => {
-        if (s2.measures.length > 1) s2.measures.pop();
+        for (const ref of C.staffRefs(s2))
+          if (ref.measures.length > 1) ref.measures.pop();
+        C.ensureParts(s2);
       });
       ui.selection = null; ui.cursorId = null;
       update(); toast("마지막 마디를 삭제했어요");
@@ -1207,16 +1262,17 @@
       // 입력 커서 이동
       const pos = cursorPos();
       const f = pos.found;
-      const nx = dir > 0 ? C.nextEvent(score, f.m, f.e) : C.prevEvent(score, f.m, f.e);
+      const nx = dir > 0 ? C.nextEvent(score, f.m, f.e, f) : C.prevEvent(score, f.m, f.e, f);
       if (nx) { ui.cursorId = nx.ev.id; refreshCursor(); updateStatus(); }
       return;
     }
     let found = selectedEvent();
     if (!found) {
-      select(score.measures[0].events[0].id);
+      const ref = C.activeRef(score);
+      select(ref.measures[0].events[0].id);
       return;
     }
-    const nx = dir > 0 ? C.nextEvent(score, found.m, found.e) : C.prevEvent(score, found.m, found.e);
+    const nx = dir > 0 ? C.nextEvent(score, found.m, found.e, found) : C.prevEvent(score, found.m, found.e, found);
     if (nx) select(nx.ev.id, { extend });
   }
 
@@ -1275,7 +1331,12 @@
       stopPlayback(); update();
     });
     $("#instrument-select").addEventListener("change", () => {
-      C.mutate("악기", (s2) => { s2.instrument = $("#instrument-select").value; });
+      const ref = C.activeRef(C.state.score);
+      C.mutate("악기", (s2) => {
+        const r = C.staffRef(s2, ref);
+        r.part.instrument = $("#instrument-select").value;
+        if (r.partIdx === 0) s2.instrument = r.part.instrument;
+      });
       P.previewNote([60, 64, 67], 0.5);
       update();
     });

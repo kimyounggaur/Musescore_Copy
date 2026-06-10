@@ -130,23 +130,25 @@
 
   /* 마디 내 임시표 표시 계산: note.__acc = 'sharp'|'flat'|'natural'|null */
   function computeAccidentals(score) {
-    for (let m = 0; m < score.measures.length; m++) {
-      const eff = new Map(); // "step:oct" → alter
-      const evs = score.measures[m].events;
-      for (let e = 0; e < evs.length; e++) {
-        const ev = evs[e];
-        if (ev.type !== "note") continue;
-        for (const note of ev.notes) {
-          const k = note.step + ":" + note.oct;
-          const cur = eff.has(k) ? eff.get(k) : C.keyAlterFor(note.step, score.keySig);
-          if (C.isTiedFrom(score, m, e, note)) {
-            note.__acc = null;            // 타이로 이어진 음은 임시표 생략
-            eff.set(k, note.alter);
-          } else if (note.alter !== cur) {
-            note.__acc = note.alter === 1 ? "sharp" : note.alter === -1 ? "flat" : "natural";
-            eff.set(k, note.alter);
-          } else {
-            note.__acc = null;
+    for (const ref of C.staffRefs(score)) {
+      for (let m = 0; m < ref.measures.length; m++) {
+        const eff = new Map(); // "step:oct" → alter
+        const evs = ref.measures[m].events;
+        for (let e = 0; e < evs.length; e++) {
+          const ev = evs[e];
+          if (ev.type !== "note") continue;
+          for (const note of ev.notes) {
+            const k = note.step + ":" + note.oct;
+            const cur = eff.has(k) ? eff.get(k) : C.keyAlterFor(note.step, score.keySig);
+            if (C.isTiedFrom(score, m, e, note, ref)) {
+              note.__acc = null;            // 타이로 이어진 음은 임시표 생략
+              eff.set(k, note.alter);
+            } else if (note.alter !== cur) {
+              note.__acc = note.alter === 1 ? "sharp" : note.alter === -1 ? "flat" : "natural";
+              eff.set(k, note.alter);
+            } else {
+              note.__acc = null;
+            }
           }
         }
       }
@@ -175,77 +177,144 @@
     const k = Math.abs(score.keySig);
     return 14 + 28 + (k ? k * 9.5 + 7 : 0) + (firstSystem ? 30 : 0) + 10;
   }
+  function staffGroupHeight(refs) {
+    if (!refs.length) return STAFF_H;
+    let y = 0, lastPart = refs[0].partIdx;
+    refs.forEach((ref, i) => {
+      if (i > 0) y += STAFF_H + (ref.partIdx === lastPart ? 70 : 90);
+      ref._relY = y;
+      lastPart = ref.partIdx;
+    });
+    return y + STAFF_H;
+  }
+  function measureCount(score, refs) {
+    return Math.max(1, ...refs.map(r => r.measures.length));
+  }
+  function measureNaturalWidth(refs, mIdx) {
+    const seg = new Map();
+    for (const ref of refs) {
+      const mm = ref.measures[mIdx];
+      if (!mm) continue;
+      if (mm.events.length === 1 && mm.events[0].full) {
+        seg.set("0/1", Math.max(seg.get("0/1") || 0, eventWidth(mm.events[0])));
+        continue;
+      }
+      let tick = Fraction.ZERO;
+      for (const ev of mm.events) {
+        const key = tick.toString();
+        seg.set(key, Math.max(seg.get(key) || 0, eventWidth(ev)));
+        tick = tick.add(C.durValue(ev.dur));
+      }
+    }
+    return Math.max(64, 16 + [...seg.values()].reduce((a, w) => a + w, 0));
+  }
+  function segmentMapFor(refs, mIdx, scale) {
+    const seg = new Map();
+    for (const ref of refs) {
+      const mm = ref.measures[mIdx];
+      if (!mm || (mm.events.length === 1 && mm.events[0].full)) continue;
+      let tick = Fraction.ZERO;
+      for (const ev of mm.events) {
+        const key = tick.toString();
+        seg.set(key, Math.max(seg.get(key) || 0, eventWidth(ev)));
+        tick = tick.add(C.durValue(ev.dur));
+      }
+    }
+    return [...seg.entries()]
+      .map(([key, w]) => ({ key, width: w * scale }))
+      .sort((a, b) => Fraction.from(a.key.split("/").map(Number)).cmp(Fraction.from(b.key.split("/").map(Number))));
+  }
 
   /* 핵심: 악보 → 시스템/이벤트 좌표 */
   function layout(score) {
+    C.ensureParts(score);
     computeAccidentals(score);
-    const usable = PAGE_W - MARGIN * 2;
-    const hasLyrics = score.measures.some(mm => mm.events.some(ev => ev.lyric));
-    const hasDyn = score.measures.some(mm => mm.events.some(ev => ev.dynamic)) ||
+    const refs = C.staffRefs(score);
+    const count = measureCount(score, refs);
+    const hasLyrics = refs.some(ref => ref.measures.some(mm => mm.events.some(ev => ev.lyric)));
+    const hasDyn = refs.some(ref => ref.measures.some(mm => mm.events.some(ev => ev.dynamic))) ||
       (score.spanners || []).some(sp => sp.type === "cresc" || sp.type === "dim");
-    const PITCH = 150 + (hasLyrics ? 24 : 0) + (hasDyn ? 16 : 0);
+    const groupH = staffGroupHeight(refs);
+    const PITCH = Math.max(150, groupH + 74 + (hasLyrics ? 24 : 0) + (hasDyn ? 16 : 0));
     const lyricOff = STAFF_H + (hasDyn ? 52 : 34);
 
     // 마디 자연 폭
-    const natural = score.measures.map(mm => {
-      let w = 16;
-      for (const ev of mm.events) w += eventWidth(ev);
-      return Math.max(w, 64);
-    });
+    const natural = Array.from({ length: count }, (_, mIdx) => measureNaturalWidth(refs, mIdx));
 
     // 그리디 줄바꿈
     const systems = [];
     let i = 0;
-    while (i < score.measures.length) {
+    while (i < count) {
       const first = systems.length === 0;
+      const nameW = refs.length > 1 ? (first ? 96 : 54) : 0;
       const hw = headerWidth(score, first);
+      const usable = PAGE_W - MARGIN * 2 - nameW;
       let sum = 0; const idxs = [];
-      while (i < score.measures.length) {
+      while (i < count) {
         const w = natural[i];
         if (idxs.length && hw + sum + w > usable) break;
         idxs.push(i); sum += w; i++;
       }
-      systems.push({ idxs, hw, sum });
+      systems.push({ idxs, hw, sum, nameW, usable });
     }
 
     // 시스템별 좌표 채우기
-    const out = { systems: [], eventsById: new Map(), pitch: PITCH, hasLyrics };
+    const out = { systems: [], eventsById: new Map(), pitch: PITCH, hasLyrics, refs };
     systems.forEach((sys, si) => {
       const yTop = 44 + si * PITCH;
       const isLast = si === systems.length - 1;
-      let scale = (usable - sys.hw) / sys.sum;
+      let scale = (sys.usable - sys.hw) / sys.sum;
       if (isLast && scale > 1 / 0.7) scale = 1;
       scale = Math.max(scale, 0.5);
 
+      const staffX0 = MARGIN + sys.nameW;
       const S = {
-        yTop, x0: MARGIN, x1: isLast && scale === 1 ? MARGIN + sys.hw + sys.sum : PAGE_W - MARGIN,
+        yTop, pageX0: MARGIN, nameW: sys.nameW,
+        x0: staffX0, x1: isLast && scale === 1 ? staffX0 + sys.hw + sys.sum : PAGE_W - MARGIN,
         headerW: sys.hw, measures: [],
+        staffLayouts: [],
         middleY: yTop + STAFF_H / 2,
         first: si === 0,
         lyricOff,
       };
-      let x = MARGIN + sys.hw;
+      for (const ref of refs) {
+        const SL = { ...ref, sys: S, yTop: yTop + ref._relY, x0: S.x0, x1: S.x1, headerW: S.headerW, middleY: yTop + ref._relY + STAFF_H / 2, lyricOff };
+        S.staffLayouts.push(SL);
+      }
+      let x = S.x0 + sys.hw;
       for (const mIdx of sys.idxs) {
-        const mm = score.measures[mIdx];
         const mW = natural[mIdx] * scale;
-        const M = { idx: mIdx, x0: x, x1: x + mW, events: [] };
-        if (mm.events.length === 1 && mm.events[0].full) {
-          // 온마디 쉼표: 중앙 정렬
-          const ev = mm.events[0];
-          M.events.push(mkEv(ev, mIdx, 0, x + mW / 2, S, score, Fraction.ZERO));
-        } else {
-          let ex = x + 12 * scale;
-          let tick = Fraction.ZERO;
-          mm.events.forEach((ev, eIdx) => {
-            const w = eventWidth(ev) * scale;
-            const accW = (ev.type === "note" && ev.notes.some(n => n.__acc)) ? 11 : 0;
-            const cx = ex + accW + 6.5 + (ev.dur.d === 1 ? 3 : 0);
-            M.events.push(mkEv(ev, mIdx, eIdx, cx, S, score, tick));
-            ex += w;
-            tick = tick.add(C.durValue(ev.dur));
-          });
+        const M = { idx: mIdx, x0: x, x1: x + mW, events: [], staffMeasures: [] };
+        const segs = segmentMapFor(refs, mIdx, scale);
+        const segX = new Map();
+        let ex = x + 12 * scale;
+        for (const seg of segs) {
+          segX.set(seg.key, ex);
+          ex += seg.width;
         }
-        for (const le of M.events) out.eventsById.set(le.id, le);
+        for (const SL of S.staffLayouts) {
+          const mm = SL.measures[mIdx] || { events: [C.fullRest(score)] };
+          const SM = { idx: mIdx, x0: x, x1: x + mW, events: [], staff: SL };
+          if (mm.events.length === 1 && mm.events[0].full) {
+            const ev = mm.events[0];
+            SM.events.push(mkEv(ev, mIdx, 0, x + mW / 2, S, SL, score, Fraction.ZERO));
+          } else {
+            let tick = Fraction.ZERO;
+            mm.events.forEach((ev, eIdx) => {
+              const key = tick.toString();
+              const baseX = segX.get(key) ?? (x + 12 * scale);
+              const accW = (ev.type === "note" && ev.notes.some(n => n.__acc)) ? 11 : 0;
+              const cx = baseX + accW + 6.5 + (ev.dur.d === 1 ? 3 : 0);
+              SM.events.push(mkEv(ev, mIdx, eIdx, cx, S, SL, score, tick));
+              tick = tick.add(C.durValue(ev.dur));
+            });
+          }
+          for (const le of SM.events) {
+            out.eventsById.set(le.id, le);
+            M.events.push(le);
+          }
+          M.staffMeasures.push(SM);
+        }
         S.measures.push(M);
         x += mW;
       }
@@ -257,21 +326,24 @@
     return out;
   }
 
-  function mkEv(ev, mIdx, eIdx, cx, S, score, tick) {
+  function mkEv(ev, mIdx, eIdx, cx, S, SL, score, tick) {
     return {
-      id: ev.id, ev, mIdx, eIdx, x: cx, sys: S, tick,
+      id: ev.id, ev, mIdx, eIdx, x: cx, sys: S, staff: SL,
+      partIdx: SL.partIdx, staffIdx: SL.staffIdx, globalIdx: SL.globalIdx, tick,
       startTime: null, // playback에서 채움
     };
   }
 
   /* absStep → y 좌표 (시스템 기준) */
   function yForStep(S, score, as) {
-    const bottom = C.CLEFS[score.clef].bottomStep;       // 맨 아래 줄의 absStep
+    const clef = S.clef || score.clef;
+    const bottom = C.CLEFS[clef].bottomStep;       // 맨 아래 줄의 absStep
     const bottomY = S.yTop + STAFF_H;
     return bottomY - (as - bottom) * (SP / 2);
   }
   function stepForY(S, score, y) {
-    const bottom = C.CLEFS[score.clef].bottomStep;
+    const clef = S.clef || score.clef;
+    const bottom = C.CLEFS[clef].bottomStep;
     const bottomY = S.yTop + STAFF_H;
     return Math.round((bottomY - y) / (SP / 2)) + bottom;
   }
@@ -292,8 +364,10 @@
       svg += barlines(S, score);
       svg += measureNumbers(S);
       for (const M of S.measures) {
-        const beams = computeBeams(score, M, S);
-        svg += renderMeasure(score, M, S, beams, sel);
+        for (const SM of M.staffMeasures) {
+          const beams = computeBeams(score, SM, SM.staff);
+          svg += renderMeasure(score, SM, SM.staff, beams, sel);
+        }
       }
     }
     svg += renderTies(score, L);
@@ -314,38 +388,50 @@
 
   function staffLines(S) {
     let s = `<g class="staff">`;
-    for (let i = 0; i < 5; i++) {
-      const y = S.yTop + i * SP;
-      s += `<line x1="${S.x0}" y1="${y}" x2="${S.x1}" y2="${y}"/>`;
+    for (const SL of S.staffLayouts) {
+      for (let i = 0; i < 5; i++) {
+        const y = SL.yTop + i * SP;
+        s += `<line x1="${SL.x0}" y1="${y}" x2="${SL.x1}" y2="${y}"/>`;
+      }
+      const label = S.first ? SL.name : SL.shortName;
+      if (S.nameW && SL.staffIdx === 0) {
+        s += `<text class="part-name" x="${S.x0 - 12}" y="${SL.middleY + 4}" text-anchor="end">${esc(label)}</text>`;
+      }
+    }
+    for (const partIdx of [...new Set(S.staffLayouts.map(st => st.partIdx))]) {
+      const list = S.staffLayouts.filter(st => st.partIdx === partIdx);
+      if (list.length < 2) continue;
+      const x = S.x0 - 20, y1 = list[0].yTop - 2, y2 = list[list.length - 1].yTop + STAFF_H + 2;
+      s += `<path class="brace" d="M ${r2(x + 9)} ${r2(y1)} C ${r2(x - 9)} ${r2(y1 + 18)}, ${r2(x - 9)} ${r2((y1 + y2) / 2 - 14)}, ${r2(x + 4)} ${r2((y1 + y2) / 2)} C ${r2(x - 9)} ${r2((y1 + y2) / 2 + 14)}, ${r2(x - 9)} ${r2(y2 - 18)}, ${r2(x + 9)} ${r2(y2)}"/>`;
     }
     return s + "</g>";
   }
 
   function clefAndKey(S, score) {
     let s = "";
-    const cx = S.x0 + 14;
-    if (score.clef === "treble") {
-      const gLineY = yForStep(S, score, C.absStep({ step: 4, oct: 4 })); // G4 줄
-      s += glyph("gClef", cx, gLineY);
-    } else {
-      const fLineY = yForStep(S, score, C.absStep({ step: 3, oct: 3 })); // F3 줄
-      s += glyph("fClef", cx, fLineY);
-    }
-    const k = score.keySig;
-    if (k !== 0) {
-      const steps = C.keySigSteps(k, score.clef);
-      const gname = k > 0 ? "sharp" : "flat";
-      steps.forEach((as, i) => {
-        s += glyph(gname, S.x0 + 46 + i * 9.5, yForStep(S, score, as));
-      });
+    for (const SL of S.staffLayouts) {
+      const cx = SL.x0 + 14;
+      if (SL.clef === "treble") {
+        const gLineY = yForStep(SL, score, C.absStep({ step: 4, oct: 4 })); // G4 줄
+        s += glyph("gClef", cx, gLineY);
+      } else {
+        const fLineY = yForStep(SL, score, C.absStep({ step: 3, oct: 3 })); // F3 줄
+        s += glyph("fClef", cx, fLineY);
+      }
+      const k = score.keySig;
+      if (k !== 0) {
+        const steps = C.keySigSteps(k, SL.clef);
+        const gname = k > 0 ? "sharp" : "flat";
+        steps.forEach((as, i) => {
+          s += glyph(gname, SL.x0 + 46 + i * 9.5, yForStep(SL, score, as));
+        });
+      }
     }
     return s;
   }
 
   function timeSig(S, score) {
     const x = S.x0 + S.headerW - 24;
-    const numY = S.yTop + SP;       // 분자: 2번째 줄
-    const denY = S.yTop + 3 * SP;   // 분모: 4번째 줄
     const draw = (n, y) => {
       const str = String(n);
       if (fontReady) {
@@ -354,22 +440,32 @@
       }
       return `<text x="${x}" y="${y + 7}" font-family="Georgia,'Times New Roman',serif" font-weight="700" font-size="23px" text-anchor="middle">${str}</text>`;
     };
-    return draw(score.timeSig.num, numY) + draw(score.timeSig.den, denY);
+    let s = "";
+    for (const SL of S.staffLayouts) {
+      s += draw(score.timeSig.num, SL.yTop + SP);
+      s += draw(score.timeSig.den, SL.yTop + 3 * SP);
+    }
+    return s;
   }
 
   function barlines(S, score) {
-    const yT = S.yTop, yB = S.yTop + STAFF_H;
     let s = `<g class="barline">`;
-    s += `<line x1="${S.x0}" y1="${yT}" x2="${S.x0}" y2="${yB}"/>`;
-    S.measures.forEach((M, i) => {
-      const isScoreEnd = M.idx === score.measures.length - 1;
-      if (isScoreEnd) {
-        s += `<line x1="${r2(M.x1 - 7)}" y1="${yT}" x2="${r2(M.x1 - 7)}" y2="${yB}"/>`;
-        s += `<rect x="${r2(M.x1 - 4)}" y="${yT}" width="4" height="${STAFF_H}" class="thick"/>`;
-      } else {
-        s += `<line x1="${r2(M.x1)}" y1="${yT}" x2="${r2(M.x1)}" y2="${yB}"/>`;
-      }
-    });
+    const partIdxs = [...new Set(S.staffLayouts.map(st => st.partIdx))];
+    const count = Math.max(...C.staffRefs(score).map(r => r.measures.length));
+    for (const partIdx of partIdxs) {
+      const list = S.staffLayouts.filter(st => st.partIdx === partIdx);
+      const yT = list[0].yTop, yB = list[list.length - 1].yTop + STAFF_H;
+      s += `<line x1="${S.x0}" y1="${yT}" x2="${S.x0}" y2="${yB}"/>`;
+      S.measures.forEach((M) => {
+        const isScoreEnd = M.idx === count - 1;
+        if (isScoreEnd) {
+          s += `<line x1="${r2(M.x1 - 7)}" y1="${yT}" x2="${r2(M.x1 - 7)}" y2="${yB}"/>`;
+          s += `<rect x="${r2(M.x1 - 4)}" y="${yT}" width="4" height="${yB - yT}" class="thick"/>`;
+        } else {
+          s += `<line x1="${r2(M.x1)}" y1="${yT}" x2="${r2(M.x1)}" y2="${yB}"/>`;
+        }
+      });
+    }
     return s + "</g>";
   }
 
@@ -471,12 +567,18 @@
     const avg = notes.reduce((a, n) => a + C.absStep(n), 0) / notes.length;
     return avg < mid ? "up" : "down";
   }
+  function stemDirForStaff(score, notes, S) {
+    const clef = S.clef || score.clef;
+    const mid = C.absStep(C.CLEFS[clef].middle);
+    const avg = notes.reduce((a, n) => a + C.absStep(n), 0) / notes.length;
+    return avg < mid ? "up" : "down";
+  }
 
   function renderNote(score, S, le, beamed, stem) {
     const ev = le.ev;
     let s = "";
     const kind = ev.dur.d === 1 ? "whole" : ev.dur.d === 2 ? "half" : "black";
-    const dir = stem ? stem.dir : stemDirFor(score, ev.notes);
+    const dir = stem ? stem.dir : stemDirForStaff(score, ev.notes, S);
     const sorted = ev.notes.slice().sort((a, b) => C.absStep(a) - C.absStep(b)); // 낮은 음부터
     const stemX = dir === "up" ? le.x + 4.8 : le.x - 4.8;
 
@@ -492,7 +594,7 @@
     }
 
     // 덧줄
-    const bottom = C.CLEFS[score.clef].bottomStep;
+    const bottom = C.CLEFS[S.clef || score.clef].bottomStep;
     let minOff = Infinity, maxOff = -Infinity;
     for (const n of sorted) {
       const off = C.absStep(n) - bottom; // 보표 스텝 오프셋(0=맨아래줄, 8=맨위줄)
@@ -609,7 +711,7 @@
     // 방향: 전체 음의 평균
     const all = [];
     for (const le of items) for (const n of le.ev.notes) all.push(n);
-    const dir = stemDirFor(score, all);
+    const dir = stemDirForStaff(score, all, S);
 
     const xs = items.map(le => dir === "up" ? le.x + 4.8 : le.x - 4.8);
     // 각 이벤트의 극단 머리 y(스템 방향 쪽)
@@ -679,26 +781,28 @@
   /* ---- 타이 ---- */
   function renderTies(score, L) {
     let s = "";
-    for (let m = 0; m < score.measures.length; m++) {
-      const evs = score.measures[m].events;
-      for (let e = 0; e < evs.length; e++) {
-        const ev = evs[e];
-        if (ev.type !== "note") continue;
-        const tied = ev.notes.filter(n => n.tie);
-        if (!tied.length) continue;
-        const nx = C.nextEvent(score, m, e);
-        if (!nx) continue;
-        const le1 = L.eventsById.get(ev.id);
-        const le2 = L.eventsById.get(nx.ev.id);
-        if (!le1 || !le2) continue;
-        for (const n of tied) {
-          const dir = stemDirFor(score, ev.notes); // 타이는 스템 반대쪽
-          const curveDown = dir === "up";
-          if (le1.sys === le2.sys) {
-            s += tiePath(le1.x + 7, le2.x - 7, yForStep(le1.sys, score, C.absStep(n)), curveDown);
-          } else {
-            s += tiePath(le1.x + 7, le1.sys.x1 - 2, yForStep(le1.sys, score, C.absStep(n)), curveDown);
-            s += tiePath(le2.sys.x0 + le2.sys.headerW - 6, le2.x - 7, yForStep(le2.sys, score, C.absStep(n)), curveDown);
+    for (const ref of C.staffRefs(score)) {
+      for (let m = 0; m < ref.measures.length; m++) {
+        const evs = ref.measures[m].events;
+        for (let e = 0; e < evs.length; e++) {
+          const ev = evs[e];
+          if (ev.type !== "note") continue;
+          const tied = ev.notes.filter(n => n.tie);
+          if (!tied.length) continue;
+          const nx = C.nextEvent(score, m, e, ref);
+          if (!nx) continue;
+          const le1 = L.eventsById.get(ev.id);
+          const le2 = L.eventsById.get(nx.ev.id);
+          if (!le1 || !le2) continue;
+          for (const n of tied) {
+            const dir = stemDirForStaff(score, ev.notes, le1.staff); // 타이는 스템 반대쪽
+            const curveDown = dir === "up";
+            if (le1.sys === le2.sys) {
+              s += tiePath(le1.x + 7, le2.x - 7, yForStep(le1.staff, score, C.absStep(n)), curveDown);
+            } else {
+              s += tiePath(le1.x + 7, le1.sys.x1 - 2, yForStep(le1.staff, score, C.absStep(n)), curveDown);
+              s += tiePath(le2.sys.x0 + le2.sys.headerW - 6, le2.x - 7, yForStep(le2.staff, score, C.absStep(n)), curveDown);
+            }
           }
         }
       }
@@ -717,14 +821,15 @@
 
   /* ---- 스패너(슬러/헤어핀): 시스템 경계 분할 공통 처리 ---- */
   function spannerSegments(le1, le2, L) {
-    if (le1.sys === le2.sys) return [{ S: le1.sys, x1: le1.x, x2: le2.x, openL: false, openR: false }];
+    const staffIn = (S, le) => S.staffLayouts.find(st => st.globalIdx === le.globalIdx) || S.staffLayouts[0];
+    if (le1.sys === le2.sys) return [{ S: le1.sys, staff: le1.staff, x1: le1.x, x2: le2.x, openL: false, openR: false }];
     const list = L.systems;
     const i1 = list.indexOf(le1.sys), i2 = list.indexOf(le2.sys);
     if (i1 < 0 || i2 < 0 || i2 < i1) return [];
-    const segs = [{ S: le1.sys, x1: le1.x, x2: le1.sys.x1 - 3, openL: false, openR: true }];
+    const segs = [{ S: le1.sys, staff: le1.staff, x1: le1.x, x2: le1.sys.x1 - 3, openL: false, openR: true }];
     for (let i = i1 + 1; i < i2; i++)
-      segs.push({ S: list[i], x1: list[i].x0 + list[i].headerW, x2: list[i].x1 - 3, openL: true, openR: true });
-    segs.push({ S: le2.sys, x1: le2.sys.x0 + le2.sys.headerW - 2, x2: le2.x, openL: true, openR: false });
+      segs.push({ S: list[i], staff: staffIn(list[i], le1), x1: list[i].x0 + list[i].headerW, x2: list[i].x1 - 3, openL: true, openR: true });
+    segs.push({ S: le2.sys, staff: le2.staff, x1: le2.sys.x0 + le2.sys.headerW - 2, x2: le2.x, openL: true, openR: false });
     return segs;
   }
 
@@ -741,14 +846,14 @@
 
   /* 슬러: 스템 반대쪽(혼합이면 위), 3차 베지어 + 사이 음표 회피 */
   function renderSlur(score, L, le1, le2) {
-    const d1 = stemDirFor(score, le1.ev.notes), d2 = stemDirFor(score, le2.ev.notes);
+    const d1 = stemDirForStaff(score, le1.ev.notes, le1.staff), d2 = stemDirForStaff(score, le2.ev.notes, le2.staff);
     const above = !(d1 === "up" && d2 === "up");
     const segs = spannerSegments(le1, le2, L);
     let s = "";
     for (const seg of segs) {
-      const edgeY = seg.S.yTop + (above ? -7 : STAFF_H + 7);
-      const y1 = seg.openL ? edgeY : slurAnchorY(score, seg.S, le1, above);
-      const y2 = seg.openR ? edgeY : slurAnchorY(score, seg.S, le2, above);
+      const edgeY = seg.staff.yTop + (above ? -7 : STAFF_H + 7);
+      const y1 = seg.openL ? edgeY : slurAnchorY(score, seg.staff, le1, above);
+      const y2 = seg.openR ? edgeY : slurAnchorY(score, seg.staff, le2, above);
       s += slurPath(seg.x1, y1, seg.x2, y2, above, slurClearance(score, seg, above, y1, y2));
     }
     return s;
@@ -763,11 +868,12 @@
     let h = Math.min(24, 7 + w * 0.09);
     for (const M of seg.S.measures) {
       for (const le of M.events) {
+        if (le.globalIdx !== seg.staff.globalIdx) continue;
         if (le.x <= seg.x1 + 3 || le.x >= seg.x2 - 3 || le.ev.type !== "note") continue;
         const steps = le.ev.notes.map(C.absStep);
         const ext = above ? Math.max(...steps) : Math.min(...steps);
         let headY = yForStep(seg.S, score, ext);
-        const sd = stemDirFor(score, le.ev.notes);
+        const sd = stemDirForStaff(score, le.ev.notes, le.staff || seg.staff);
         if (above && sd === "up") headY -= 3.2 * SP;       // 스템 끝까지 회피
         if (!above && sd === "down") headY += 3.2 * SP;
         const t = Math.max(0.15, Math.min(0.85, (le.x - seg.x1) / w));
@@ -804,7 +910,7 @@
       const w = Math.max(1, seg.x2 - seg.x1);
       const f1 = cum / total, f2 = (cum + w) / total;
       cum += w;
-      const y = seg.S.yTop + STAFF_H + 24;
+      const y = seg.staff.yTop + STAFF_H + 24;
       const h1 = (type === "cresc" ? f1 : 1 - f1) * H;
       const h2 = (type === "cresc" ? f2 : 1 - f2) * H;
       s += `<g class="hairpin">` +
@@ -819,14 +925,16 @@
   function hitTest(x, y) {
     const L = lastLayout;
     if (!L) return null;
-    // 가장 가까운 시스템
-    let S = null, best = Infinity;
+    // 가장 가까운 보표
+    let S = null, ST = null, best = Infinity;
     for (const sys of L.systems) {
-      const cy = sys.yTop + STAFF_H / 2;
-      const d = Math.abs(y - cy);
-      if (d < best) { best = d; S = sys; }
+      for (const st of sys.staffLayouts) {
+        const cy = st.yTop + STAFF_H / 2;
+        const d = Math.abs(y - cy);
+        if (d < best) { best = d; S = sys; ST = st; }
+      }
     }
-    if (!S || best > 90) return null;
+    if (!S || !ST || best > 76) return null;
     // 마디
     let M = null;
     for (const mm of S.measures) if (x >= mm.x0 && x <= mm.x1) M = mm;
@@ -834,14 +942,15 @@
       if (x < S.x0 + S.headerW && S.measures.length) M = S.measures[0];
       else return null;
     }
+    const SM = M.staffMeasures.find(sm => sm.staff.globalIdx === ST.globalIdx) || M.staffMeasures[0];
     // 가장 가까운 이벤트(세그먼트)
     let le = null, dx = Infinity;
-    for (const cand of M.events) {
+    for (const cand of SM.events) {
       const d = Math.abs(x - cand.x);
       if (d < dx) { dx = d; le = cand; }
     }
-    const step = stepForY(S, L.score, y);
-    return { sys: S, M, le, step, x, y };
+    const step = stepForY(ST, L.score, y);
+    return { sys: S, staff: ST, M, staffMeasure: SM, le, step, x, y };
   }
 
   /* ---------------- 오버레이(고스트/입력 커서) ---------------- */
@@ -849,9 +958,9 @@
     const g = document.getElementById("overlay-ghost");
     if (!g) return;
     if (!hit || !hit.le) { g.innerHTML = ""; return; }
-    const { sys: S, le } = hit;
+    const { staff: S, le } = hit;
     const score = lastLayout.score;
-    const bottom = C.CLEFS[score.clef].bottomStep;
+    const bottom = C.CLEFS[S.clef || score.clef].bottomStep;
     const as = Math.max(bottom - 11, Math.min(bottom + 19, hit.step));
     const y = yForStep(S, score, as);
     let s = "";
@@ -861,7 +970,7 @@
       const kind = dur.d === 1 ? "whole" : dur.d === 2 ? "half" : "black";
       let inner = headShape(le.x, y, kind);
       if (kind !== "whole") {
-        const dir = as < C.absStep(C.CLEFS[score.clef].middle) ? "up" : "down";
+        const dir = as < C.absStep(C.CLEFS[S.clef || score.clef].middle) ? "up" : "down";
         const sx = dir === "up" ? le.x + 4.8 : le.x - 4.8;
         const tip = dir === "up" ? y - 35 : y + 35;
         inner += `<line class="stem" x1="${r2(sx)}" y1="${r2(y)}" x2="${r2(sx)}" y2="${r2(tip)}"/>`;
@@ -886,10 +995,11 @@
     const le = lastLayout.eventsById.get(ref);
     if (!le) { g.innerHTML = ""; return; }
     const S = le.sys;
+    const ST = le.staff || S;
     const x = le.x - 13;
     g.innerHTML =
-      `<line class="input-caret" x1="${r2(x)}" y1="${S.yTop - 16}" x2="${r2(x)}" y2="${S.yTop + STAFF_H + 16}"/>` +
-      `<path class="input-caret-arrow" d="M ${r2(x - 4.5)} ${S.yTop - 16} h 9 l -4.5 6 Z" />`;
+      `<line class="input-caret" x1="${r2(x)}" y1="${ST.yTop - 16}" x2="${r2(x)}" y2="${ST.yTop + STAFF_H + 16}"/>` +
+      `<path class="input-caret-arrow" d="M ${r2(x - 4.5)} ${ST.yTop - 16} h 9 l -4.5 6 Z" />`;
   }
 
   function clearOverlays() {

@@ -72,7 +72,8 @@
     <input id="tempo-input" type="number" min="30" max="280" step="1" value="100">
   </div>
 
-  <select id="instrument-select" class="tsel" title="재생 악기"></select>
+  <select id="staff-select" class="tsel" title="입력할 보표"></select>
+  <select id="instrument-select" class="tsel" title="활성 파트의 재생 악기"></select>
 
   <div class="tspacer"></div>
 
@@ -199,6 +200,13 @@
       <input id="set-title" class="full" type="text" placeholder="악보 제목">
       <label for="set-composer">작곡가</label>
       <input id="set-composer" class="full" type="text" placeholder="(선택)">
+      <label for="set-ensemble">편성</label>
+      <select id="set-ensemble">
+        <option value="solo">독주 1단</option>
+        <option value="piano">피아노 2단</option>
+        <option value="flute-piano">플루트 + 피아노 3단</option>
+        <option value="string-quartet">현악4중주</option>
+      </select>
       <label for="set-clef">음자리표</label>
       <select id="set-clef">
         <option value="treble">높은음자리표 𝄞</option>

@@ -80,10 +80,13 @@
   const DYN_SOUND = { pp: 40, p: 54, mp: 66, mf: 78, f: 91, ff: 105 };
 
   function exportMusicXML(score) {
+    C.ensureParts(score);
     const DIV = 8; // 4분음표당 division
     const units = (dur) => Math.round(C.durValue(dur).value * 4 * DIV);
     const L = C.measureLen(score);
-    const gm = (SF.playback.INSTRUMENTS[score.instrument] || SF.playback.INSTRUMENTS.piano).gm;
+    const measureUnits = Math.round(L.value * 4 * DIV);
+    const refs = C.staffRefs(score);
+    const maxMeasures = Math.max(...refs.map(r => r.measures.length));
 
     // 스패너 앵커 맵 (slur 번호 1~6 순환)
     const slurStart = new Map(), slurStop = new Map(), wedgeStart = new Map(), wedgeStop = new Map();
@@ -107,82 +110,95 @@
   <creator type="composer">${xmlEsc(score.meta.composer || "")}</creator>
   <encoding><software>ScoreForge</software></encoding>
  </identification>
- <part-list>
-  <score-part id="P1"><part-name>${xmlEsc(SF.playback.INSTRUMENTS[score.instrument]?.label || "악기")}</part-name>
-   <midi-instrument id="P1-I1"><midi-channel>1</midi-channel><midi-program>${gm + 1}</midi-program></midi-instrument>
-  </score-part>
- </part-list>
- <part id="P1">\n`;
+ <part-list>\n`;
+    score.parts.forEach((part, pIdx) => {
+      const gm = (SF.playback.INSTRUMENTS[part.instrument] || SF.playback.INSTRUMENTS.piano).gm;
+      xml += `  <score-part id="P${pIdx + 1}"><part-name>${xmlEsc(part.name || "악기")}</part-name>
+   <midi-instrument id="P${pIdx + 1}-I1"><midi-channel>${pIdx + 1}</midi-channel><midi-program>${gm + 1}</midi-program></midi-instrument>
+  </score-part>\n`;
+    });
+    xml += ` </part-list>\n`;
 
-    score.measures.forEach((mm, mIdx) => {
-      xml += `  <measure number="${mIdx + 1}">\n`;
-      if (mIdx === 0) {
-        xml += `   <attributes>
+    score.parts.forEach((part, pIdx) => {
+      const partRefs = refs.filter(r => r.partIdx === pIdx);
+      xml += ` <part id="P${pIdx + 1}">\n`;
+      for (let mIdx = 0; mIdx < maxMeasures; mIdx++) {
+        xml += `  <measure number="${mIdx + 1}">\n`;
+        if (mIdx === 0) {
+          xml += `   <attributes>
     <divisions>${DIV}</divisions>
     <key><fifths>${score.keySig}</fifths></key>
     <time><beats>${score.timeSig.num}</beats><beat-type>${score.timeSig.den}</beat-type></time>
-    <clef><sign>${score.clef === "bass" ? "F" : "G"}</sign><line>${score.clef === "bass" ? 4 : 2}</line></clef>
-   </attributes>
-   <direction placement="above"><direction-type>
+    ${partRefs.length > 1 ? `<staves>${partRefs.length}</staves>` : ""}
+    ${partRefs.map((ref, i) => `<clef${partRefs.length > 1 ? ` number="${i + 1}"` : ""}><sign>${ref.clef === "bass" ? "F" : "G"}</sign><line>${ref.clef === "bass" ? 4 : 2}</line></clef>`).join("\n    ")}
+   </attributes>\n`;
+          if (pIdx === 0) xml += `   <direction placement="above"><direction-type>
     <metronome><beat-unit>quarter</beat-unit><per-minute>${score.tempo}</per-minute></metronome>
    </direction-type><sound tempo="${score.tempo}"/></direction>\n`;
-      }
-      mm.events.forEach((ev, eIdx) => {
-        // 이벤트에 걸린 셈여림/헤어핀 시작 → direction 먼저
-        if (ev.dynamic && DYN_SOUND[ev.dynamic]) {
-          xml += `   <direction placement="below"><direction-type><dynamics><${ev.dynamic}/></dynamics></direction-type>` +
-            `<sound dynamics="${DYN_SOUND[ev.dynamic]}"/></direction>\n`;
-        }
-        for (const w of wedgeStart.get(ev.id) || []) {
-          xml += `   <direction placement="below"><direction-type><wedge type="${w.kind}" number="${w.num}"/></direction-type></direction>\n`;
         }
 
-        if (ev.type === "rest") {
-          if (ev.full) {
-            xml += `   <note><rest measure="yes"/><duration>${Math.round(L.value * 4 * DIV)}</duration><voice>1</voice></note>\n`;
-          } else {
-            xml += `   <note><rest/><duration>${units(ev.dur)}</duration><voice>1</voice><type>${TYPE_NAMES[ev.dur.d]}</type>${"<dot/>".repeat(ev.dur.dots || 0)}</note>\n`;
-          }
-        } else {
-          ev.notes.forEach((note, nIdx) => {
-            const stop = C.isTiedFrom(score, mIdx, eIdx, note);
-            const start = !!note.tie;
-            xml += `   <note>${nIdx > 0 ? "<chord/>" : ""}<pitch><step>${C.STEP_EN[note.step]}</step>` +
-              (note.alter ? `<alter>${note.alter}</alter>` : "") +
-              `<octave>${note.oct}</octave></pitch>` +
-              `<duration>${units(ev.dur)}</duration>` +
-              (stop ? `<tie type="stop"/>` : "") + (start ? `<tie type="start"/>` : "") +
-              `<voice>1</voice><type>${TYPE_NAMES[ev.dur.d]}</type>${"<dot/>".repeat(ev.dur.dots || 0)}`;
-            let notations = "";
-            if (stop) notations += `<tied type="stop"/>`;
-            if (start) notations += `<tied type="start"/>`;
-            if (nIdx === 0) {
-              for (const sl of slurStop.get(ev.id) || []) notations += `<slur type="stop" number="${sl.num}"/>`;
-              for (const sl of slurStart.get(ev.id) || []) notations += `<slur type="start" number="${sl.num}"/>`;
-              const ar = ev.artics || [];
-              const artXml =
-                (ar.includes("accent") ? "<accent/>" : "") +
-                (ar.includes("marcato") ? "<strong-accent/>" : "") +
-                (ar.includes("staccato") ? "<staccato/>" : "") +
-                (ar.includes("tenuto") ? "<tenuto/>" : "");
-              if (artXml) notations += `<articulations>${artXml}</articulations>`;
-              if (ar.includes("fermata")) notations += `<fermata/>`;
+        partRefs.forEach((ref, sIdx) => {
+          if (sIdx > 0) xml += `   <backup><duration>${measureUnits}</duration></backup>\n`;
+          const mm = ref.measures[mIdx] || { events: [{ id: "", type: "rest", full: true, dur: { n: L.n, d: L.d, dots: 0 }, notes: [] }] };
+          mm.events.forEach((ev, eIdx) => {
+            const staffTag = partRefs.length > 1 ? `<staff>${sIdx + 1}</staff>` : "";
+            if (ev.dynamic && DYN_SOUND[ev.dynamic]) {
+              xml += `   <direction placement="below"><direction-type><dynamics><${ev.dynamic}/></dynamics></direction-type>` +
+                `${partRefs.length > 1 ? `<staff>${sIdx + 1}</staff>` : ""}<sound dynamics="${DYN_SOUND[ev.dynamic]}"/></direction>\n`;
             }
-            if (notations) xml += `<notations>${notations}</notations>`;
-            if (nIdx === 0 && ev.lyric) {
-              xml += `<lyric number="1"><syllabic>single</syllabic><text>${xmlEsc(ev.lyric)}</text></lyric>`;
+            for (const w of wedgeStart.get(ev.id) || []) {
+              xml += `   <direction placement="below"><direction-type><wedge type="${w.kind}" number="${w.num}"/></direction-type>${partRefs.length > 1 ? `<staff>${sIdx + 1}</staff>` : ""}</direction>\n`;
             }
-            xml += `</note>\n`;
+
+            if (ev.type === "rest") {
+              if (ev.full) {
+                xml += `   <note><rest measure="yes"/><duration>${measureUnits}</duration><voice>1</voice>${staffTag}</note>\n`;
+              } else {
+                xml += `   <note><rest/><duration>${units(ev.dur)}</duration><voice>1</voice><type>${TYPE_NAMES[ev.dur.d]}</type>${"<dot/>".repeat(ev.dur.dots || 0)}${staffTag}</note>\n`;
+              }
+            } else {
+              ev.notes.forEach((note, nIdx) => {
+                const stop = C.isTiedFrom(score, mIdx, eIdx, note, ref);
+                const start = !!note.tie;
+                xml += `   <note>${nIdx > 0 ? "<chord/>" : ""}<pitch><step>${C.STEP_EN[note.step]}</step>` +
+                  (note.alter ? `<alter>${note.alter}</alter>` : "") +
+                  `<octave>${note.oct}</octave></pitch>` +
+                  `<duration>${units(ev.dur)}</duration>` +
+                  (stop ? `<tie type="stop"/>` : "") + (start ? `<tie type="start"/>` : "") +
+                  `<voice>1</voice><type>${TYPE_NAMES[ev.dur.d]}</type>${"<dot/>".repeat(ev.dur.dots || 0)}${staffTag}`;
+                let notations = "";
+                if (stop) notations += `<tied type="stop"/>`;
+                if (start) notations += `<tied type="start"/>`;
+                if (nIdx === 0) {
+                  for (const sl of slurStop.get(ev.id) || []) notations += `<slur type="stop" number="${sl.num}"/>`;
+                  for (const sl of slurStart.get(ev.id) || []) notations += `<slur type="start" number="${sl.num}"/>`;
+                  const ar = ev.artics || [];
+                  const artXml =
+                    (ar.includes("accent") ? "<accent/>" : "") +
+                    (ar.includes("marcato") ? "<strong-accent/>" : "") +
+                    (ar.includes("staccato") ? "<staccato/>" : "") +
+                    (ar.includes("tenuto") ? "<tenuto/>" : "");
+                  if (artXml) notations += `<articulations>${artXml}</articulations>`;
+                  if (ar.includes("fermata")) notations += `<fermata/>`;
+                }
+                if (notations) xml += `<notations>${notations}</notations>`;
+                if (nIdx === 0 && ev.lyric) {
+                  xml += `<lyric number="1"><syllabic>single</syllabic><text>${xmlEsc(ev.lyric)}</text></lyric>`;
+                }
+                xml += `</note>\n`;
+              });
+            }
+
+            for (const w of wedgeStop.get(ev.id) || []) {
+              xml += `   <direction placement="below"><direction-type><wedge type="stop" number="${w.num}"/></direction-type>${partRefs.length > 1 ? `<staff>${sIdx + 1}</staff>` : ""}</direction>\n`;
+            }
           });
-        }
-
-        for (const w of wedgeStop.get(ev.id) || []) {
-          xml += `   <direction placement="below"><direction-type><wedge type="stop" number="${w.num}"/></direction-type></direction>\n`;
-        }
-      });
-      xml += `  </measure>\n`;
+        });
+        xml += `  </measure>\n`;
+      }
+      xml += ` </part>\n`;
     });
-    xml += ` </part>\n</score-partwise>\n`;
+    xml += `</score-partwise>\n`;
     return xml;
   }
 

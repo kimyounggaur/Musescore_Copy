@@ -159,6 +159,8 @@ select.tsel {
 /* ---- 악보 SVG ---- */
 #score-svg { color: var(--ink); }
 .staff line { stroke: #20242b; stroke-width: 1.1; }
+.part-name { font-family: system-ui, -apple-system, Segoe UI, sans-serif; font-size: 13px; fill: #49515d; }
+.brace { fill: none; stroke: #20242b; stroke-width: 2.2; stroke-linecap: round; }
 .barline line { stroke: #20242b; stroke-width: 1.5; }
 .barline rect.thick { fill: #20242b; }
 .mnum { font-size: 11px; fill: #8b93a0; font-family: inherit; }

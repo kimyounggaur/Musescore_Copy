@@ -194,6 +194,7 @@
   const VELS = { pp: 0.38, p: 0.48, mp: 0.58, mf: 0.68, f: 0.8, ff: 0.92 };
 
   function compile(score) {
+    C.ensureParts(score);
     const spw = 4 * 60 / score.tempo; // 온음표 1개의 초
     const L = C.measureLen(score);
     const mLenSec = L.value * spw;
@@ -202,52 +203,63 @@
     const slurCover = C.slurCoverMap ? C.slurCoverMap(score) : new Set();
     const dynList = []; // 명시적 셈여림 [{t, v}] — 헤어핀 목표 탐색용
     const posById = new Map(); // 이벤트 id → {t, vel} (쉼표 포함)
-    let vel = VELS.mf;
+    let maxMeasures = 0;
 
-    for (let m = 0; m < score.measures.length; m++) {
-      const evs = score.measures[m].events;
-      let tick = Fraction.ZERO;
-      for (let e = 0; e < evs.length; e++) {
-        const ev = evs[e];
-        const t = m * mLenSec + tick.value * spw;
-        const dval = C.durValue(ev.dur).value * spw;
-        if (ev.dynamic && VELS[ev.dynamic] !== undefined) {
-          vel = VELS[ev.dynamic];
-          dynList.push({ t, v: vel });
-        }
-        posById.set(ev.id, { t, vel });
-        if (ev.type === "note") {
-          const midis = [];
-          for (const note of ev.notes) {
-            const midi = C.midiOf(note);
-            if (consumed.has(m + ":" + e + ":" + midi)) continue;
-            // 타이 체인 길이 합산
-            let total = dval;
-            let cur = { m, e, ev }, curNote = note;
-            while (curNote.tie) {
-              const nx = C.nextEvent(score, cur.m, cur.e);
-              if (!nx || nx.ev.type !== "note") break;
-              const n2 = nx.ev.notes.find(n => C.midiOf(n) === midi && n.step === curNote.step);
-              if (!n2) break;
-              consumed.add(nx.m + ":" + nx.e + ":" + midi);
-              total += C.durValue(nx.ev.dur).value * spw;
-              cur = nx; curNote = n2;
+    for (const ref of C.staffRefs(score)) {
+      let vel = VELS.mf;
+      maxMeasures = Math.max(maxMeasures, ref.measures.length);
+      for (let m = 0; m < ref.measures.length; m++) {
+        const evs = ref.measures[m].events;
+        let tick = Fraction.ZERO;
+        for (let e = 0; e < evs.length; e++) {
+          const ev = evs[e];
+          const t = m * mLenSec + tick.value * spw;
+          const dval = C.durValue(ev.dur).value * spw;
+          if (ev.dynamic && VELS[ev.dynamic] !== undefined) {
+            vel = VELS[ev.dynamic];
+            dynList.push({ t, v: vel });
+          }
+          posById.set(ev.id, { t, vel });
+          if (ev.type === "note") {
+            const midis = [];
+            for (const note of ev.notes) {
+              const midi = C.midiOf(note);
+              const key = ref.globalIdx + ":" + m + ":" + e + ":" + midi;
+              if (consumed.has(key)) continue;
+              // 타이 체인 길이 합산
+              let total = dval;
+              let cur = { ...ref, m, e, ev }, curNote = note;
+              while (curNote.tie) {
+                const nx = C.nextEvent(score, cur.m, cur.e, ref);
+                if (!nx || nx.ev.type !== "note") break;
+                const n2 = nx.ev.notes.find(n => C.midiOf(n) === midi && n.step === curNote.step);
+                if (!n2) break;
+                consumed.add(ref.globalIdx + ":" + nx.m + ":" + nx.e + ":" + midi);
+                total += C.durValue(nx.ev.dur).value * spw;
+                cur = nx; curNote = n2;
+              }
+              midis.push({ midi, durSec: total });
             }
-            midis.push({ midi, durSec: total });
+            if (midis.length) {
+              const ar = ev.artics || [];
+              let gate = 0.95, boost = 0;
+              if (slurCover.has(ev.id)) gate = 1.02;            // 레가토
+              if (ar.includes("tenuto")) gate = 1.0;
+              if (ar.includes("staccato")) gate = slurCover.has(ev.id) ? 0.7 : 0.45;
+              if (ar.includes("fermata")) gate = Math.max(gate, 1.05);
+              if (ar.includes("accent")) boost += 0.14;
+              if (ar.includes("marcato")) { boost += 0.2; if (!ar.includes("staccato")) gate = Math.min(gate, 0.92); }
+              events.push({
+                id: ev.id, t, durSec: dval, midis, mIdx: m,
+                partIdx: ref.partIdx, staffIdx: ref.staffIdx,
+                channel: Math.min(15, ref.partIdx),
+                instrument: ref.instrument,
+                velBase: vel, boost, gate,
+              });
+            }
           }
-          if (midis.length) {
-            const ar = ev.artics || [];
-            let gate = 0.95, boost = 0;
-            if (slurCover.has(ev.id)) gate = 1.02;            // 레가토
-            if (ar.includes("tenuto")) gate = 1.0;
-            if (ar.includes("staccato")) gate = slurCover.has(ev.id) ? 0.7 : 0.45;
-            if (ar.includes("fermata")) gate = Math.max(gate, 1.05);
-            if (ar.includes("accent")) boost += 0.14;
-            if (ar.includes("marcato")) { boost += 0.2; if (!ar.includes("staccato")) gate = Math.min(gate, 0.92); }
-            events.push({ id: ev.id, t, durSec: dval, midis, mIdx: m, velBase: vel, boost, gate });
-          }
+          tick = tick.add(C.durValue(ev.dur));
         }
-        tick = tick.add(C.durValue(ev.dur));
       }
     }
 
@@ -271,7 +283,8 @@
     }
     for (const ev of events) ev.vel = Math.max(0.15, Math.min(1, ev.velBase + ev.boost));
 
-    return { events, spw, mLenSec, totalSec: score.measures.length * mLenSec };
+    events.sort((a, b) => a.t - b.t || a.partIdx - b.partIdx || a.staffIdx - b.staffIdx);
+    return { events, spw, mLenSec, totalSec: Math.max(1, maxMeasures) * mLenSec };
   }
 
   /* ---------------- 재생 컨트롤 ---------------- */
@@ -307,7 +320,6 @@
     player.nextBeat = Math.ceil((player.startOffset - 1e-9) / spb);
     player.playing = true;
 
-    const preset = INSTRUMENTS[score.instrument] || INSTRUMENTS.piano;
     const LOOKAHEAD = 0.18;
 
     const pump = () => {
@@ -317,6 +329,7 @@
       while (player.nextIdx < evs.length && evs[player.nextIdx].t <= horizon) {
         const ev = evs[player.nextIdx];
         const when = player.startCtxTime + (ev.t - player.startOffset);
+        const preset = INSTRUMENTS[ev.instrument] || INSTRUMENTS[score.instrument] || INSTRUMENTS.piano;
         for (const n of ev.midis)
           scheduleNote(preset, n.midi, when, Math.max(0.05, n.durSec * (ev.gate || 0.95)), ev.vel || 0.7);
         player.nextIdx++;
@@ -367,7 +380,8 @@
   /* 미리듣기(클릭/입력 피드백) */
   function previewNote(midis, durSec = 0.45) {
     const score = C.state.score;
-    const preset = INSTRUMENTS[score.instrument] || INSTRUMENTS.piano;
+    const ref = C.activeRef ? C.activeRef(score) : null;
+    const preset = INSTRUMENTS[ref?.instrument || score.instrument] || INSTRUMENTS.piano;
     const ac = audio();
     const arr = Array.isArray(midis) ? midis : [midis];
     for (const m of arr) scheduleNote(preset, m, ac.currentTime + 0.01, durSec, 0.7);
@@ -383,14 +397,18 @@
     const msgs = []; // {tick, data[]}
     msgs.push({ tick: 0, data: [0xFF, 0x51, 0x03, ...u24(Math.round(60000000 / score.tempo))] });
     msgs.push({ tick: 0, data: [0xFF, 0x58, 0x04, score.timeSig.num, Math.log2(score.timeSig.den), 24, 8] });
-    const gm = (INSTRUMENTS[score.instrument] || INSTRUMENTS.piano).gm;
-    msgs.push({ tick: 0, data: [0xC0, gm] });
+    for (const part of score.parts || [{ instrument: score.instrument }]) {
+      const ch = Math.min(15, (score.parts || []).indexOf(part));
+      const gm = (INSTRUMENTS[part.instrument || score.instrument] || INSTRUMENTS.piano).gm;
+      msgs.push({ tick: 0, data: [0xC0 | ch, gm] });
+    }
     for (const ev of comp.events) {
       const v = Math.max(1, Math.min(127, Math.round((ev.vel || 0.7) * 120)));
       const gate = Math.min(ev.gate || 0.95, 0.98);
       for (const n of ev.midis) {
-        msgs.push({ tick: toTicks(ev.t), data: [0x90, n.midi, v] });
-        msgs.push({ tick: toTicks(ev.t + n.durSec * gate), data: [0x80, n.midi, 0] });
+        const ch = ev.channel || 0;
+        msgs.push({ tick: toTicks(ev.t), data: [0x90 | ch, n.midi, v] });
+        msgs.push({ tick: toTicks(ev.t + n.durSec * gate), data: [0x80 | ch, n.midi, 0] });
       }
     }
     msgs.sort((a, b) => a.tick - b.tick || noteOffFirst(a, b));

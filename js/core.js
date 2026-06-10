@@ -192,7 +192,178 @@ window.SF = window.SF || {};
     return { id: newId(), type: "rest", dur: { n: L.n, d: L.d, dots: 0 }, notes: [], full: true };
   }
 
+  const PART_LIBRARY = {
+    piano: { name: "피아노", shortName: "Pno.", group: "keyboard", instrument: "piano", brace: "brace", staves: [{ clef: "treble", name: "오른손" }, { clef: "bass", name: "왼손" }] },
+    flute: { name: "플루트", shortName: "Fl.", group: "woodwind", instrument: "flute", staves: [{ clef: "treble" }] },
+    violin: { name: "바이올린", shortName: "Vln.", group: "strings", instrument: "strings", staves: [{ clef: "treble" }] },
+    viola: { name: "비올라", shortName: "Vla.", group: "strings", instrument: "strings", staves: [{ clef: "treble" }] },
+    cello: { name: "첼로", shortName: "Vc.", group: "strings", instrument: "strings", staves: [{ clef: "bass" }] },
+    organ: { name: "오르간", shortName: "Org.", group: "keyboard", instrument: "organ", brace: "brace", staves: [{ clef: "treble" }, { clef: "bass" }] },
+    epiano: { name: "일렉피아노", shortName: "E.Pno.", group: "keyboard", instrument: "epiano", staves: [{ clef: "treble" }] },
+    musicbox: { name: "뮤직박스", shortName: "M.B.", group: "keyboard", instrument: "musicbox", staves: [{ clef: "treble" }] },
+    chiptune: { name: "8비트", shortName: "8bit", group: "synth", instrument: "chiptune", staves: [{ clef: "treble" }] },
+  };
+
+  const ENSEMBLES = {
+    solo: { label: "독주 1단", parts: ["solo"] },
+    piano: { label: "피아노 2단", parts: ["piano"] },
+    "flute-piano": { label: "플루트 + 피아노 3단", parts: ["flute", "piano"] },
+    "string-quartet": { label: "현악4중주", parts: ["violin", "violin", "viola", "cello"] },
+  };
+
+  function cloneMeasure(mm) {
+    return JSON.parse(JSON.stringify(mm));
+  }
+  function emptyMeasures(score, count) {
+    const out = [];
+    for (let i = 0; i < count; i++) out.push({ events: [fullRest(score)] });
+    return out;
+  }
+  function partTemplate(kind, opt = {}) {
+    const lib = kind === "solo" ? {
+      name: opt.name || (PART_LIBRARY[opt.instrument || "piano"]?.name || "악기"),
+      shortName: opt.shortName || (PART_LIBRARY[opt.instrument || "piano"]?.shortName || "Inst."),
+      group: "solo",
+      instrument: opt.instrument || "piano",
+      staves: [{ clef: opt.clef || "treble" }],
+    } : (PART_LIBRARY[kind] || PART_LIBRARY.piano);
+    return {
+      id: newId(),
+      kind,
+      name: lib.name,
+      shortName: lib.shortName,
+      group: lib.group,
+      instrument: lib.instrument,
+      brace: lib.brace || null,
+      staves: lib.staves.map((st, i) => ({
+        id: newId(),
+        name: st.name || "",
+        clef: st.clef || "treble",
+        staffIdx: i,
+        measures: [],
+      })),
+    };
+  }
+  function createPartsFor(score, partsSpec, measureCount, seedMeasures) {
+    return partsSpec.map((spec, pIdx) => {
+      const kind = typeof spec === "string" ? spec : (spec.kind || "solo");
+      const part = partTemplate(kind, typeof spec === "object" ? spec : {});
+      part.staves.forEach((staff, sIdx) => {
+        if (pIdx === 0 && sIdx === 0 && seedMeasures) staff.measures = seedMeasures;
+        else staff.measures = emptyMeasures(score, measureCount);
+      });
+      return part;
+    });
+  }
+  function primaryStaff(score) {
+    ensureParts(score);
+    return score.parts[0].staves[0];
+  }
+  function syncLegacyFields(score) {
+    if (!score.parts || !score.parts.length || !score.parts[0].staves.length) return score;
+    const st = score.parts[0].staves[0], part = score.parts[0];
+    score.measures = st.measures;
+    score.clef = st.clef || score.clef || "treble";
+    score.instrument = part.instrument || score.instrument || "piano";
+    score.activePartIdx = Math.max(0, Math.min(score.activePartIdx || 0, score.parts.length - 1));
+    score.activeStaffIdx = Math.max(0, Math.min(score.activeStaffIdx || 0, score.parts[score.activePartIdx].staves.length - 1));
+    return score;
+  }
+  function ensureParts(score) {
+    if (!score.measures) score.measures = [];
+    const count = Math.max(1, score.measures.length || 1);
+    if (!score.parts || !score.parts.length) {
+      const firstMeasures = score.measures.length ? score.measures : emptyMeasures(score, count);
+      score.parts = createPartsFor(score, [{
+        kind: "solo",
+        instrument: score.instrument || "piano",
+        clef: score.clef || "treble",
+      }], firstMeasures.length, firstMeasures);
+    } else {
+      for (const part of score.parts) {
+        if (!part.id) part.id = newId();
+        if (!part.instrument) part.instrument = score.instrument || "piano";
+        if (!part.name) part.name = PART_LIBRARY[part.instrument]?.name || "악기";
+        if (!part.shortName) part.shortName = PART_LIBRARY[part.instrument]?.shortName || part.name;
+        if (!part.staves || !part.staves.length) part.staves = [{ id: newId(), clef: score.clef || "treble", measures: emptyMeasures(score, count) }];
+        for (let i = 0; i < part.staves.length; i++) {
+          const staff = part.staves[i];
+          if (!staff.id) staff.id = newId();
+          if (!staff.clef) staff.clef = i === 1 ? "bass" : (score.clef || "treble");
+          if (!staff.measures || !staff.measures.length) staff.measures = emptyMeasures(score, count);
+          while (staff.measures.length < count) staff.measures.push({ events: [fullRest(score)] });
+          for (const mm of staff.measures) if (!mm.events || !mm.events.length) mm.events = [fullRest(score)];
+        }
+      }
+    }
+    if (!score.spanners) score.spanners = [];
+    return syncLegacyFields(score);
+  }
+  function staffRefs(score) {
+    ensureParts(score);
+    const refs = [];
+    score.parts.forEach((part, partIdx) => {
+      part.staves.forEach((staff, staffIdx) => refs.push({
+        partIdx, staffIdx, globalIdx: refs.length,
+        part, staff, measures: staff.measures,
+        clef: staff.clef || "treble",
+        instrument: part.instrument || score.instrument || "piano",
+        name: part.name || "악기",
+        shortName: part.shortName || part.name || "Inst.",
+        brace: part.brace || (part.staves.length > 1 ? "brace" : null),
+      }));
+    });
+    return refs;
+  }
+  function activeRef(score) {
+    const refs = staffRefs(score);
+    const p = score.activePartIdx || 0, s = score.activeStaffIdx || 0;
+    return refs.find(r => r.partIdx === p && r.staffIdx === s) || refs[0];
+  }
+  function staffRef(score, ctx) {
+    if (!ctx) return activeRef(score);
+    const refs = staffRefs(score);
+    if (typeof ctx.globalIdx === "number") return refs[ctx.globalIdx] || refs[0];
+    const p = ctx.partIdx ?? score.activePartIdx ?? 0;
+    const s = ctx.staffIdx ?? score.activeStaffIdx ?? 0;
+    return refs.find(r => r.partIdx === p && r.staffIdx === s) || refs[0];
+  }
+  function staffMeasures(score, ctx) { return staffRef(score, ctx).measures; }
+  function setActiveStaff(score, partIdx, staffIdx) {
+    ensureParts(score);
+    score.activePartIdx = Math.max(0, Math.min(partIdx || 0, score.parts.length - 1));
+    score.activeStaffIdx = Math.max(0, Math.min(staffIdx || 0, score.parts[score.activePartIdx].staves.length - 1));
+    return activeRef(score);
+  }
+  function activeClef(score) { return activeRef(score).clef || "treble"; }
+  function ensembleKey(score) {
+    ensureParts(score);
+    if (score.parts.length === 1 && score.parts[0].staves.length === 2 && score.parts[0].instrument === "piano") return "piano";
+    if (score.parts.length === 2 && score.parts[0].instrument === "flute" && score.parts[1].instrument === "piano" && score.parts[1].staves.length === 2) return "flute-piano";
+    if (score.parts.length === 4 && score.parts.every(p => p.group === "strings")) return "string-quartet";
+    if (score.parts.length === 1 && score.parts[0].staves.length === 1) return "solo";
+    return "custom";
+  }
+  function applyEnsemble(score, key) {
+    ensureParts(score);
+    const spec = ENSEMBLES[key] || ENSEMBLES.solo;
+    const oldRefs = staffRefs(score);
+    const oldPrimary = oldRefs[0]?.measures || score.measures;
+    const count = Math.max(1, score.measures.length);
+    const partsSpec = spec.parts.map((kind, i) => {
+      if (kind === "solo") return { kind: "solo", instrument: score.instrument || "piano", clef: score.clef || "treble" };
+      if (key === "string-quartet" && i === 1) return { kind: "violin", name: "바이올린 II", shortName: "Vln. II" };
+      if (key === "string-quartet" && i === 0) return { kind: "violin", name: "바이올린 I", shortName: "Vln. I" };
+      return kind;
+    });
+    score.parts = createPartsFor(score, partsSpec, count, oldPrimary);
+    score.activePartIdx = 0;
+    score.activeStaffIdx = 0;
+    return syncLegacyFields(score);
+  }
+
   function createScore(opt = {}) {
+    const measureCount = opt.measureCount || 8;
     const score = {
       format: "scoreforge-1",
       meta: { title: opt.title || "새 악보", composer: opt.composer || "" },
@@ -202,11 +373,20 @@ window.SF = window.SF || {};
       tempo: opt.tempo || 100,
       instrument: opt.instrument || "piano",
       measures: [],
+      parts: [],
+      activePartIdx: 0,
+      activeStaffIdx: 0,
       spanners: [], // { id, type: 'slur'|'cresc'|'dim', startId, endId } — 구간 요소
     };
-    const count = opt.measureCount || 8;
-    for (let i = 0; i < count; i++) score.measures.push({ events: [fullRest(score)] });
-    return score;
+    for (let i = 0; i < measureCount; i++) score.measures.push({ events: [fullRest(score)] });
+    const ensemble = opt.ensemble || null;
+    const parts = opt.parts || (ensemble && ENSEMBLES[ensemble] ? ENSEMBLES[ensemble].parts : [{
+      kind: "solo",
+      instrument: opt.instrument || "piano",
+      clef: opt.clef || "treble",
+    }]);
+    score.parts = createPartsFor(score, parts, measureCount, score.measures);
+    return syncLegacyFields(score);
   }
 
   /* ---------------- 순회/조회 ---------------- */
@@ -216,24 +396,32 @@ window.SF = window.SF || {};
     return t;
   }
   function findEvent(score, id) {
-    for (let m = 0; m < score.measures.length; m++) {
-      const evs = score.measures[m].events;
-      for (let e = 0; e < evs.length; e++) if (evs[e].id === id) return { m, e, ev: evs[e] };
+    for (const ref of staffRefs(score)) {
+      for (let m = 0; m < ref.measures.length; m++) {
+        const evs = ref.measures[m].events;
+        for (let e = 0; e < evs.length; e++) {
+          if (evs[e].id === id) return { ...ref, m, e, ev: evs[e] };
+        }
+      }
     }
     return null;
   }
-  function nextEvent(score, m, e) {
-    const evs = score.measures[m].events;
-    if (e + 1 < evs.length) return { m, e: e + 1, ev: evs[e + 1] };
-    for (let mm = m + 1; mm < score.measures.length; mm++)
-      if (score.measures[mm].events.length) return { m: mm, e: 0, ev: score.measures[mm].events[0] };
+  function nextEvent(score, m, e, ctx) {
+    const ref = staffRef(score, ctx);
+    const measures = staffMeasures(score, ctx);
+    const evs = measures[m]?.events || [];
+    if (e + 1 < evs.length) return { ...ref, m, e: e + 1, ev: evs[e + 1] };
+    for (let mm = m + 1; mm < measures.length; mm++)
+      if (measures[mm].events.length) return { ...ref, m: mm, e: 0, ev: measures[mm].events[0] };
     return null;
   }
-  function prevEvent(score, m, e) {
-    if (e - 1 >= 0) return { m, e: e - 1, ev: score.measures[m].events[e - 1] };
+  function prevEvent(score, m, e, ctx) {
+    const ref = staffRef(score, ctx);
+    const measures = staffMeasures(score, ctx);
+    if (e - 1 >= 0) return { ...ref, m, e: e - 1, ev: measures[m].events[e - 1] };
     for (let mm = m - 1; mm >= 0; mm--) {
-      const evs = score.measures[mm].events;
-      if (evs.length) return { m: mm, e: evs.length - 1, ev: evs[evs.length - 1] };
+      const evs = measures[mm].events;
+      if (evs.length) return { ...ref, m: mm, e: evs.length - 1, ev: evs[evs.length - 1] };
     }
     return null;
   }
@@ -244,8 +432,8 @@ window.SF = window.SF || {};
 
   /* 마디 내 [start, start+len) 범위를 새 이벤트 목록으로 교체.
    * start는 항상 기존 이벤트 경계여야 한다(입력 커서가 보장). */
-  function replaceRange(score, mIdx, start, len, makeEvents) {
-    const measure = score.measures[mIdx];
+  function replaceRange(score, mIdx, start, len, makeEvents, ctx) {
+    const measure = staffMeasures(score, ctx)[mIdx];
     const out = [];
     let pos = Fraction.ZERO;
     const end = start.add(len);
@@ -274,7 +462,8 @@ window.SF = window.SF || {};
   }
 
   /* 음표/쉼표 입력. 마디를 넘으면 다음 마디로 타이 분할. 입력된 첫 이벤트 ref 반환 */
-  function inputAt(score, mIdx, tick, dur, pitches /* null=쉼표 */) {
+  function inputAt(score, mIdx, tick, dur, pitches /* null=쉼표 */, ctx) {
+    const ref = staffRef(score, ctx);
     const L = measureLen(score);
     let want = durValue(dur);
     const room = L.sub(tick);
@@ -292,7 +481,7 @@ window.SF = window.SF || {};
         if (!firstId) firstId = ev.id;
         return ev;
       });
-      replaceRange(score, m, t, pieces.reduce((a, d) => a.add(durValue(d)), Fraction.ZERO), () => evs);
+      replaceRange(score, m, t, pieces.reduce((a, d) => a.add(durValue(d)), Fraction.ZERO), () => evs, ref);
     };
 
     if (want.lte(room)) {
@@ -301,7 +490,7 @@ window.SF = window.SF || {};
     } else {
       // 마디 경계를 넘음 → 분할 + (음표면) 타이
       const over = want.sub(room);
-      const hasNext = mIdx + 1 < score.measures.length;
+      const hasNext = mIdx + 1 < ref.measures.length;
       place(mIdx, tick, decompose(tick, room), hasNext && !!pitches);
       if (hasNext) {
         const pieces2 = decompose(Fraction.ZERO, over.gt(L) ? L : over);
@@ -315,21 +504,21 @@ window.SF = window.SF || {};
   }
 
   /* 이벤트 삭제 → 같은 길이의 쉼표 */
-  function deleteEvent(score, mIdx, eIdx) {
-    const measure = score.measures[mIdx];
+  function deleteEvent(score, mIdx, eIdx, ctx) {
+    const measure = staffMeasures(score, ctx)[mIdx];
     const ev = measure.events[eIdx];
     if (!ev) return;
     const start = eventStartTick(measure, eIdx);
     const len = durValue(ev.dur);
     replaceRange(score, mIdx, start, len, () =>
-      decompose(start, len).map(d => ({ id: newId(), type: "rest", dur: d, notes: [] })));
-    consolidateRests(score, mIdx);
+      decompose(start, len).map(d => ({ id: newId(), type: "rest", dur: d, notes: [] })), ctx);
+    consolidateRests(score, mIdx, ctx);
     normalizeTies(score);
   }
 
   /* 연속 쉼표 정리: 쉼표 구간을 다시 분해해 깔끔하게, 마디 전체가 쉼표면 온쉼표 1개 */
-  function consolidateRests(score, mIdx) {
-    const measure = score.measures[mIdx];
+  function consolidateRests(score, mIdx, ctx) {
+    const measure = staffMeasures(score, ctx)[mIdx];
     if (measure.events.every(e => e.type === "rest")) {
       measure.events = [fullRest(score)];
       return;
@@ -357,16 +546,18 @@ window.SF = window.SF || {};
 
   /* 타이 정합성: 다음 이벤트에 같은 음높이가 없으면 tie 해제 */
   function normalizeTies(score) {
-    for (let m = 0; m < score.measures.length; m++) {
-      const evs = score.measures[m].events;
-      for (let e = 0; e < evs.length; e++) {
-        const ev = evs[e];
-        if (ev.type !== "note") continue;
-        const nx = nextEvent(score, m, e);
-        for (const note of ev.notes) {
-          if (note.tie) {
-            const ok = nx && nx.ev.type === "note" && nx.ev.notes.some(n2 => pitchEq(n2, note));
-            if (!ok) note.tie = false;
+    for (const ref of staffRefs(score)) {
+      for (let m = 0; m < ref.measures.length; m++) {
+        const evs = ref.measures[m].events;
+        for (let e = 0; e < evs.length; e++) {
+          const ev = evs[e];
+          if (ev.type !== "note") continue;
+          const nx = nextEvent(score, m, e, ref);
+          for (const note of ev.notes) {
+            if (note.tie) {
+              const ok = nx && nx.ev.type === "note" && nx.ev.notes.some(n2 => pitchEq(n2, note));
+              if (!ok) note.tie = false;
+            }
           }
         }
       }
@@ -374,8 +565,8 @@ window.SF = window.SF || {};
   }
 
   /* 직전 이벤트로부터 타이로 이어져 들어온 음인지 */
-  function isTiedFrom(score, m, e, note) {
-    const pv = prevEvent(score, m, e);
+  function isTiedFrom(score, m, e, note, ctx) {
+    const pv = prevEvent(score, m, e, ctx);
     return !!(pv && pv.ev.type === "note" && pv.ev.notes.some(n => n.tie && pitchEq(n, note)));
   }
 
@@ -384,8 +575,9 @@ window.SF = window.SF || {};
   function eventOrderMap(score) {
     const map = new Map();
     let i = 0;
-    for (const measure of score.measures)
-      for (const ev of measure.events) map.set(ev.id, i++);
+    for (const ref of staffRefs(score))
+      for (const measure of ref.measures)
+        for (const ev of measure.events) map.set(ev.id, i++);
     return map;
   }
 
@@ -420,74 +612,89 @@ window.SF = window.SF || {};
 
   /* ---------------- 박자표 변경: 모든 내용을 새 마디 길이로 다시 붓기 ---------------- */
   function rebar(score, newTs) {
-    // 1) 타이 병합된 (음/쉼, 실제 길이) 타임라인 수집
-    const items = [];
-    const consumed = new Set();
-    for (let m = 0; m < score.measures.length; m++) {
-      const evs = score.measures[m].events;
-      for (let e = 0; e < evs.length; e++) {
-        const ev = evs[e];
-        if (consumed.has(ev.id)) continue;
-        let len = durValue(ev.dur);
-        if (ev.type === "note") {
-          // 타이 체인 병합(모든 음이 동일 피치셋이라고 가정 — 단성부)
-          let cur = { m, e, ev };
-          while (cur.ev.notes.length && cur.ev.notes.every(n => n.tie)) {
-            const nx = nextEvent(score, cur.m, cur.e);
-            if (!nx || nx.ev.type !== "note") break;
-            consumed.add(nx.ev.id);
-            len = len.add(durValue(nx.ev.dur));
-            cur = nx;
+    ensureParts(score);
+    const lanes = staffRefs(score).map(ref => {
+      const items = [];
+      const consumed = new Set();
+      for (let m = 0; m < ref.measures.length; m++) {
+        const evs = ref.measures[m].events;
+        for (let e = 0; e < evs.length; e++) {
+          const ev = evs[e];
+          if (consumed.has(ev.id)) continue;
+          let len = durValue(ev.dur);
+          if (ev.type === "note") {
+            let cur = { ...ref, m, e, ev };
+            while (cur.ev.notes.length && cur.ev.notes.every(n => n.tie)) {
+              const nx = nextEvent(score, cur.m, cur.e, ref);
+              if (!nx || nx.ev.type !== "note") break;
+              consumed.add(nx.ev.id);
+              len = len.add(durValue(nx.ev.dur));
+              cur = nx;
+            }
+            items.push({
+              type: "note", len,
+              pitches: ev.notes.map(n => ({ step: n.step, alter: n.alter, oct: n.oct })),
+              lyric: ev.lyric,
+              dynamic: ev.dynamic,
+              artics: ev.artics ? [...ev.artics] : null,
+            });
+          } else {
+            items.push({ type: "rest", len, fromFull: !!ev.full });
           }
-          items.push({ type: "note", len, pitches: ev.notes.map(n => ({ step: n.step, alter: n.alter, oct: n.oct })), lyric: ev.lyric });
-        } else if (!ev.full) {
-          items.push({ type: "rest", len });
-        } else {
-          items.push({ type: "rest", len, fromFull: true });
         }
       }
-    }
-    // 2) 새 박자표로 빈 마디 구성 후 순서대로 붓기
+      return { ref, items, total: items.reduce((a, it) => a.add(it.len), Fraction.ZERO) };
+    });
+
     score.timeSig = { num: newTs.num, den: newTs.den };
     const L = measureLen(score);
-    const total = items.reduce((a, it) => a.add(it.len), Fraction.ZERO);
     let mCount = 1;
-    { // ceil(total / L)
-      const q = total.div(L);
-      mCount = Math.max(1, Math.ceil(q.value - 1e-9));
+    for (const lane of lanes) {
+      const q = lane.total.div(L);
+      mCount = Math.max(mCount, Math.ceil(q.value - 1e-9));
     }
-    score.measures = [];
-    for (let i = 0; i < mCount; i++) score.measures.push({ events: [fullRest(score)] });
+    mCount = Math.max(1, mCount);
 
-    let m = 0, t = Fraction.ZERO;
-    for (const it of items) {
-      let remain = it.len;
-      let first = true;
-      while (remain.n > 0 && m < score.measures.length) {
-        const room = L.sub(t);
-        const take = remain.lte(room) ? remain : room;
-        const pieces = decompose(t, take);
-        for (const [i, d] of pieces.entries()) {
-          const isLastPiece = remain.eq(take) && i === pieces.length - 1;
-          if (it.type === "note") {
-            const ev = {
-              id: newId(), type: "note", dur: d,
-              notes: it.pitches.map(p => ({ ...p, tie: !isLastPiece })),
-            };
-            if (first && it.lyric) ev.lyric = it.lyric;
-            replaceRange(score, m, t, durValue(d), () => [ev]);
-          } else {
-            replaceRange(score, m, t, durValue(d), () =>
-              [{ id: newId(), type: "rest", dur: d, notes: [] }]);
-          }
-          t = t.add(durValue(d));
-          first = false;
-        }
-        remain = remain.sub(take);
-        if (t.gte(L)) { m++; t = Fraction.ZERO; }
-      }
+    for (const lane of lanes) {
+      lane.ref.staff.measures = emptyMeasures(score, mCount);
     }
-    for (let i = 0; i < score.measures.length; i++) consolidateRests(score, i);
+    syncLegacyFields(score);
+
+    for (const lane of lanes) {
+      const ctx = { partIdx: lane.ref.partIdx, staffIdx: lane.ref.staffIdx };
+      let m = 0, t = Fraction.ZERO;
+      for (const it of lane.items) {
+        let remain = it.len;
+        let first = true;
+        while (remain.n > 0 && m < staffMeasures(score, ctx).length) {
+          const room = L.sub(t);
+          const take = remain.lte(room) ? remain : room;
+          const pieces = decompose(t, take);
+          for (const [i, d] of pieces.entries()) {
+            const isLastPiece = remain.eq(take) && i === pieces.length - 1;
+            if (it.type === "note") {
+              const ev = {
+                id: newId(), type: "note", dur: d,
+                notes: it.pitches.map(p => ({ ...p, tie: !isLastPiece })),
+              };
+              if (first && it.lyric) ev.lyric = it.lyric;
+              if (first && it.dynamic) ev.dynamic = it.dynamic;
+              if (first && it.artics) ev.artics = [...it.artics];
+              replaceRange(score, m, t, durValue(d), () => [ev], ctx);
+            } else {
+              replaceRange(score, m, t, durValue(d), () =>
+                [{ id: newId(), type: "rest", dur: d, notes: [] }], ctx);
+            }
+            t = t.add(durValue(d));
+            first = false;
+          }
+          remain = remain.sub(take);
+          if (t.gte(L)) { m++; t = Fraction.ZERO; }
+        }
+      }
+      for (let i = 0; i < staffMeasures(score, ctx).length; i++) consolidateRests(score, i, ctx);
+    }
+    syncLegacyFields(score);
     normalizeTies(score);
   }
 
@@ -501,7 +708,8 @@ window.SF = window.SF || {};
     if (f === 7 && score.keySig <= 0) f = -5;
     if (f === -7 && score.keySig >= 0) f = 5;
     score.keySig = f;
-    for (const measure of score.measures)
+    for (const ref of staffRefs(score))
+      for (const measure of ref.measures)
       for (const ev of measure.events)
         if (ev.type === "note")
           ev.notes = ev.notes.map(n => {
@@ -511,18 +719,25 @@ window.SF = window.SF || {};
   }
 
   /* ---------------- 직렬화 ---------------- */
-  function toJSON(score) { return JSON.parse(JSON.stringify(score)); }
+  function toJSON(score) {
+    ensureParts(score);
+    return JSON.parse(JSON.stringify(score));
+  }
   function fromJSON(obj) {
     const score = JSON.parse(JSON.stringify(obj));
+    ensureParts(score);
     // id 카운터 복구 + 구버전 파일 마이그레이션
     let maxId = 0;
-    for (const m of score.measures) for (const ev of m.events) {
-      const n = parseInt(String(ev.id).replace(/\D/g, ""), 10);
-      if (!isNaN(n)) maxId = Math.max(maxId, n);
-      if (!ev.notes) ev.notes = [];
-    }
+    for (const ref of staffRefs(score))
+      for (const m of ref.measures)
+        for (const ev of m.events) {
+          const n = parseInt(String(ev.id).replace(/\D/g, ""), 10);
+          if (!isNaN(n)) maxId = Math.max(maxId, n);
+          if (!ev.notes) ev.notes = [];
+        }
     _idCounter = maxId + 1;
     if (!score.spanners) score.spanners = [];
+    syncLegacyFields(score);
     normalizeSpanners(score);
     return score;
   }
@@ -537,6 +752,7 @@ window.SF = window.SF || {};
 
   function onChange(fn) { state.listeners.add(fn); return () => state.listeners.delete(fn); }
   function emit() {
+    ensureParts(state.score);
     normalizeSpanners(state.score); // 편집으로 앵커가 사라진 슬러/헤어핀 정리
     state.dirty = true;
     for (const fn of state.listeners) fn(state.score);
@@ -567,7 +783,7 @@ window.SF = window.SF || {};
   function canRedo() { return history.redo.length > 0; }
   function resetHistory() { history.undo.length = 0; history.redo.length = 0; }
   function setScore(score) {
-    state.score = score; resetHistory(); emit(); state.dirty = false;
+    state.score = fromJSON(score); resetHistory(); emit(); state.dirty = false;
   }
 
   /* ---------------- 내보내기 ---------------- */
@@ -577,7 +793,9 @@ window.SF = window.SF || {};
     durBase, durValue, durEq, durName, decompose, BASES,
     midiOf, absStep, pitchEq, keyAlterFor, spellMidi, transposePitch, pitchName,
     STEP_EN, STEP_KO, STEP_SEMIS, KEY_NAMES, CLEFS, keySigSteps, beamGroups, beatLen,
+    PART_LIBRARY, ENSEMBLES,
     createScore, measureLen, fullRest, newId,
+    ensureParts, staffRefs, staffRef, staffMeasures, activeRef, activeClef, setActiveStaff, ensembleKey, applyEnsemble,
     eventStartTick, findEvent, nextEvent, prevEvent,
     replaceRange, inputAt, deleteEvent, consolidateRests, normalizeTies, isTiedFrom,
     eventOrderMap, normalizeSpanners, slurCoverMap,
