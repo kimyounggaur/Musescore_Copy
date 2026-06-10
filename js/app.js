@@ -24,6 +24,7 @@
     pianoVisible: true,
     dragging: null,
   };
+  let clip = null; // 내부 악보 클립보드
 
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -135,6 +136,133 @@
       t = end;
     }
     return null;
+  }
+
+  function advancePos(score, mIdx, tick, len) {
+    const L = C.measureLen(score);
+    let t = tick.add(len), m = mIdx;
+    while (t.gte(L)) { t = t.sub(L); m++; }
+    return { mIdx: m, tick: t };
+  }
+
+  function measureCountForEnd(score, endPos) {
+    return endPos.tick.isZero() ? endPos.mIdx : endPos.mIdx + 1;
+  }
+
+  function ensureMeasureCount(score, count) {
+    if (count <= 0) return;
+    C.ensureParts(score);
+    for (const ref of C.staffRefs(score)) {
+      while (ref.measures.length < count) ref.measures.push({ events: [C.fullRest(score)] });
+    }
+    score.measures = C.staffRefs(score)[0]?.measures || score.measures;
+  }
+
+  function clonePlain(obj) {
+    return JSON.parse(JSON.stringify(obj));
+  }
+
+  function cloneDurForPaste(dur, tupletIds) {
+    const out = clonePlain(dur);
+    if (out.tuplet && out.tuplet.id) {
+      if (!tupletIds.has(out.tuplet.id)) tupletIds.set(out.tuplet.id, C.newId());
+      out.tuplet.id = tupletIds.get(out.tuplet.id);
+    }
+    return out;
+  }
+
+  function selectionItems() {
+    const ids = selectedIds();
+    if (!ids || !ids.size) return null;
+    const found = [...ids].map(id => C.findEvent(C.state.score, id)).filter(Boolean);
+    if (!found.length) return null;
+    const first = found[0];
+    if (found.some(f => f.partIdx !== first.partIdx || f.staffIdx !== first.staffIdx)) return { mixed: true };
+    found.sort((a, b) => a.m - b.m || a.e - b.e);
+    return {
+      partIdx: first.partIdx,
+      staffIdx: first.staffIdx,
+      name: first.name,
+      items: found.map(f => {
+        const ev = clonePlain(f.ev);
+        delete ev.id;
+        delete ev.full;
+        return ev;
+      }),
+    };
+  }
+
+  function copySelection(opts = {}) {
+    const pack = selectionItems();
+    if (!pack) { flashHint("복사할 음표나 쉼표를 먼저 선택하세요"); return false; }
+    if (pack.mixed) { flashHint("복사는 한 보표 안의 범위에서만 할 수 있어요"); return false; }
+    clip = {
+      items: pack.items,
+      total: pack.items.reduce((a, ev) => a.add(C.durValue(ev.dur)), Fraction.ZERO),
+      label: pack.name,
+    };
+    if (!opts.quiet) toast(`${clip.items.length}개를 복사했어요`);
+    return true;
+  }
+
+  function decoratePastedEvent(score, id, src) {
+    const f = id && C.findEvent(score, id);
+    if (!f) return;
+    if (src.lyric) f.ev.lyric = src.lyric; else delete f.ev.lyric;
+    if (src.dynamic) f.ev.dynamic = src.dynamic; else delete f.ev.dynamic;
+    if (src.artics && src.artics.length) f.ev.artics = [...src.artics]; else delete f.ev.artics;
+    if (src.type === "note" && f.ev.type === "note") {
+      for (let i = 0; i < f.ev.notes.length; i++) {
+        f.ev.notes[i].tie = !!(f.ev.notes[i].tie || src.notes?.[i]?.tie);
+      }
+    }
+  }
+
+  function pasteClipboard() {
+    if (!clip || !clip.items.length) { flashHint("붙여넣을 악보 조각이 없어요"); return; }
+    const score = C.state.score;
+    let target = null;
+    if (ui.inputMode) target = cursorPos().found;
+    else target = selectedEvent() || targetEvent();
+    if (!target) {
+      const ref = activeRef();
+      target = { ...ref, m: 0, e: 0, ev: ref.measures[0].events[0] };
+    }
+    const startTick = C.eventStartTick(target.measures[target.m], target.e);
+    const ctx = { partIdx: target.partIdx, staffIdx: target.staffIdx };
+    const endPos = advancePos(score, target.m, startTick, clip.total);
+    const needed = measureCountForEnd(score, endPos);
+    const pastedIds = [];
+
+    C.mutate("붙여넣기", (s2) => {
+      ensureMeasureCount(s2, needed);
+      C.setActiveStaff(s2, ctx.partIdx, ctx.staffIdx);
+      const tupletIds = new Map();
+      let pos = { mIdx: target.m, tick: startTick };
+      const touched = new Set();
+      for (const src of clip.items) {
+        const dur = cloneDurForPaste(src.dur, tupletIds);
+        const pitches = src.type === "note" ? src.notes.map(n => ({ step: n.step, alter: n.alter, oct: n.oct })) : null;
+        const firstId = C.inputAt(s2, pos.mIdx, pos.tick, dur, pitches, ctx);
+        if (firstId) {
+          pastedIds.push(firstId);
+          decoratePastedEvent(s2, firstId, src);
+        }
+        touched.add(pos.mIdx);
+        pos = advancePos(s2, pos.mIdx, pos.tick, C.durValue(dur));
+        touched.add(Math.max(0, pos.mIdx - (pos.tick.isZero() ? 1 : 0)));
+      }
+      for (const m of touched) if (m >= 0 && m < C.staffMeasures(s2, ctx).length) C.consolidateRests(s2, m, ctx);
+      C.normalizeTies(s2);
+    });
+    if (pastedIds.length) {
+      ui.selection = pastedIds[0];
+      ui.selAnchor = pastedIds[pastedIds.length - 1] || pastedIds[0];
+      ui.cursorId = pastedIds[pastedIds.length - 1] || pastedIds[0];
+      ui.lastInsertedId = ui.cursorId;
+    }
+    update();
+    toast(`${clip.items.length}개를 붙여넣었어요`);
   }
 
   /* 입력 실행 (커서/세그먼트 위치에) */
@@ -990,7 +1118,7 @@
     const found = selectedEvent();
     const ids = selectedIds();
     if (ids && ids.size > 1) {
-      text = `${ids.size}개 선택 — S=이음줄 · < >=쐐기 · 기호 버튼=일괄 적용`;
+      text = `${ids.size}개 선택 — Ctrl+C/V=복사/붙여넣기 · S=이음줄 · < >=쐐기`;
     } else if (found) {
       const ev = found.ev;
       if (ev.type === "note") {
@@ -1235,6 +1363,9 @@
         if (K === "Z") { e.preventDefault(); e.shiftKey ? C.redo() : C.undo(); afterHistory(); return; }
         if (K === "Y") { e.preventDefault(); C.redo(); afterHistory(); return; }
         if (K === "S") { e.preventDefault(); IO.saveJSON(C.state.score); toast("악보 파일을 내려받았어요"); return; }
+        if (K === "C") { e.preventDefault(); copySelection(); return; }
+        if (K === "V") { e.preventDefault(); pasteClipboard(); return; }
+        if (K === "X") { e.preventDefault(); if (copySelection({ quiet: true })) { deleteSelection(); toast("잘라냈어요"); } return; }
         if (/^[2-9]$/.test(k)) { e.preventDefault(); applyTuplet(+k); return; }
         if (K === "ARROWUP" || k === "ArrowUp") { e.preventDefault(); transposeSelection(12); return; }
         if (k === "ArrowDown") { e.preventDefault(); transposeSelection(-12); return; }
