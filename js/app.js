@@ -457,6 +457,31 @@
     toast(removed ? "쐐기를 지웠어요" : (type === "cresc" ? "크레셴도(점점 세게)를 걸었어요" : "디미누엔도(점점 여리게)를 걸었어요"));
   }
 
+  function applyTuplet(actual) {
+    const found = selectedEvent() || targetEvent();
+    if (!found) { flashHint("잇단음표로 바꿀 음표나 쉼표를 선택하세요"); return; }
+    if (found.ev.full) { flashHint("온마디 쉼표는 먼저 음길이를 바꾼 뒤 잇단음표로 만들 수 있어요"); return; }
+    if (found.ev.dur.tuplet) { flashHint("이미 잇단음표 안에 있어요"); return; }
+    let ids = null;
+    C.mutate(`${actual}잇단음표`, (score) => {
+      const f = C.findEvent(score, found.ev.id);
+      if (!f) return;
+      ids = C.makeTupletAt(score, f.m, f.e, actual, f);
+    });
+    if (ids && ids.length) {
+      ui.selection = ids[0];
+      ui.selAnchor = ids[0];
+      ui.cursorId = ids[0];
+      ui.lastInsertedId = ids[0];
+      const f = C.findEvent(C.state.score, ids[0]);
+      if (f && f.ev.type === "note") P.previewNote(f.ev.notes.map(C.midiOf), 0.25);
+      update();
+      toast(`${actual}잇단음표로 나눴어요`);
+    } else {
+      update();
+    }
+  }
+
   /* ---------------- 입력 모드 ---------------- */
   function setInputMode(on) {
     ui.inputMode = on;
@@ -1201,6 +1226,7 @@
         if (K === "Z") { e.preventDefault(); e.shiftKey ? C.redo() : C.undo(); afterHistory(); return; }
         if (K === "Y") { e.preventDefault(); C.redo(); afterHistory(); return; }
         if (K === "S") { e.preventDefault(); IO.saveJSON(C.state.score); toast("악보 파일을 내려받았어요"); return; }
+        if (/^[2-9]$/.test(k)) { e.preventDefault(); applyTuplet(+k); return; }
         if (K === "ARROWUP" || k === "ArrowUp") { e.preventDefault(); transposeSelection(12); return; }
         if (k === "ArrowDown") { e.preventDefault(); transposeSelection(-12); return; }
         return;

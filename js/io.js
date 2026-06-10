@@ -142,6 +142,10 @@
           const mm = ref.measures[mIdx] || { events: [{ id: "", type: "rest", full: true, dur: { n: L.n, d: L.d, dots: 0 }, notes: [] }] };
           mm.events.forEach((ev, eIdx) => {
             const staffTag = partRefs.length > 1 ? `<staff>${sIdx + 1}</staff>` : "";
+            const tp = ev.dur.tuplet;
+            const timeMod = tp ? `<time-modification><actual-notes>${tp.actual}</actual-notes><normal-notes>${tp.normal}</normal-notes></time-modification>` : "";
+            const tpStart = tp && (!mm.events[eIdx - 1] || mm.events[eIdx - 1].dur.tuplet?.id !== tp.id);
+            const tpStop = tp && (!mm.events[eIdx + 1] || mm.events[eIdx + 1].dur.tuplet?.id !== tp.id);
             if (ev.dynamic && DYN_SOUND[ev.dynamic]) {
               xml += `   <direction placement="below"><direction-type><dynamics><${ev.dynamic}/></dynamics></direction-type>` +
                 `${partRefs.length > 1 ? `<staff>${sIdx + 1}</staff>` : ""}<sound dynamics="${DYN_SOUND[ev.dynamic]}"/></direction>\n`;
@@ -154,7 +158,10 @@
               if (ev.full) {
                 xml += `   <note><rest measure="yes"/><duration>${measureUnits}</duration><voice>1</voice>${staffTag}</note>\n`;
               } else {
-                xml += `   <note><rest/><duration>${units(ev.dur)}</duration><voice>1</voice><type>${TYPE_NAMES[ev.dur.d]}</type>${"<dot/>".repeat(ev.dur.dots || 0)}${staffTag}</note>\n`;
+                let notations = "";
+                if (tpStart) notations += `<tuplet type="start"/>`;
+                if (tpStop) notations += `<tuplet type="stop"/>`;
+                xml += `   <note><rest/><duration>${units(ev.dur)}</duration><voice>1</voice><type>${TYPE_NAMES[ev.dur.d]}</type>${"<dot/>".repeat(ev.dur.dots || 0)}${timeMod}${staffTag}${notations ? `<notations>${notations}</notations>` : ""}</note>\n`;
               }
             } else {
               ev.notes.forEach((note, nIdx) => {
@@ -165,11 +172,13 @@
                   `<octave>${note.oct}</octave></pitch>` +
                   `<duration>${units(ev.dur)}</duration>` +
                   (stop ? `<tie type="stop"/>` : "") + (start ? `<tie type="start"/>` : "") +
-                  `<voice>1</voice><type>${TYPE_NAMES[ev.dur.d]}</type>${"<dot/>".repeat(ev.dur.dots || 0)}${staffTag}`;
+                  `<voice>1</voice><type>${TYPE_NAMES[ev.dur.d]}</type>${"<dot/>".repeat(ev.dur.dots || 0)}${timeMod}${staffTag}`;
                 let notations = "";
                 if (stop) notations += `<tied type="stop"/>`;
                 if (start) notations += `<tied type="start"/>`;
                 if (nIdx === 0) {
+                  if (tpStart) notations += `<tuplet type="start"/>`;
+                  if (tpStop) notations += `<tuplet type="stop"/>`;
                   for (const sl of slurStop.get(ev.id) || []) notations += `<slur type="stop" number="${sl.num}"/>`;
                   for (const sl of slurStart.get(ev.id) || []) notations += `<slur type="start" number="${sl.num}"/>`;
                   const ar = ev.artics || [];

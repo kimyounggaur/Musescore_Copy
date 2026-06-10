@@ -42,7 +42,9 @@ window.SF = window.SF || {};
   function durBase(dur) { return F(dur.n, dur.d); }
   function durValue(dur) {
     const dots = dur.dots || 0;
-    return F(dur.n * (Math.pow(2, dots + 1) - 1), dur.d * Math.pow(2, dots));
+    let v = F(dur.n * (Math.pow(2, dots + 1) - 1), dur.d * Math.pow(2, dots));
+    if (dur.tuplet) v = v.mul(F(dur.tuplet.normal || 2, dur.tuplet.actual || 3));
+    return v;
   }
   function durEq(a, b) { return a.n === b.n && a.d === b.d && (a.dots || 0) === (b.dots || 0); }
 
@@ -53,7 +55,24 @@ window.SF = window.SF || {};
   const DUR_NAMES = { "1/1": "온음표", "1/2": "2분음표", "1/4": "4분음표", "1/8": "8분음표", "1/16": "16분음표" };
   function durName(dur) {
     const base = DUR_NAMES[dur.n + "/" + dur.d] || (dur.n + "/" + dur.d);
-    return (dur.dots ? "점" : "") + base;
+    const tuplet = dur.tuplet ? `${dur.tuplet.actual}잇단 ` : "";
+    return tuplet + (dur.dots ? "점" : "") + base;
+  }
+
+  function tupletNormalFor(actual) {
+    let n = 1;
+    while (n * 2 < actual) n *= 2;
+    return n;
+  }
+  function tupletWrittenDur(totalDur, actual) {
+    const total = durValue(totalDur);
+    const normal = tupletNormalFor(actual);
+    const written = total.div(F(normal, 1));
+    const base = BASES.find(b => F(b.n, b.d).eq(written)) || { n: written.n, d: written.d };
+    return { n: base.n, d: base.d, dots: 0 };
+  }
+  function tupletMeta(actual, id) {
+    return { id: id || newId(), actual, normal: tupletNormalFor(actual) };
   }
 
   /* tick(마디 내 위치) 정렬을 지키며 길이를 표기 가능한 조각들로 분해.
@@ -516,6 +535,36 @@ window.SF = window.SF || {};
     normalizeTies(score);
   }
 
+  function makeTupletAt(score, mIdx, eIdx, actual, ctx) {
+    actual = Math.max(2, Math.min(9, actual | 0));
+    const measure = staffMeasures(score, ctx)[mIdx];
+    const ev = measure.events[eIdx];
+    if (!ev || ev.full || ev.dur.tuplet) return null;
+    const start = eventStartTick(measure, eIdx);
+    const totalLen = durValue(ev.dur);
+    const written = tupletWrittenDur(ev.dur, actual);
+    const tuplet = tupletMeta(actual);
+    const ids = [];
+    const make = () => Array.from({ length: actual }, (_, i) => {
+      const next = {
+        id: newId(),
+        type: ev.type,
+        dur: { ...written, tuplet: { ...tuplet } },
+        notes: ev.type === "note" ? ev.notes.map(n => ({ step: n.step, alter: n.alter, oct: n.oct, tie: false })) : [],
+      };
+      if (i === 0) {
+        if (ev.lyric) next.lyric = ev.lyric;
+        if (ev.dynamic) next.dynamic = ev.dynamic;
+        if (ev.artics) next.artics = [...ev.artics];
+      }
+      ids.push(next.id);
+      return next;
+    });
+    replaceRange(score, mIdx, start, totalLen, make, ctx);
+    normalizeTies(score);
+    return ids;
+  }
+
   /* 연속 쉼표 정리: 쉼표 구간을 다시 분해해 깔끔하게, 마디 전체가 쉼표면 온쉼표 1개 */
   function consolidateRests(score, mIdx, ctx) {
     const measure = staffMeasures(score, ctx)[mIdx];
@@ -791,13 +840,14 @@ window.SF = window.SF || {};
   SF.F = F;
   SF.core = {
     durBase, durValue, durEq, durName, decompose, BASES,
+    tupletNormalFor, tupletWrittenDur, tupletMeta,
     midiOf, absStep, pitchEq, keyAlterFor, spellMidi, transposePitch, pitchName,
     STEP_EN, STEP_KO, STEP_SEMIS, KEY_NAMES, CLEFS, keySigSteps, beamGroups, beatLen,
     PART_LIBRARY, ENSEMBLES,
     createScore, measureLen, fullRest, newId,
     ensureParts, staffRefs, staffRef, staffMeasures, activeRef, activeClef, setActiveStaff, ensembleKey, applyEnsemble,
     eventStartTick, findEvent, nextEvent, prevEvent,
-    replaceRange, inputAt, deleteEvent, consolidateRests, normalizeTies, isTiedFrom,
+    replaceRange, inputAt, deleteEvent, makeTupletAt, consolidateRests, normalizeTies, isTiedFrom,
     eventOrderMap, normalizeSpanners, slurCoverMap,
     rebar, transposeScore, toJSON, fromJSON,
     state, mutate, undo, redo, canUndo, canRedo, resetHistory, setScore, onChange,

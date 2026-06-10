@@ -550,6 +550,36 @@
       body += `<rect class="hit" x="${r2(hitX)}" y="${S.yTop - 30}" width="${hitW}" height="${STAFF_H + 60}" fill="transparent"/>`;
       s += `<g class="${cls}" data-ref="${ev.id}">${body}</g>`;
     }
+    s += renderTuplets(score, M, S);
+    return s;
+  }
+
+  function renderTuplets(score, M, S) {
+    let s = "";
+    const groups = new Map();
+    M.events.forEach((le, idx) => {
+      const tp = le.ev.dur.tuplet;
+      if (!tp) return;
+      const g = groups.get(tp.id) || { actual: tp.actual, items: [], firstIdx: idx, lastIdx: idx };
+      g.items.push(le); g.lastIdx = idx; groups.set(tp.id, g);
+    });
+    for (const g of groups.values()) {
+      if (g.items.length < 2) continue;
+      const first = g.items[0], last = g.items[g.items.length - 1];
+      const x1 = first.x - 12, x2 = last.x + 12;
+      let y = S.yTop - 18;
+      for (const le of g.items) {
+        if (le.ev.type === "note") {
+          const top = Math.min(...le.ev.notes.map(n => yForStep(S, score, C.absStep(n))));
+          y = Math.min(y, top - 18);
+        }
+      }
+      const mid = (x1 + x2) / 2;
+      s += `<g class="tuplet">` +
+        `<path d="M ${r2(x1)} ${r2(y + 7)} L ${r2(x1)} ${r2(y)} L ${r2(mid - 8)} ${r2(y)} M ${r2(mid + 8)} ${r2(y)} L ${r2(x2)} ${r2(y)} L ${r2(x2)} ${r2(y + 7)}"/>` +
+        `<text x="${r2(mid)}" y="${r2(y + 4)}" text-anchor="middle">${g.actual}</text>` +
+        `</g>`;
+    }
     return s;
   }
 
