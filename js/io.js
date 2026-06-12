@@ -78,6 +78,49 @@
   }
 
   const DYN_SOUND = { pp: 40, p: 54, mp: 66, mf: 78, f: 91, ff: 105 };
+  const CHORD_KIND_EXPORT = {
+    "": { kind: "major", text: "" },
+    m: { kind: "minor", text: "m" },
+    min: { kind: "minor", text: "m" },
+    maj: { kind: "major", text: "maj" },
+    maj7: { kind: "major-seventh", text: "maj7" },
+    7: { kind: "dominant", text: "7" },
+    m7: { kind: "minor-seventh", text: "m7" },
+    dim: { kind: "diminished", text: "dim" },
+    aug: { kind: "augmented", text: "aug" },
+    sus2: { kind: "suspended-second", text: "sus2" },
+    sus4: { kind: "suspended-fourth", text: "sus4" },
+    add9: { kind: "other", text: "add9" },
+    m7b5: { kind: "half-diminished", text: "m7b5" },
+  };
+  const CHORD_KIND_IMPORT = {
+    major: "",
+    minor: "m",
+    "major-seventh": "maj7",
+    dominant: "7",
+    "minor-seventh": "m7",
+    diminished: "dim",
+    augmented: "aug",
+    "suspended-second": "sus2",
+    "suspended-fourth": "sus4",
+    "half-diminished": "m7b5",
+  };
+  function alterSuffix(n) {
+    n = Math.round(+n || 0);
+    return n > 0 ? "#".repeat(n) : n < 0 ? "b".repeat(-n) : "";
+  }
+  function exportHarmony(chord, staffTag) {
+    const ch = C.cloneChordSymbol(chord);
+    if (!ch || !ch.root) {
+      const raw = ch ? (ch.normalized || ch.raw || "") : "";
+      return raw ? `   <harmony><root><root-step>C</root-step></root><kind text="${xmlEsc(raw)}">other</kind>${staffTag}</harmony>\n` : "";
+    }
+    const q = CHORD_KIND_EXPORT[ch.quality] || { kind: "other", text: ch.quality || ch.normalized || "" };
+    const rootAlter = ch.rootAlter ? `<root-alter>${ch.rootAlter}</root-alter>` : "";
+    const kindText = q.text !== undefined ? ` text="${xmlEsc(q.text)}"` : "";
+    const bass = ch.bass ? `<bass><bass-step>${ch.bass}</bass-step>${ch.bassAlter ? `<bass-alter>${ch.bassAlter}</bass-alter>` : ""}</bass>` : "";
+    return `   <harmony><root><root-step>${ch.root}</root-step>${rootAlter}</root><kind${kindText}>${q.kind}</kind>${bass}${staffTag}</harmony>\n`;
+  }
 
   function exportMusicXML(score) {
     C.ensureParts(score);
@@ -123,6 +166,7 @@
       const partRefs = refs.filter(r => r.partIdx === pIdx);
       xml += ` <part id="P${pIdx + 1}">\n`;
       for (let mIdx = 0; mIdx < maxMeasures; mIdx++) {
+        const mmMeta = C.ensureMeasureMeta(score.measures[mIdx] || {});
         xml += `  <measure number="${mIdx + 1}">\n`;
         if (mIdx === 0) {
           xml += `   <attributes>
@@ -135,6 +179,12 @@
           if (pIdx === 0) xml += `   <direction placement="above"><direction-type>
     <metronome><beat-unit>quarter</beat-unit><per-minute>${score.tempo}</per-minute></metronome>
    </direction-type><sound tempo="${score.tempo}"/></direction>\n`;
+        }
+        if (mmMeta.startRepeat || mmMeta.endingStart) {
+          xml += `   <barline location="left">`;
+          if (mmMeta.endingStart) xml += `<ending number="${xmlEsc(mmMeta.endingStart)}" type="start"/>`;
+          if (mmMeta.startRepeat) xml += `<repeat direction="forward"/>`;
+          xml += `</barline>\n`;
         }
 
         partRefs.forEach((ref, sIdx) => {
@@ -155,6 +205,9 @@
             if (ev.staffText) {
               xml += `   <direction placement="above"><direction-type><words>${xmlEsc(ev.staffText)}</words></direction-type>${partRefs.length > 1 ? `<staff>${sIdx + 1}</staff>` : ""}</direction>\n`;
             }
+            if (ev.chordSymbol) {
+              xml += exportHarmony(ev.chordSymbol, staffTag);
+            }
             if (ev.dynamic && DYN_SOUND[ev.dynamic]) {
               xml += `   <direction placement="below"><direction-type><dynamics><${ev.dynamic}/></dynamics></direction-type>` +
                 `${partRefs.length > 1 ? `<staff>${sIdx + 1}</staff>` : ""}<sound dynamics="${DYN_SOUND[ev.dynamic]}"/></direction>\n`;
@@ -173,6 +226,13 @@
                 xml += `   <note><rest/><duration>${units(ev.dur)}</duration><voice>1</voice><type>${TYPE_NAMES[ev.dur.d]}</type>${"<dot/>".repeat(ev.dur.dots || 0)}${timeMod}${staffTag}${notations ? `<notations>${notations}</notations>` : ""}</note>\n`;
               }
             } else {
+              for (const gr of ev.graceBefore || []) {
+                (gr.notes || []).forEach((note, nIdx) => {
+                  xml += `   <note>${nIdx > 0 ? "<chord/>" : `<grace slash="${(gr.kind || "acciaccatura") === "acciaccatura" ? "yes" : "no"}"/>`}<pitch><step>${C.STEP_EN[note.step]}</step>` +
+                    (note.alter ? `<alter>${note.alter}</alter>` : "") +
+                    `<octave>${note.oct}</octave></pitch><voice>1</voice><type>eighth</type>${staffTag}</note>\n`;
+                });
+              }
               ev.notes.forEach((note, nIdx) => {
                 const stop = C.isTiedFrom(score, mIdx, eIdx, note, ref);
                 const start = !!note.tie;
@@ -200,8 +260,10 @@
                   if (ar.includes("fermata")) notations += `<fermata/>`;
                 }
                 if (notations) xml += `<notations>${notations}</notations>`;
-                if (nIdx === 0 && ev.lyric) {
-                  xml += `<lyric number="1"><syllabic>single</syllabic><text>${xmlEsc(ev.lyric)}</text></lyric>`;
+                if (nIdx === 0) {
+                  for (const lyr of C.lyricsOf(ev)) {
+                    xml += `<lyric number="${lyr.verse}"><syllabic>${xmlEsc(lyr.syllabic || "single")}</syllabic><text>${xmlEsc(lyr.text)}</text>${lyr.extend ? "<extend/>" : ""}</lyric>`;
+                  }
                 }
                 xml += `</note>\n`;
               });
@@ -212,6 +274,12 @@
             }
           });
         });
+        if (mmMeta.endRepeat || mmMeta.endingStop) {
+          xml += `   <barline location="right">`;
+          if (mmMeta.endingStop) xml += `<ending type="stop"/>`;
+          if (mmMeta.endRepeat) xml += `<repeat direction="backward" times="${Math.max(2, Math.min(8, mmMeta.repeatCount || 2))}"/>`;
+          xml += `</barline>\n`;
+        }
         xml += `  </measure>\n`;
       }
       xml += ` </part>\n`;
@@ -339,11 +407,14 @@
     let timeSig = null, keySig = null, clef = null, tempo = null;
     let chosenVoice = null, chosenStaff = null;
     let pendingDynamic = null;
+    let pendingChordSymbol = null;
     let pendingTempo = null, pendingRehearsal = null, pendingStaffText = null;
     const pendingWedges = new Map(); // number → {type, startItem|null}
     const wedgePairs = [];
     const items = []; // 선택 성부의 음표들
     const measureLens = [];
+    const measureMeta = [];
+    let pendingGrace = [];
     let lastNoteItem = null;
 
     const durFrac = (el) => {
@@ -353,6 +424,7 @@
 
     measEls.forEach((me, mIdx) => {
       let cur = SF.F(0, 1), maxCur = cur;
+      const meta = measureMeta[mIdx] = { startRepeat: false, endRepeat: false, repeatCount: 2, endingStart: null, endingStop: false };
       for (const el of [...me.children]) {
         const tag = el.tagName;
         if (tag === "attributes") {
@@ -425,13 +497,36 @@
         } else if (tag === "forward") {
           cur = cur.add(durFrac(el));
         } else if (tag === "harmony") {
-          countWarn("harmony", "코드 기호는 무시");
+          const root = textOf(el, "root > root-step").toUpperCase();
+          const rootAlter = parseInt(textOf(el, "root > root-alter") || "0", 10) || 0;
+          const kindEl = el.querySelector("kind");
+          const kindValue = kindEl ? kindEl.textContent.trim() : "";
+          const kindText = (kindEl && kindEl.getAttribute("text")) || CHORD_KIND_IMPORT[kindValue] || kindValue;
+          const bass = textOf(el, "bass > bass-step").toUpperCase();
+          const bassAlter = parseInt(textOf(el, "bass > bass-alter") || "0", 10) || 0;
+          const raw = root
+            ? root + alterSuffix(rootAlter) + kindText + (bass ? "/" + bass + alterSuffix(bassAlter) : "")
+            : kindText;
+          pendingChordSymbol = C.parseChordSymbol(raw);
         } else if (tag === "barline") {
-          if (el.querySelector("repeat") || el.querySelector("ending")) countWarn("repeat", "도돌이표/볼타는 무시(전개 없음)");
+          const repeat = el.querySelector("repeat");
+          if (repeat) {
+            const dir = repeat.getAttribute("direction");
+            if (dir === "forward") meta.startRepeat = true;
+            if (dir === "backward") {
+              meta.endRepeat = true;
+              meta.repeatCount = Math.max(2, Math.min(8, parseInt(repeat.getAttribute("times") || "2", 10) || 2));
+            }
+          }
+          for (const ending of el.querySelectorAll("ending")) {
+            const type = ending.getAttribute("type") || "";
+            if (type === "start" || type === "discontinue") meta.endingStart = ending.getAttribute("number") || ending.textContent.trim() || "1";
+            if (type === "stop") meta.endingStop = true;
+          }
         } else if (tag === "note") {
           const isChord = !!el.querySelector(":scope > chord");
           const isRest = !!el.querySelector(":scope > rest");
-          if (el.querySelector(":scope > grace")) { countWarn("grace", "꾸밈음(grace)은 무시"); continue; }
+          const isGrace = !!el.querySelector(":scope > grace");
           const voice = textOf(el, ":scope > voice") || "1";
           const staff = textOf(el, ":scope > staff") || "1";
           const dF = durFrac(el);
@@ -469,6 +564,20 @@
             pitch = C.spellMidi(C.midiOf(pitch), keySig ?? 0);
             countWarn("respell", "겹임시표는 같은 소리의 다른 철자로 변환");
           }
+          if (isGrace) {
+            if (isChord && pendingGrace.length) {
+              pendingGrace[pendingGrace.length - 1].notes.push({ ...pitch, tie: false });
+            } else {
+              const gr = el.querySelector(":scope > grace");
+              pendingGrace.push({
+                id: C.newId(),
+                kind: gr?.getAttribute("slash") === "no" ? "appoggiatura" : "acciaccatura",
+                dur: { n: 1, d: 8, dots: 0 },
+                notes: [{ ...pitch, tie: false }],
+              });
+            }
+            continue;
+          }
           if (el.querySelector("time-modification")) countWarn("tuplet", "잇단음표는 16분 격자로 근사");
           const tieStart = !!el.querySelector(':scope > tie[type="start"]') ||
             !!el.querySelector('notations tied[type="start"]');
@@ -479,17 +588,27 @@
             const item = {
               mIdx, tick: cur, dur: dF,
               pitches: [{ ...pitch, tie: tieStart }],
-              lyric: null, artics: [], dynamic: pendingDynamic,
+              graceBefore: pendingGrace,
+              lyric: null, lyrics: [], artics: [], dynamic: pendingDynamic, chordSymbol: pendingChordSymbol,
               tempo: pendingTempo, rehearsal: pendingRehearsal, staffText: pendingStaffText,
               slurStarts: [], slurStops: [],
             };
             pendingDynamic = null;
+            pendingChordSymbol = null;
+            pendingGrace = [];
             pendingTempo = null; pendingRehearsal = null; pendingStaffText = null;
             // 가사 (1절만)
-            const lyrEl = el.querySelector(":scope > lyric");
-            if (lyrEl) {
-              item.lyric = [...lyrEl.querySelectorAll("text")].map(t => t.textContent).join("") || null;
-              if (el.querySelectorAll(":scope > lyric").length > 1) countWarn("verse", "가사는 1절만 가져옴");
+            for (const lyrEl of el.querySelectorAll(":scope > lyric")) {
+              const text = [...lyrEl.querySelectorAll("text")].map(t => t.textContent).join("") || "";
+              if (!text.trim()) continue;
+              const verse = Math.max(1, Math.min(8, parseInt(lyrEl.getAttribute("number") || "1", 10) || 1));
+              item.lyrics.push({
+                verse,
+                text,
+                syllabic: textOf(lyrEl, "syllabic") || "single",
+                extend: !!lyrEl.querySelector("extend"),
+              });
+              if (verse === 1 && !item.lyric) item.lyric = text;
             }
             // 아티큘레이션·페르마타·슬러
             const not = el.querySelector("notations");
@@ -533,6 +652,10 @@
       keySig: keySig ?? 0, timeSig, tempo: tempo || 100,
       clef: clef || "treble", measureCount: Math.max(1, measEls.length),
     });
+    measureMeta.forEach((meta, mIdx) => {
+      const mm = C.ensureMeasureMeta(score.measures[mIdx] || {});
+      Object.assign(mm, meta);
+    });
     const L = C.measureLen(score);
 
     // 못갖춘마디(여린내기): 첫 마디 내용을 오른쪽 정렬
@@ -557,9 +680,15 @@
         id: C.newId(), type: "note", dur: d,
         notes: item.pitches.map(p => ({ step: p.step, alter: p.alter, oct: p.oct, tie: i < pieces.length - 1 ? true : !!p.tie })),
       }));
+      if (item.graceBefore && item.graceBefore.length) evs[0].graceBefore = C.cloneGraceList(item.graceBefore);
       if (item.lyric) evs[0].lyric = item.lyric;
+      if (item.lyrics && item.lyrics.length) {
+        evs[0].lyrics = C.cloneLyrics(item.lyrics);
+        C.normalizeEventLyrics(evs[0]);
+      }
       if (item.artics.length) evs[0].artics = [...new Set(item.artics)];
       if (item.dynamic) evs[0].dynamic = item.dynamic;
+      if (item.chordSymbol) evs[0].chordSymbol = C.cloneChordSymbol(item.chordSymbol);
       if (item.tempo) evs[0].tempo = item.tempo;
       if (item.rehearsal) evs[0].rehearsal = item.rehearsal;
       if (item.staffText) evs[0].staffText = item.staffText;

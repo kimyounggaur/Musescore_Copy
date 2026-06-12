@@ -160,6 +160,7 @@
     const v = C.durValue(ev.dur).value;
     let w = Math.max(26, spaceFor(v));
     if (ev.type === "note") {
+      if (ev.graceBefore && ev.graceBefore.length) w += ev.graceBefore.length * 14;
       if (ev.notes.some(n => n.__acc)) w += 11;
       if (hasSecond(ev)) w += 7;
       if (ev.dur.dots) w += 7;
@@ -226,17 +227,20 @@
   }
 
   /* 핵심: 악보 → 시스템/이벤트 좌표 */
-  function layout(score) {
+  function layout(score, opts = {}) {
     C.ensureParts(score);
     computeAccidentals(score);
-    const refs = C.staffRefs(score);
+    const refs = C.visibleStaffRefs ? C.visibleStaffRefs(score, opts.viewMode, { hideEmptyStaves: opts.hideEmptyStaves }) : C.staffRefs(score);
     const count = measureCount(score, refs);
-    const hasLyrics = refs.some(ref => ref.measures.some(mm => mm.events.some(ev => ev.lyric)));
-    const hasAboveText = refs.some(ref => ref.measures.some(mm => mm.events.some(ev => ev.tempo || ev.rehearsal || ev.staffText)));
+    const lyricVerses = new Set();
+    refs.forEach(ref => ref.measures.forEach(mm => mm.events.forEach(ev => C.lyricsOf(ev).forEach(l => lyricVerses.add(l.verse)))));
+    const hasLyrics = lyricVerses.size > 0;
+    const lyricLineCount = Math.max(1, lyricVerses.size);
+    const hasAboveText = refs.some(ref => ref.measures.some(mm => mm.events.some(ev => ev.tempo || ev.rehearsal || ev.staffText || ev.chordSymbol)));
     const hasDyn = refs.some(ref => ref.measures.some(mm => mm.events.some(ev => ev.dynamic))) ||
       (score.spanners || []).some(sp => sp.type === "cresc" || sp.type === "dim");
     const groupH = staffGroupHeight(refs);
-    const PITCH = Math.max(150, groupH + 74 + (hasAboveText ? 18 : 0) + (hasLyrics ? 24 : 0) + (hasDyn ? 16 : 0));
+    const PITCH = Math.max(150, groupH + 74 + (hasAboveText ? 18 : 0) + (hasLyrics ? 18 * lyricLineCount + 8 : 0) + (hasDyn ? 16 : 0));
     const lyricOff = STAFF_H + (hasDyn ? 52 : 34);
 
     // 마디 자연 폭
@@ -353,7 +357,7 @@
   let lastLayout = null;
 
   function render(score, opts = {}) {
-    const L = layout(score);
+    const L = layout(score, opts);
     let sel = opts.selection || null;
     if (sel && !(sel instanceof Set)) sel = new Set([sel]);
     let svg = "";
@@ -364,6 +368,7 @@
       if (S.first) svg += timeSig(S, score);
       svg += barlines(S, score);
       svg += measureNumbers(S);
+      svg += renderVoltas(S, score);
       for (const M of S.measures) {
         for (const SM of M.staffMeasures) {
           const beams = computeBeams(score, SM, SM.staff);
@@ -458,14 +463,64 @@
       const yT = list[0].yTop, yB = list[list.length - 1].yTop + STAFF_H;
       s += `<line x1="${S.x0}" y1="${yT}" x2="${S.x0}" y2="${yB}"/>`;
       S.measures.forEach((M) => {
+        const mm = C.ensureMeasureMeta(score.measures[M.idx] || {});
+        if (mm.startRepeat) s += repeatStart(M.x0, list);
         const isScoreEnd = M.idx === count - 1;
-        if (isScoreEnd) {
+        if (mm.endRepeat) {
+          s += repeatEnd(M.x1, list);
+        } else if (isScoreEnd) {
           s += `<line x1="${r2(M.x1 - 7)}" y1="${yT}" x2="${r2(M.x1 - 7)}" y2="${yB}"/>`;
           s += `<rect x="${r2(M.x1 - 4)}" y="${yT}" width="4" height="${yB - yT}" class="thick"/>`;
         } else {
           s += `<line x1="${r2(M.x1)}" y1="${yT}" x2="${r2(M.x1)}" y2="${yB}"/>`;
         }
       });
+    }
+    return s + "</g>";
+  }
+  function repeatStart(x, staffLayouts) {
+    let s = "";
+    const yT = staffLayouts[0].yTop, yB = staffLayouts[staffLayouts.length - 1].yTop + STAFF_H;
+    s += `<rect x="${r2(x + 1)}" y="${yT}" width="4" height="${yB - yT}" class="thick"/>`;
+    s += `<line x1="${r2(x + 8)}" y1="${yT}" x2="${r2(x + 8)}" y2="${yB}"/>`;
+    for (const st of staffLayouts) s += repeatDots(x + 13, st);
+    return s;
+  }
+  function repeatEnd(x, staffLayouts) {
+    let s = "";
+    const yT = staffLayouts[0].yTop, yB = staffLayouts[staffLayouts.length - 1].yTop + STAFF_H;
+    s += `<line x1="${r2(x - 9)}" y1="${yT}" x2="${r2(x - 9)}" y2="${yB}"/>`;
+    s += `<rect x="${r2(x - 5)}" y="${yT}" width="4" height="${yB - yT}" class="thick"/>`;
+    for (const st of staffLayouts) s += repeatDots(x - 14, st);
+    return s;
+  }
+  function repeatDots(x, st) {
+    return `<circle class="repeat-dot" cx="${r2(x)}" cy="${r2(st.yTop + SP * 1.5)}" r="2.2"/>` +
+      `<circle class="repeat-dot" cx="${r2(x)}" cy="${r2(st.yTop + SP * 2.5)}" r="2.2"/>`;
+  }
+
+  function renderVoltas(S, score) {
+    const ranges = [];
+    for (let i = 0; i < score.measures.length; i++) {
+      const mm = C.ensureMeasureMeta(score.measures[i] || {});
+      if (!mm.endingStart) continue;
+      let j = i;
+      while (j + 1 < score.measures.length && !C.ensureMeasureMeta(score.measures[j] || {}).endingStop) j++;
+      ranges.push({ from: i, to: j, label: mm.endingStart });
+    }
+    if (!ranges.length) return "";
+    let s = `<g class="volta">`;
+    for (const r of ranges) {
+      const visible = S.measures.filter(M => M.idx >= r.from && M.idx <= r.to);
+      if (!visible.length) continue;
+      const first = visible[0], last = visible[visible.length - 1];
+      const startsHere = first.idx === r.from;
+      const endsHere = last.idx === r.to;
+      const x1 = startsHere ? first.x0 + 4 : S.x0 + S.headerW;
+      const x2 = endsHere ? last.x1 - 4 : S.x1 - 3;
+      const y = S.yTop - 40;
+      s += `<path d="M ${r2(x1)} ${r2(y + 16)} L ${r2(x1)} ${r2(y)} L ${r2(x2)} ${r2(y)}${endsHere ? ` L ${r2(x2)} ${r2(y + 16)}` : ""}"/>`;
+      if (startsHere) s += `<text x="${r2(x1 + 7)}" y="${r2(y + 12)}">${esc(r.label)}.</text>`;
     }
     return s + "</g>";
   }
@@ -542,17 +597,45 @@
       let body = "";
       if (ev.type === "rest") body = renderRest(score, S, M, le);
       else body = renderNote(score, S, le, beamedIds.has(le.id), stemInfo.get(le.id));
-      if (ev.lyric) {
-        body += `<text class="lyric" x="${r2(le.x)}" y="${S.yTop + S.lyricOff}" text-anchor="middle">${esc(ev.lyric)}</text>`;
+      for (const lyr of C.lyricsOf(ev)) {
+        body += `<text class="lyric" x="${r2(le.x)}" y="${S.yTop + S.lyricOff + (lyr.verse - 1) * 17}" text-anchor="middle">${esc(lyr.text)}</text>`;
       }
       if (ev.dynamic) body += renderDynamic(ev.dynamic, le.x, S.yTop + STAFF_H + 28);
       body += renderEventText(ev, le, S);
       // 히트 영역
       const hitX = le.x - 16, hitW = 32;
-      body += `<rect class="hit" x="${r2(hitX)}" y="${S.yTop - 46}" width="${hitW}" height="${STAFF_H + 82}" fill="transparent"/>`;
+      body += `<rect class="hit" x="${r2(hitX)}" y="${S.yTop - 62}" width="${hitW}" height="${STAFF_H + 100}" fill="transparent"/>`;
       s += `<g class="${cls}" data-ref="${ev.id}">${body}</g>`;
     }
+    s += renderLyricSpans(M, S);
     s += renderTuplets(score, M, S);
+    return s;
+  }
+
+  function renderLyricSpans(M, S) {
+    let s = "";
+    const nextLyric = (idx, verse) => {
+      for (let j = idx + 1; j < M.events.length; j++) {
+        const lyr = C.lyricsOf(M.events[j].ev).find(l => l.verse === verse);
+        if (lyr) return { le: M.events[j], lyric: lyr };
+      }
+      return null;
+    };
+    M.events.forEach((le, idx) => {
+      for (const lyr of C.lyricsOf(le.ev)) {
+        const nx = nextLyric(idx, lyr.verse);
+        if (!nx) continue;
+        const y = S.yTop + S.lyricOff + (lyr.verse - 1) * 17;
+        const x1 = le.x + 12, x2 = nx.le.x - 12;
+        if (x2 <= x1) continue;
+        if (lyr.syllabic === "begin" || lyr.syllabic === "middle") {
+          s += `<text class="lyric-hyphen" x="${r2((x1 + x2) / 2)}" y="${r2(y)}" text-anchor="middle">-</text>`;
+        }
+        if (lyr.extend) {
+          s += `<line class="lyric-extend" x1="${r2(x1)}" y1="${r2(y + 4)}" x2="${r2(x2)}" y2="${r2(y + 4)}"/>`;
+        }
+      }
+    });
     return s;
   }
 
@@ -569,6 +652,10 @@
     if (ev.staffText) {
       const y = S.yTop - (ev.tempo ? 6 : 10);
       s += `<text class="staff-text" x="${r2(le.x)}" y="${r2(y)}" text-anchor="middle">${esc(ev.staffText)}</text>`;
+    }
+    if (ev.chordSymbol) {
+      const y = S.yTop - 2;
+      s += `<text class="chord-symbol" x="${r2(le.x)}" y="${r2(y)}" text-anchor="middle">${esc(C.displayChordSymbol(ev.chordSymbol))}</text>`;
     }
     return s;
   }
@@ -625,7 +712,7 @@
 
   function renderNote(score, S, le, beamed, stem) {
     const ev = le.ev;
-    let s = "";
+    let s = renderGraceBefore(score, S, le);
     const kind = ev.dur.d === 1 ? "whole" : ev.dur.d === 2 ? "half" : "black";
     const dir = stem ? stem.dir : stemDirForStaff(score, ev.notes, S);
     const sorted = ev.notes.slice().sort((a, b) => C.absStep(a) - C.absStep(b)); // 낮은 음부터
@@ -726,6 +813,30 @@
       }
     }
     return s;
+  }
+
+  function renderGraceBefore(score, S, le) {
+    const list = le.ev.graceBefore || [];
+    if (!list.length) return "";
+    let s = `<g class="grace-notes">`;
+    list.forEach((g, i) => {
+      const x = le.x - (list.length - i) * 15 - 8;
+      const notes = (g.notes || []).length ? g.notes : le.ev.notes.slice(0, 1);
+      const sorted = notes.slice().sort((a, b) => C.absStep(a) - C.absStep(b));
+      const dir = stemDirForStaff(score, sorted, S);
+      const ext = dir === "up" ? sorted[sorted.length - 1] : sorted[0];
+      const y = yForStep(S, score, C.absStep(ext));
+      const stemX = dir === "up" ? x + 3.6 : x - 3.6;
+      const tipY = y + (dir === "up" ? -24 : 24);
+      for (const n of sorted) {
+        s += headShape(x, yForStep(S, score, C.absStep(n)), "black", "grace-head");
+      }
+      s += `<line class="stem grace-stem" x1="${r2(stemX)}" y1="${r2(y)}" x2="${r2(stemX)}" y2="${r2(tipY)}"/>`;
+      if ((g.kind || "acciaccatura") === "acciaccatura") {
+        s += `<line class="grace-slash" x1="${r2(stemX - 4)}" y1="${r2((y + tipY) / 2 + 5)}" x2="${r2(stemX + 5)}" y2="${r2((y + tipY) / 2 - 5)}"/>`;
+      }
+    });
+    return s + `</g>`;
   }
 
   function renderRest(score, S, M, le) {

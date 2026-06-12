@@ -222,20 +222,27 @@
   function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
 
   /* 음 하나 예약 */
-  function scheduleNote(preset, midi, when, dur, vel = 0.8) {
+  function scheduleNote(preset, midi, when, dur, vel = 0.8, pan = 0) {
     const ac = audio();
     const f = midiToFreq(midi + (preset.octShift || 0));
     const g = ac.createGain();
     g.gain.value = 0;
     let dest = g;
+    let out = master;
+    if (Math.abs(pan) > 0.001 && ac.createStereoPanner) {
+      const pn = ac.createStereoPanner();
+      pn.pan.value = Math.max(-1, Math.min(1, pan));
+      pn.connect(master);
+      out = pn;
+    }
     if (preset.filter) {
       const fl = ac.createBiquadFilter();
       fl.type = preset.filter.type;
       fl.frequency.value = Math.min(preset.filter.base + preset.filter.perVel * vel + f * 1.2, 12000);
       fl.Q.value = preset.filter.q;
-      g.connect(fl); fl.connect(master); dest = g;
+      g.connect(fl); fl.connect(out); dest = g;
     } else {
-      g.connect(master);
+      g.connect(out);
     }
 
     const stopAt = when + dur + (preset.release || 0.1) + 0.05;
@@ -312,6 +319,102 @@
    * 슬러(레가토)를 모두 이벤트에 반영한다.
    */
   const VELS = { pp: 0.38, p: 0.48, mp: 0.58, mf: 0.68, f: 0.8, ff: 0.92 };
+  const SWING = { off: 0, light: 0.54, medium: 0.58, heavy: 0.66 };
+
+  function mixerFor(score, part) {
+    C.ensureParts(score);
+    const rec = score.playbackSettings?.mixer?.[part.id] || {};
+    return {
+      mute: !!rec.mute,
+      solo: !!rec.solo,
+      volume: Math.max(0, Math.min(1.5, rec.volume === undefined ? 1 : +rec.volume)),
+      pan: Math.max(-1, Math.min(1, +rec.pan || 0)),
+    };
+  }
+
+  function playableRefs(score, opts) {
+    let refs = C.visibleStaffRefs ? C.visibleStaffRefs(score, opts.viewMode, { hideEmptyStaves: false }) : C.staffRefs(score);
+    const hasSolo = refs.some(ref => mixerFor(score, ref.part).solo);
+    refs = refs.filter(ref => {
+      const mx = mixerFor(score, ref.part);
+      return hasSolo ? mx.solo : !mx.mute;
+    });
+    return refs;
+  }
+
+  function swingDelay(score, tempoMap, abs, tick, len) {
+    const mode = score.playbackSettings?.swing || "off";
+    const ratio = SWING[mode] || 0;
+    if (!ratio) return 0;
+    const eighth = new Fraction(1, 8);
+    const q = tick.div(eighth);
+    if (q.d !== 1 || q.n % 2 !== 1) return 0;
+    return tempoMap.durationSec(abs, eighth) * (ratio * 2 - 1);
+  }
+
+  function swingAbs(score, abs) {
+    const mode = score.playbackSettings?.swing || "off";
+    const ratio = SWING[mode] || 0;
+    if (!ratio) return abs;
+    const L = C.measureLen(score);
+    const m = Math.floor(abs.div(L).value + 1e-9);
+    const tick = abs.sub(L.mul(new Fraction(m, 1)));
+    const eighth = new Fraction(1, 8);
+    const q = tick.div(eighth);
+    if (q.d !== 1 || q.n % 2 !== 1) return abs;
+    return abs.add(eighth.mul(new Fraction(Math.round((ratio * 2 - 1) * 1000), 1000)));
+  }
+
+  function endingMatches(label, pass) {
+    return String(label || "")
+      .split(/[,\s]+/)
+      .map(x => x.trim().replace(/\.$/, ""))
+      .filter(Boolean)
+      .some(x => x === String(pass));
+  }
+
+  function endingStopAfter(score, m) {
+    for (let i = m; i < score.measures.length; i++) {
+      if (C.ensureMeasureMeta(score.measures[i] || {}).endingStop) return i;
+    }
+    return m;
+  }
+
+  function repeatStartBefore(score, m) {
+    for (let i = m; i >= 0; i--) {
+      if (C.ensureMeasureMeta(score.measures[i] || {}).startRepeat) return i;
+    }
+    return 0;
+  }
+
+  function buildPlaybackPlan(score) {
+    C.ensureParts(score);
+    const maxMeasures = Math.max(1, ...C.staffRefs(score).map(r => r.measures.length));
+    const plan = [];
+    const endPass = new Map();
+    let m = 0, guard = 0;
+    const currentPass = () => Math.max(1, ...endPass.values(), 1);
+    while (m < maxMeasures && guard++ < maxMeasures * 16) {
+      const mm = C.ensureMeasureMeta(score.measures[m] || {});
+      const pass = currentPass();
+      if (mm.endingStart && !endingMatches(mm.endingStart, pass)) {
+        m = endingStopAfter(score, m) + 1;
+        continue;
+      }
+      plan.push({ m, pass });
+      if (mm.endRepeat) {
+        const count = Math.max(2, Math.min(8, mm.repeatCount || 2));
+        const used = endPass.get(m) || 1;
+        if (used < count) {
+          endPass.set(m, used + 1);
+          m = repeatStartBefore(score, m);
+          continue;
+        }
+      }
+      m++;
+    }
+    return plan.length ? plan : Array.from({ length: maxMeasures }, (_, i) => ({ m: i, pass: 1 }));
+  }
 
   function buildTempoMap(score, refs) {
     const L = C.measureLen(score);
@@ -359,12 +462,38 @@
     return { changes, secondsAt, durationSec, beatTimes, measureTimes, totalSec: secondsAt(totalAbs), maxMeasures };
   }
 
-  function compile(score) {
+  function compile(score, opts = {}) {
     C.ensureParts(score);
-    const refs = C.staffRefs(score);
+    const refs = playableRefs(score, opts);
     const tempoMap = buildTempoMap(score, refs);
-    const spw = 4 * 60 / (tempoMap.changes[0]?.tempo || score.tempo || 100); // 호환용 초기 온음표 초
+    const plan = buildPlaybackPlan(score);
     const L = C.measureLen(score);
+    let planSec = 0;
+    const expandedMeasureTimes = [0];
+    const expandedPlan = plan.map((item, i) => {
+      const baseStartSec = tempoMap.measureTimes[item.m] || 0;
+      const baseEndSec = tempoMap.measureTimes[item.m + 1] ?? baseStartSec;
+      const out = { ...item, planIdx: i, startSec: planSec, baseStartSec };
+      planSec += Math.max(0, baseEndSec - baseStartSec);
+      expandedMeasureTimes.push(planSec);
+      return out;
+    });
+    const expandedBeatTimes = [];
+    const beatLen = new Fraction(1, score.timeSig.den);
+    for (const item of expandedPlan) {
+      let beatAbs = L.mul(new Fraction(item.m, 1));
+      const endAbs = beatAbs.add(L);
+      let beatIdx = 0;
+      while (beatAbs.lt(endAbs)) {
+        expandedBeatTimes.push({
+          t: item.startSec + tempoMap.secondsAt(beatAbs) - item.baseStartSec,
+          accent: beatIdx % score.timeSig.num === 0,
+        });
+        beatAbs = beatAbs.add(beatLen);
+        beatIdx++;
+      }
+    }
+    const spw = 4 * 60 / (tempoMap.changes[0]?.tempo || score.tempo || 100); // 호환용 초기 온음표 초
     const events = [];
     const timelineEvents = [];
     const consumed = new Set(); // "m:e:midi" 타이로 흡수된 음
@@ -374,26 +503,42 @@
 
     for (const ref of refs) {
       let vel = VELS.mf;
-      for (let m = 0; m < ref.measures.length; m++) {
-        const evs = ref.measures[m].events;
+      for (const item of expandedPlan) {
+        const m = item.m;
+        const evs = ref.measures[m]?.events || [C.fullRest(score)];
         let tick = Fraction.ZERO;
         for (let e = 0; e < evs.length; e++) {
           const ev = evs[e];
           const abs = L.mul(new Fraction(m, 1)).add(tick);
           const evLen = C.durValue(ev.dur);
-          const t = tempoMap.secondsAt(abs);
+          const t = item.startSec + tempoMap.secondsAt(abs) - item.baseStartSec + swingDelay(score, tempoMap, abs, tick, evLen);
           const dval = tempoMap.durationSec(abs, evLen);
           if (ev.dynamic && VELS[ev.dynamic] !== undefined) {
             vel = VELS[ev.dynamic];
             dynList.push({ t, v: vel });
           }
           posById.set(ev.id, { t, vel });
-          timelineEvents.push({ id: ev.id, t, mIdx: m, partIdx: ref.partIdx, staffIdx: ref.staffIdx });
+          timelineEvents.push({ id: ev.id, t, mIdx: m, pass: item.pass, partIdx: ref.partIdx, staffIdx: ref.staffIdx });
           if (ev.type === "note") {
+            (ev.graceBefore || []).forEach((gr, gi, arr) => {
+              const gm = [];
+              for (const note of gr.notes || []) gm.push({ midi: C.midiOf(note), durSec: 0.055, durVal: new Fraction(1, 32) });
+              if (gm.length) {
+                events.push({
+                  id: gr.id, t: Math.max(0, t - 0.06 * (arr.length - gi)), durSec: 0.055, midis: gm, mIdx: m,
+                  absVal: L.mul(new Fraction(item.planIdx, 1)).add(tick),
+                  partIdx: ref.partIdx, staffIdx: ref.staffIdx,
+                  channel: Math.min(15, ref.partIdx),
+                  instrument: ref.instrument,
+                  mixer: mixerFor(score, ref.part),
+                  velBase: vel, boost: 0, gate: 0.9,
+                });
+              }
+            });
             const midis = [];
             for (const note of ev.notes) {
               const midi = C.midiOf(note);
-              const key = ref.globalIdx + ":" + m + ":" + e + ":" + midi;
+              const key = item.planIdx + ":" + ref.globalIdx + ":" + m + ":" + e + ":" + midi;
               if (consumed.has(key)) continue;
               // 타이 체인 길이 합산
               let totalLen = evLen;
@@ -403,7 +548,7 @@
                 if (!nx || nx.ev.type !== "note") break;
                 const n2 = nx.ev.notes.find(n => C.midiOf(n) === midi && n.step === curNote.step);
                 if (!n2) break;
-                consumed.add(ref.globalIdx + ":" + nx.m + ":" + nx.e + ":" + midi);
+                consumed.add(item.planIdx + ":" + ref.globalIdx + ":" + nx.m + ":" + nx.e + ":" + midi);
                 totalLen = totalLen.add(C.durValue(nx.ev.dur));
                 cur = nx; curNote = n2;
               }
@@ -420,10 +565,11 @@
               if (ar.includes("marcato")) { boost += 0.2; if (!ar.includes("staccato")) gate = Math.min(gate, 0.92); }
               events.push({
                 id: ev.id, t, durSec: dval, midis, mIdx: m,
-                absVal: abs,
+                absVal: L.mul(new Fraction(item.planIdx, 1)).add(tick),
                 partIdx: ref.partIdx, staffIdx: ref.staffIdx,
                 channel: Math.min(15, ref.partIdx),
                 instrument: ref.instrument,
+                mixer: mixerFor(score, ref.part),
                 velBase: vel, boost, gate,
               });
             }
@@ -451,18 +597,19 @@
         }
       }
     }
-    for (const ev of events) ev.vel = Math.max(0.15, Math.min(1, ev.velBase + ev.boost));
+    for (const ev of events) ev.vel = Math.max(0.15, Math.min(1, (ev.velBase + ev.boost) * (ev.mixer?.volume ?? 1)));
 
     events.sort((a, b) => a.t - b.t || a.partIdx - b.partIdx || a.staffIdx - b.staffIdx);
     timelineEvents.sort((a, b) => a.t - b.t || a.partIdx - b.partIdx || a.staffIdx - b.staffIdx);
     return {
       events, timelineEvents,
       spw,
-      mLenSec: tempoMap.measureTimes[1] - tempoMap.measureTimes[0],
-      totalSec: Math.max(1, tempoMap.totalSec),
-      beatTimes: tempoMap.beatTimes,
-      measureTimes: tempoMap.measureTimes,
+      mLenSec: expandedMeasureTimes[1] - expandedMeasureTimes[0],
+      totalSec: Math.max(1, planSec || tempoMap.totalSec),
+      beatTimes: expandedBeatTimes,
+      measureTimes: expandedMeasureTimes,
       tempoChanges: tempoMap.changes,
+      playbackPlan: expandedPlan,
     };
   }
 
@@ -484,12 +631,12 @@
     onEnd: null,
   };
 
-  async function play(fromSec = 0) {
+  async function play(fromSec = 0, opts = {}) {
     stop(false);
     const token = ++player.startToken;
     const score = C.state.score;
     const ac = audio();
-    const comp = compile(score);
+    const comp = compile(score, opts);
     if (!comp.events.length && !player.metronome) {
       // 빈 악보도 커서는 움직이게 재생은 허용
     }
@@ -522,7 +669,7 @@
         for (const n of ev.midis) {
           const dur = Math.max(0.05, n.durSec * (ev.gate || 0.95));
           if (!scheduleSampleNote(ev.instrument || score.instrument, n.midi, when, dur, ev.vel || 0.7)) {
-            scheduleNote(preset, n.midi, when, dur, ev.vel || 0.7);
+            scheduleNote(preset, n.midi, when, dur, ev.vel || 0.7, ev.mixer?.pan || 0);
           }
         }
         player.nextIdx++;
@@ -606,15 +753,18 @@
     for (const part of score.parts || [{ instrument: score.instrument }]) {
       const ch = Math.min(15, (score.parts || []).indexOf(part));
       const gm = (INSTRUMENTS[part.instrument || score.instrument] || INSTRUMENTS.piano).gm;
+      const mx = mixerFor(score, part);
       msgs.push({ tick: 0, data: [0xC0 | ch, gm] });
+      msgs.push({ tick: 0, data: [0xB0 | ch, 7, Math.max(0, Math.min(127, Math.round(mx.volume * 100)))] });
+      msgs.push({ tick: 0, data: [0xB0 | ch, 10, Math.max(0, Math.min(127, Math.round(64 + mx.pan * 63)))] });
     }
     for (const ev of comp.events) {
       const v = Math.max(1, Math.min(127, Math.round((ev.vel || 0.7) * 120)));
       const gate = Math.min(ev.gate || 0.95, 0.98);
       for (const n of ev.midis) {
         const ch = ev.channel || 0;
-        msgs.push({ tick: toTicks(ev.absVal), data: [0x90 | ch, n.midi, v] });
-        msgs.push({ tick: toTicks(ev.absVal.add(n.durVal.mul(new Fraction(gate * 1000 | 0, 1000)))), data: [0x80 | ch, n.midi, 0] });
+        msgs.push({ tick: toTicks(swingAbs(score, ev.absVal)), data: [0x90 | ch, n.midi, v] });
+        msgs.push({ tick: toTicks(swingAbs(score, ev.absVal.add(n.durVal.mul(new Fraction(gate * 1000 | 0, 1000))))), data: [0x80 | ch, n.midi, 0] });
       }
     }
     msgs.sort((a, b) => a.tick - b.tick || noteOffFirst(a, b));
@@ -652,6 +802,6 @@
   SF.playback = {
     INSTRUMENTS, audio,
     play, stop, previewNote, pausePos, player, compile, exportMidi,
-    getSampleStatus, setSampleStatusHandler, ensureSampleInstrument,
+    getSampleStatus, setSampleStatusHandler, ensureSampleInstrument, buildPlaybackPlan,
   };
 })(window.SF);

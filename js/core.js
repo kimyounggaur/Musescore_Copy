@@ -162,6 +162,171 @@ window.SF = window.SF || {};
     return STEP_EN[p.step] + acc + p.oct;
   }
 
+  /* ---------------- 코드 기호 ---------------- */
+  const CHORD_QUALITY_ALIASES = {
+    "": "",
+    m: "m",
+    min: "m",
+    minor: "m",
+    maj: "maj",
+    major: "maj",
+    maj7: "maj7",
+    ma7: "maj7",
+    "Δ": "maj7",
+    "Δ7": "maj7",
+    7: "7",
+    m7: "m7",
+    min7: "m7",
+    dim: "dim",
+    o: "dim",
+    "°": "dim",
+    aug: "aug",
+    "+": "aug",
+    sus2: "sus2",
+    sus4: "sus4",
+    sus: "sus4",
+    add9: "add9",
+    m7b5: "m7b5",
+    "ø": "m7b5",
+  };
+  function chordAlterText(alter, pretty) {
+    if (!alter) return "";
+    return (pretty ? (alter > 0 ? "♯" : "♭") : (alter > 0 ? "#" : "b")).repeat(Math.abs(alter));
+  }
+  function parseChordSymbol(raw) {
+    const original = String(raw || "").trim();
+    if (!original) return null;
+    const ascii = original.replace(/♯/g, "#").replace(/♭/g, "b").replace(/\s+/g, "");
+    const slash = ascii.split("/");
+    const head = slash[0];
+    const bassText = slash.length > 1 ? slash.slice(1).join("/") : "";
+    const m = head.match(/^([A-Ga-g])([#b]?)(.*)$/);
+    if (!m) return { raw: original, root: null, rootAlter: 0, quality: "", bass: null, bassAlter: 0, normalized: original };
+    const root = m[1].toUpperCase();
+    const rootAlter = m[2] === "#" ? 1 : m[2] === "b" ? -1 : 0;
+    const qualityRaw = m[3] || "";
+    const quality = CHORD_QUALITY_ALIASES[qualityRaw] ?? CHORD_QUALITY_ALIASES[qualityRaw.toLowerCase()] ?? qualityRaw;
+    let bass = null, bassAlter = 0;
+    if (bassText) {
+      const bm = bassText.match(/^([A-Ga-g])([#b]?)$/);
+      if (bm) {
+        bass = bm[1].toUpperCase();
+        bassAlter = bm[2] === "#" ? 1 : bm[2] === "b" ? -1 : 0;
+      }
+    }
+    const normalized = root + chordAlterText(rootAlter, false) + quality + (bass ? "/" + bass + chordAlterText(bassAlter, false) : "");
+    return { raw: original, root, rootAlter, quality, bass, bassAlter, normalized };
+  }
+  function normalizeChordSymbol(raw) {
+    const parsed = parseChordSymbol(raw);
+    return parsed ? parsed.normalized : "";
+  }
+  function displayChordSymbol(chord) {
+    const parsed = typeof chord === "string" ? parseChordSymbol(chord) : chord;
+    if (!parsed) return "";
+    if (!parsed.root) return parsed.normalized || parsed.raw || "";
+    return parsed.root + chordAlterText(parsed.rootAlter, true) + (parsed.quality || "") +
+      (parsed.bass ? "/" + parsed.bass + chordAlterText(parsed.bassAlter, true) : "");
+  }
+  function cloneChordSymbol(chord) {
+    if (!chord) return null;
+    const parsed = typeof chord === "string" ? parseChordSymbol(chord) : parseChordSymbol(chord.raw || chord.normalized || "");
+    return parsed ? { ...parsed } : null;
+  }
+  function normalizeEventChordSymbol(ev) {
+    if (!ev || !ev.chordSymbol) return;
+    const parsed = cloneChordSymbol(ev.chordSymbol);
+    if (parsed) ev.chordSymbol = parsed;
+    else delete ev.chordSymbol;
+  }
+
+  /* ---------------- 가사 ---------------- */
+  function lyricsOf(ev) {
+    if (!ev) return [];
+    if (Array.isArray(ev.lyrics)) {
+      return ev.lyrics
+        .filter(l => l && String(l.text || "").trim())
+        .map(l => ({
+          verse: Math.max(1, Math.min(8, l.verse | 0 || 1)),
+          text: String(l.text || ""),
+          syllabic: l.syllabic || "single",
+          extend: !!l.extend,
+        }))
+        .sort((a, b) => a.verse - b.verse);
+    }
+    if (ev.lyric) return [{ verse: 1, text: String(ev.lyric), syllabic: "single", extend: false }];
+    return [];
+  }
+  function cloneLyrics(evOrLyrics) {
+    const list = Array.isArray(evOrLyrics) ? evOrLyrics : lyricsOf(evOrLyrics);
+    return list.map(l => ({ verse: l.verse, text: l.text, syllabic: l.syllabic || "single", extend: !!l.extend }));
+  }
+
+  /* ---------------- 꾸밈음 ---------------- */
+  function cloneGraceList(list) {
+    return (list || []).map(g => ({
+      id: g.id || newId(),
+      kind: g.kind || "acciaccatura",
+      dur: g.dur ? { ...g.dur } : { n: 1, d: 8, dots: 0 },
+      notes: (g.notes || []).map(n => ({ step: n.step, alter: n.alter, oct: n.oct, tie: false })),
+    }));
+  }
+  function addGraceBefore(score, eventId, pitch, kind = "acciaccatura") {
+    const found = findEvent(score, eventId);
+    if (!found || found.ev.type !== "note") return null;
+    const grace = {
+      id: newId(),
+      kind,
+      dur: { n: 1, d: 8, dots: 0 },
+      notes: [{ step: pitch.step, alter: pitch.alter || 0, oct: pitch.oct, tie: false }],
+    };
+    found.ev.graceBefore = found.ev.graceBefore || [];
+    found.ev.graceBefore.push(grace);
+    return grace.id;
+  }
+  function findGrace(score, id) {
+    for (const ref of staffRefs(score)) {
+      for (let m = 0; m < ref.measures.length; m++) {
+        const evs = ref.measures[m].events;
+        for (let e = 0; e < evs.length; e++) {
+          const ev = evs[e];
+          for (let g = 0; g < (ev.graceBefore || []).length; g++) {
+            if (ev.graceBefore[g].id === id) return { ...ref, m, e, g, ev, grace: ev.graceBefore[g] };
+          }
+        }
+      }
+    }
+    return null;
+  }
+  function setLyric(ev, verse, text, opt = {}) {
+    if (!ev) return;
+    verse = Math.max(1, Math.min(8, verse | 0 || 1));
+    const list = cloneLyrics(ev).filter(l => l.verse !== verse);
+    const clean = String(text || "").trim();
+    if (clean) list.push({
+      verse,
+      text: clean,
+      syllabic: opt.syllabic || "single",
+      extend: !!opt.extend,
+    });
+    list.sort((a, b) => a.verse - b.verse);
+    if (list.length) ev.lyrics = list; else delete ev.lyrics;
+    const first = list.find(l => l.verse === 1);
+    if (first) ev.lyric = first.text; else delete ev.lyric;
+  }
+  function normalizeEventLyrics(ev) {
+    if (!ev) return;
+    const list = cloneLyrics(ev);
+    if (list.length) {
+      ev.lyrics = list;
+      const first = list.find(l => l.verse === 1);
+      if (first) ev.lyric = first.text; else delete ev.lyric;
+    } else {
+      delete ev.lyrics;
+      delete ev.lyric;
+    }
+  }
+
   /* ---------------- 조표/음자리표 ---------------- */
   const KEY_NAMES = {
     "0": "다장조 (C)", "1": "사장조 (G, ♯1)", "2": "라장조 (D, ♯2)", "3": "가장조 (A, ♯3)",
@@ -238,6 +403,15 @@ window.SF = window.SF || {};
     for (let i = 0; i < count; i++) out.push({ events: [fullRest(score)] });
     return out;
   }
+  function ensureMeasureMeta(mm) {
+    if (!mm) return mm;
+    if (mm.startRepeat === undefined) mm.startRepeat = false;
+    if (mm.endRepeat === undefined) mm.endRepeat = false;
+    if (mm.repeatCount === undefined) mm.repeatCount = 2;
+    if (mm.endingStart === undefined) mm.endingStart = null;
+    if (mm.endingStop === undefined) mm.endingStop = false;
+    return mm;
+  }
   function partTemplate(kind, opt = {}) {
     const lib = kind === "solo" ? {
       name: opt.name || (PART_LIBRARY[opt.instrument || "piano"]?.name || "악기"),
@@ -311,12 +485,59 @@ window.SF = window.SF || {};
           if (!staff.clef) staff.clef = i === 1 ? "bass" : (score.clef || "treble");
           if (!staff.measures || !staff.measures.length) staff.measures = emptyMeasures(score, count);
           while (staff.measures.length < count) staff.measures.push({ events: [fullRest(score)] });
-          for (const mm of staff.measures) if (!mm.events || !mm.events.length) mm.events = [fullRest(score)];
+          for (const mm of staff.measures) {
+            ensureMeasureMeta(mm);
+            if (!mm.events || !mm.events.length) mm.events = [fullRest(score)];
+          }
         }
       }
     }
     if (!score.spanners) score.spanners = [];
+    if (!score.playbackSettings) score.playbackSettings = { swing: "off", mixer: {} };
+    if (!score.playbackSettings.mixer) score.playbackSettings.mixer = {};
+    if (!score.playbackSettings.swing) score.playbackSettings.swing = "off";
+    for (const part of score.parts || []) {
+      if (!score.playbackSettings.mixer[part.id]) {
+        score.playbackSettings.mixer[part.id] = { mute: false, solo: false, volume: 1, pan: 0 };
+      }
+    }
     return syncLegacyFields(score);
+  }
+  function forEachMeasureAt(score, mIdx, fn) {
+    ensureParts(score);
+    for (const ref of staffRefs(score)) {
+      const mm = ref.measures[mIdx];
+      if (mm) fn(ensureMeasureMeta(mm), ref);
+    }
+    if (score.measures[mIdx]) fn(ensureMeasureMeta(score.measures[mIdx]), null);
+  }
+  function toggleStartRepeat(score, mIdx) {
+    const cur = !!ensureMeasureMeta(score.measures[mIdx] || {}).startRepeat;
+    forEachMeasureAt(score, mIdx, mm => { mm.startRepeat = !cur; });
+  }
+  function toggleEndRepeat(score, mIdx) {
+    const cur = !!ensureMeasureMeta(score.measures[mIdx] || {}).endRepeat;
+    forEachMeasureAt(score, mIdx, mm => {
+      mm.endRepeat = !cur;
+      if (mm.endRepeat && (!mm.repeatCount || mm.repeatCount < 2)) mm.repeatCount = 2;
+    });
+  }
+  function setRepeatCount(score, mIdx, count) {
+    count = Math.max(2, Math.min(8, count | 0 || 2));
+    forEachMeasureAt(score, mIdx, mm => { mm.endRepeat = true; mm.repeatCount = count; });
+  }
+  function clearEndings(score, fromM, toM) {
+    for (let m = Math.max(0, fromM); m <= toM; m++)
+      forEachMeasureAt(score, m, mm => { mm.endingStart = null; mm.endingStop = false; });
+  }
+  function setEnding(score, fromM, toM, label) {
+    const maxM = Math.max(0, score.measures.length - 1);
+    fromM = Math.max(0, Math.min(maxM, fromM | 0));
+    toM = Math.max(fromM, Math.min(maxM, toM | 0));
+    label = String(label || "1").trim().slice(0, 12) || "1";
+    clearEndings(score, fromM, toM);
+    forEachMeasureAt(score, fromM, mm => { mm.endingStart = label; });
+    forEachMeasureAt(score, toM, mm => { mm.endingStop = true; });
   }
   function staffRefs(score) {
     ensureParts(score);
@@ -333,6 +554,20 @@ window.SF = window.SF || {};
       }));
     });
     return refs;
+  }
+  function isStaffEmpty(ref) {
+    return ref.measures.every(mm => (mm.events || []).every(ev => ev.type === "rest" && !ev.chordSymbol && !ev.tempo && !ev.rehearsal && !ev.staffText));
+  }
+  function visibleStaffRefs(score, viewMode, opt = {}) {
+    const refs = staffRefs(score);
+    let out = refs;
+    if (viewMode && viewMode.type === "part" && typeof viewMode.partIdx === "number") {
+      out = refs.filter(r => r.partIdx === viewMode.partIdx);
+    } else if (opt.hideEmptyStaves) {
+      const filtered = refs.filter(r => !isStaffEmpty(r));
+      out = filtered.length ? filtered : refs.slice(0, 1);
+    }
+    return out.length ? out : refs.slice(0, 1);
   }
   function activeRef(score) {
     const refs = staffRefs(score);
@@ -391,6 +626,7 @@ window.SF = window.SF || {};
       timeSig: opt.timeSig || { num: 4, den: 4 },
       tempo: opt.tempo || 100,
       instrument: opt.instrument || "piano",
+      playbackSettings: { swing: "off", mixer: {} },
       measures: [],
       parts: [],
       activePartIdx: 0,
@@ -553,12 +789,15 @@ window.SF = window.SF || {};
         notes: ev.type === "note" ? ev.notes.map(n => ({ step: n.step, alter: n.alter, oct: n.oct, tie: false })) : [],
       };
       if (i === 0) {
+        if (ev.graceBefore) next.graceBefore = cloneGraceList(ev.graceBefore);
         if (ev.lyric) next.lyric = ev.lyric;
+        if (lyricsOf(ev).length) next.lyrics = cloneLyrics(ev);
         if (ev.dynamic) next.dynamic = ev.dynamic;
         if (ev.artics) next.artics = [...ev.artics];
         if (ev.tempo) next.tempo = ev.tempo;
         if (ev.rehearsal) next.rehearsal = ev.rehearsal;
         if (ev.staffText) next.staffText = ev.staffText;
+        if (ev.chordSymbol) next.chordSymbol = cloneChordSymbol(ev.chordSymbol);
       }
       ids.push(next.id);
       return next;
@@ -686,15 +925,18 @@ window.SF = window.SF || {};
             items.push({
               type: "note", len,
               pitches: ev.notes.map(n => ({ step: n.step, alter: n.alter, oct: n.oct })),
+              graceBefore: cloneGraceList(ev.graceBefore),
               lyric: ev.lyric,
+              lyrics: cloneLyrics(ev),
               dynamic: ev.dynamic,
               artics: ev.artics ? [...ev.artics] : null,
               tempo: ev.tempo,
               rehearsal: ev.rehearsal,
               staffText: ev.staffText,
+              chordSymbol: cloneChordSymbol(ev.chordSymbol),
             });
           } else {
-            items.push({ type: "rest", len, fromFull: !!ev.full });
+            items.push({ type: "rest", len, fromFull: !!ev.full, chordSymbol: cloneChordSymbol(ev.chordSymbol) });
           }
         }
       }
@@ -732,16 +974,23 @@ window.SF = window.SF || {};
                 id: newId(), type: "note", dur: d,
                 notes: it.pitches.map(p => ({ ...p, tie: !isLastPiece })),
               };
+              if (first && it.graceBefore && it.graceBefore.length) ev.graceBefore = cloneGraceList(it.graceBefore);
               if (first && it.lyric) ev.lyric = it.lyric;
+              if (first && it.lyrics && it.lyrics.length) {
+                ev.lyrics = cloneLyrics(it.lyrics);
+                normalizeEventLyrics(ev);
+              }
               if (first && it.dynamic) ev.dynamic = it.dynamic;
               if (first && it.artics) ev.artics = [...it.artics];
               if (first && it.tempo) ev.tempo = it.tempo;
               if (first && it.rehearsal) ev.rehearsal = it.rehearsal;
               if (first && it.staffText) ev.staffText = it.staffText;
+              if (first && it.chordSymbol) ev.chordSymbol = cloneChordSymbol(it.chordSymbol);
               replaceRange(score, m, t, durValue(d), () => [ev], ctx);
             } else {
-              replaceRange(score, m, t, durValue(d), () =>
-                [{ id: newId(), type: "rest", dur: d, notes: [] }], ctx);
+              const ev = { id: newId(), type: "rest", dur: d, notes: [] };
+              if (first && it.chordSymbol) ev.chordSymbol = cloneChordSymbol(it.chordSymbol);
+              replaceRange(score, m, t, durValue(d), () => [ev], ctx);
             }
             t = t.add(durValue(d));
             first = false;
@@ -792,6 +1041,13 @@ window.SF = window.SF || {};
           const n = parseInt(String(ev.id).replace(/\D/g, ""), 10);
           if (!isNaN(n)) maxId = Math.max(maxId, n);
           if (!ev.notes) ev.notes = [];
+          normalizeEventChordSymbol(ev);
+          normalizeEventLyrics(ev);
+          if (ev.graceBefore) ev.graceBefore = cloneGraceList(ev.graceBefore);
+          for (const g of ev.graceBefore || []) {
+            const gn = parseInt(String(g.id).replace(/\D/g, ""), 10);
+            if (!isNaN(gn)) maxId = Math.max(maxId, gn);
+          }
         }
     _idCounter = maxId + 1;
     if (!score.spanners) score.spanners = [];
@@ -851,12 +1107,16 @@ window.SF = window.SF || {};
     durBase, durValue, durEq, durName, decompose, BASES,
     tupletNormalFor, tupletWrittenDur, tupletMeta,
     midiOf, absStep, pitchEq, keyAlterFor, spellMidi, transposePitch, pitchName,
+    parseChordSymbol, normalizeChordSymbol, displayChordSymbol, cloneChordSymbol,
+    lyricsOf, cloneLyrics, setLyric, normalizeEventLyrics,
     STEP_EN, STEP_KO, STEP_SEMIS, KEY_NAMES, CLEFS, keySigSteps, beamGroups, beatLen,
     PART_LIBRARY, ENSEMBLES,
     createScore, measureLen, fullRest, newId,
-    ensureParts, staffRefs, staffRef, staffMeasures, activeRef, activeClef, setActiveStaff, ensembleKey, applyEnsemble,
+    ensureParts, ensureMeasureMeta, staffRefs, visibleStaffRefs, isStaffEmpty, staffRef, staffMeasures, activeRef, activeClef, setActiveStaff, ensembleKey, applyEnsemble,
+    toggleStartRepeat, toggleEndRepeat, setRepeatCount, setEnding, clearEndings,
     eventStartTick, findEvent, nextEvent, prevEvent,
     replaceRange, inputAt, deleteEvent, makeTupletAt, consolidateRests, normalizeTies, isTiedFrom,
+    addGraceBefore, findGrace, cloneGraceList,
     eventOrderMap, normalizeSpanners, slurCoverMap,
     rebar, transposeScore, toJSON, fromJSON,
     state, mutate, undo, redo, canUndo, canRedo, resetHistory, setScore, onChange,

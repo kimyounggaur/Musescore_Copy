@@ -71,8 +71,17 @@
     <svg viewBox="0 0 14 20" fill="currentColor"><ellipse cx="5" cy="15.5" rx="3.6" ry="2.8" transform="rotate(-20 5 15.5)"/><rect x="7.6" y="2" width="1.4" height="13.5" rx="0.7"/></svg>=
     <input id="tempo-input" type="number" min="30" max="280" step="1" value="100">
   </div>
+  <select id="swing-select" class="tsel" title="스윙 재생">
+    <option value="off">스윙 끔</option>
+    <option value="light">스윙 약</option>
+    <option value="medium">스윙 중</option>
+    <option value="heavy">스윙 강</option>
+  </select>
+  <button id="btn-mixer" class="tbtn" title="파트별 믹서">믹서</button>
 
   <select id="staff-select" class="tsel" title="입력할 보표"></select>
+  <select id="view-select" class="tsel" title="총보/파트 보기"></select>
+  <button id="btn-hide-empty" class="tbtn" title="총보에서 빈 보표 숨김">빈보표</button>
   <select id="instrument-select" class="tsel" title="활성 파트의 재생 악기"></select>
   <span id="sample-status" class="sample-status" title="실제 악기 샘플 음원">샘플</span>
 
@@ -108,6 +117,7 @@
     <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="4.5" cy="10" r="2" fill="currentColor" stroke="none"/><circle cx="19.5" cy="10" r="2" fill="currentColor" stroke="none"/><path d="M5.5 13.5q6.5 6 13 0"/></svg>
     <span class="lbl">타이</span>
   </button>
+  <button id="btn-grace" class="tbtn" title="꾸밈음 추가 (/)">𝆔</button>
   <button id="btn-slur" class="tbtn" title="이음줄(슬러) — 부드럽게 잇기 (S, 범위 선택 후)">
     <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="4.5" cy="15" r="2" fill="currentColor" stroke="none"/><circle cx="19.5" cy="15" r="2" fill="currentColor" stroke="none"/><path d="M5 11.5q7-7.5 14 0"/></svg>
     <span class="lbl">이음줄</span>
@@ -116,9 +126,23 @@
     <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16M4 10h16M4 15h9"/><path d="m16.5 19.5 1.2-3.6 3.6-1.2-2.4 4.8-2.4 0Z" fill="currentColor"/></svg>
     <span class="lbl">가사</span>
   </button>
+  <select id="lyric-verse" class="tsel compact" title="가사 절">
+    <option value="1">1절</option>
+    <option value="2">2절</option>
+    <option value="3">3절</option>
+    <option value="4">4절</option>
+  </select>
+  <button id="btn-chord-symbol" class="tbtn" title="코드 기호 입력 (Ctrl+K)">C7</button>
   <button id="btn-tempo-mark" class="tbtn" title="선택 위치에 템포 표시 (Shift+T)">♩=</button>
   <button id="btn-rehearsal" class="tbtn" title="리허설 마크 (R)">R</button>
   <button id="btn-staff-text" class="tbtn" title="스태프 텍스트 (Shift+L)">Txt</button>
+
+  <div class="tsep"></div>
+  <button id="btn-repeat-start" class="tbtn" title="시작 반복 마디선">|:</button>
+  <button id="btn-repeat-end" class="tbtn" title="끝 반복 마디선">:|</button>
+  <button id="btn-repeat-count" class="tbtn" title="반복 횟수 설정">×2</button>
+  <button id="btn-volta-1" class="tbtn" title="1번 엔딩(볼타)">1.</button>
+  <button id="btn-volta-2" class="tbtn" title="2번 엔딩(볼타)">2.</button>
 
   <div class="tsep"></div>
   <button class="tbtn artic-btn" data-artic="staccato" title="스타카토 — 짧게 끊어서 (Shift+S)">
@@ -253,6 +277,20 @@
   </div>
 </dialog>
 
+<!-- ═══════════ 믹서 다이얼로그 ═══════════ -->
+<dialog id="dlg-mixer">
+  <div class="dlg-head">
+    <h2>믹서</h2>
+    <form method="dialog"><button class="dlg-close" title="닫기">✕</button></form>
+  </div>
+  <div class="dlg-body">
+    <div id="mixer-rows" class="mixer-rows"></div>
+    <div class="dlg-actions">
+      <form method="dialog"><button class="tbtn primary">확인</button></form>
+    </div>
+  </div>
+</dialog>
+
 <!-- ═══════════ 시작 다이얼로그 ═══════════ -->
 <dialog id="dlg-welcome">
   <div class="dlg-head">
@@ -293,6 +331,7 @@
       <div class="hrow"><span>반음 올리기/내리기</span><kbd>↑</kbd> <kbd>↓</kbd></div>
       <div class="hrow"><span>옥타브 이동</span><kbd>Ctrl</kbd>+<kbd>↑/↓</kbd></div>
       <div class="hrow"><span>붙임줄(타이)</span><kbd>T</kbd></div>
+      <div class="hrow"><span>꾸밈음 추가</span><kbd>/</kbd></div>
       <div class="hrow"><span>잇단음표로 나누기</span><kbd>Ctrl</kbd>+<kbd>3</kbd>~<kbd>9</kbd></div>
       <div class="hrow"><span>템포 표시</span><kbd>Shift</kbd>+<kbd>T</kbd></div>
       <div class="hrow"><span>입력 종료</span><kbd>Esc</kbd></div>
@@ -304,9 +343,13 @@
       <div class="hrow"><span>선택 음표 음높이 변경</span><kbd>↑</kbd> <kbd>↓</kbd> 또는 드래그</div>
       <div class="hrow"><span>음이름으로 재지정</span><kbd>A</kbd>~<kbd>G</kbd></div>
       <div class="hrow"><span>복사/붙여넣기/잘라내기</span><kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>V</kbd> / <kbd>X</kbd></div>
+      <div class="hrow"><span>코드 기호 입력</span><kbd>Ctrl</kbd>+<kbd>K</kbd></div>
       <div class="hrow"><span>리허설/스태프 텍스트</span><kbd>R</kbd> / <kbd>Shift</kbd>+<kbd>L</kbd></div>
+      <div class="hrow"><span>시작/끝 반복</span>툴바 <b>|:</b> / <b>:|</b></div>
+      <div class="hrow"><span>1·2번 엔딩</span>범위 선택 후 툴바 <b>1.</b> / <b>2.</b></div>
       <div class="hrow"><span>삭제(쉼표로)</span><kbd>Delete</kbd></div>
       <div class="hrow"><span>가사 입력</span><kbd>L</kbd> 또는 더블클릭</div>
+      <div class="hrow"><span>가사 하이픈/멜리스마</span>입력 중 <kbd>-</kbd> / <kbd>_</kbd></div>
       <div class="hrow"><span>실행 취소/다시 실행</span><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></div>
     </div>
     <div class="help-sec">표현 기호 (선택 후)</div>
