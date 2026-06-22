@@ -28,15 +28,46 @@
     hideEmptyStaves: false,
     midiEnabled: false,
     dragging: null,
+    theme: "dark",
   };
   let clip = null; // 내부 악보 클립보드
   let midiAccess = null;
   let midiInput = null;
   let midiBuffer = [];
   let midiTimer = null;
+  const THEME_KEY = "scoreforge-ui-theme";
+  const THEMES = new Set(["dark", "light", "pretty"]);
 
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+  /* ---------------- UI 테마 ---------------- */
+  function loadTheme() {
+    try {
+      const saved = localStorage.getItem(THEME_KEY);
+      return THEMES.has(saved) ? saved : "dark";
+    } catch {
+      return "dark";
+    }
+  }
+
+  function saveTheme(theme) {
+    try { localStorage.setItem(THEME_KEY, theme); } catch {}
+  }
+
+  function themeLabel(theme) {
+    return theme === "light" ? "Light UI" : theme === "pretty" ? "Pretty UI" : "Dark UI";
+  }
+
+  function applyTheme(theme, opts = {}) {
+    const next = THEMES.has(theme) ? theme : "dark";
+    ui.theme = next;
+    document.body.dataset.theme = next;
+    document.documentElement.style.colorScheme = next === "dark" ? "dark" : "light";
+    const picker = $("#theme-select");
+    if (picker) picker.value = next;
+    if (!opts.silent) toast(`${themeLabel(next)}로 전환했어요`);
+  }
 
   /* ---------------- 렌더 ---------------- */
   let layoutCache = null;
@@ -2356,6 +2387,16 @@
   }
 
   /* ---------------- 버튼 바인딩 ---------------- */
+  function bindThemePicker() {
+    const picker = $("#theme-select");
+    if (!picker) return;
+    picker.addEventListener("change", () => {
+      const next = picker.value;
+      applyTheme(next);
+      saveTheme(next);
+    });
+  }
+
   function bindButtons() {
     $("#btn-input").addEventListener("click", () => setInputMode(!ui.inputMode));
     $("#btn-undo").addEventListener("click", () => { C.undo(); afterHistory(); });
@@ -2510,8 +2551,10 @@
 
   /* ---------------- 시작 ---------------- */
   function start() {
+    applyTheme(loadTheme(), { silent: true });
     buildToolbar();
     buildPiano();
+    bindThemePicker();
     bindButtons();
     bindMenu();
     bindSettings();
