@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 900" role="img" aria-labelledby="title desc">
+  <title id="title">ScoreForge Quick Start Flow</title>
+  <desc id="desc">ScoreForge에서 새 악보를 만들고 입력, 재생, 저장까지 진행하는 6단계 퀵스타트 흐름도</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#111827"/>
+      <stop offset="0.56" stop-color="#1f2937"/>
+      <stop offset="1" stop-color="#17315f"/>
+    </linearGradient>
+    <linearGradient id="rail" x1="0" x2="1">
+      <stop offset="0" stop-color="#2563eb"/>
+      <stop offset="0.5" stop-color="#22c55e"/>
+      <stop offset="1" stop-color="#f97316"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#020617" flood-opacity=".28"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" orient="auto">
+      <path d="M1 1l10 5-10 5z" fill="#60a5fa"/>
+    </marker>
+    <style>
+      text { font-family: "Malgun Gothic", "Apple SD Gothic Neo", Arial, sans-serif; }
+      .label { fill: #dbeafe; font-size: 28px; font-weight: 900; }
+      .small { fill: #cbd5e1; font-size: 19px; }
+      .card-title { fill: #111827; font-size: 25px; font-weight: 900; }
+      .card-body { fill: #475569; font-size: 17px; }
+      .hint { fill: #2563eb; font-size: 15px; font-weight: 900; }
+      .num { fill: #fff; font-size: 24px; font-weight: 900; }
+      .key { fill: #0f172a; font-size: 16px; font-weight: 900; }
+    </style>
+  </defs>
+
+  <rect width="1400" height="900" rx="28" fill="url(#bg)"/>
+  <circle cx="1210" cy="130" r="170" fill="#2563eb" opacity=".16"/>
+  <circle cx="120" cy="790" r="190" fill="#f97316" opacity=".13"/>
+
+  <text x="72" y="92" class="label">ScoreForge 퀵스타트 지도</text>
+  <text x="72" y="130" class="small">처음 실행부터 4마디 악보 저장까지 - 따라 하면 바로 완성되는 최소 작업 흐름</text>
+
+  <rect x="104" y="398" width="1192" height="66" rx="33" fill="#0f172a" opacity=".62"/>
+  <rect x="142" y="425" width="1116" height="12" rx="6" fill="url(#rail)"/>
+
+  <g filter="url(#shadow)">
+    <g transform="translate(88 190)">
+      <rect width="310" height="170" rx="22" fill="#fff"/>
+      <circle cx="44" cy="44" r="30" fill="#2563eb"/>
+      <text x="44" y="53" text-anchor="middle" class="num">1</text>
+      <text x="90" y="54" class="card-title">열기</text>
+      <text x="90" y="90" class="card-body">브라우저에서 앱을 열고</text>
+      <text x="90" y="118" class="card-body">화면 구조를 확인합니다.</text>
+      <rect x="90" y="135" width="72" height="24" rx="8" fill="#dbeafe"/>
+      <text x="126" y="153" text-anchor="middle" class="hint">화면 보기</text>
+    </g>
+
+    <g transform="translate(548 190)">
+      <rect width="310" height="170" rx="22" fill="#fff"/>
+      <circle cx="44" cy="44" r="30" fill="#22c55e"/>
+      <text x="44" y="53" text-anchor="middle" class="num">2</text>
+      <text x="90" y="54" class="card-title">악보 설정</text>
+      <text x="90" y="90" class="card-body">제목, 편성, 조표, 박자,</text>
+      <text x="90" y="118" class="card-body">템포를 먼저 정합니다.</text>
+      <rect x="90" y="135" width="78" height="24" rx="8" fill="#dcfce7"/>
+      <text x="129" y="153" text-anchor="middle" class="hint">설정 버튼</text>
+    </g>
+
+    <g transform="translate(1008 190)">
+      <rect width="310" height="170" rx="22" fill="#fff"/>
+      <circle cx="44" cy="44" r="30" fill="#f97316"/>
+      <text x="44" y="53" text-anchor="middle" class="num">3</text>
+      <text x="90" y="54" class="card-title">입력</text>
+      <text x="90" y="90" class="card-body">N으로 입력 모드를 켜고</text>
+      <text x="90" y="118" class="card-body">숫자와 A-G로 입력합니다.</text>
+      <rect x="90" y="135" width="160" height="24" rx="8" fill="#ffedd5"/>
+      <text x="170" y="153" text-anchor="middle" class="hint">N, 3-7, A-G, 0</text>
+    </g>
+
+    <g transform="translate(88 540)">
+      <rect width="310" height="170" rx="22" fill="#fff"/>
+      <circle cx="44" cy="44" r="30" fill="#7c3aed"/>
+      <text x="44" y="53" text-anchor="middle" class="num">4</text>
+      <text x="90" y="54" class="card-title">편집</text>
+      <text x="90" y="90" class="card-body">선택한 음표를 이동하고</text>
+      <text x="90" y="118" class="card-body">기호와 텍스트를 붙입니다.</text>
+      <rect x="90" y="135" width="108" height="24" rx="8" fill="#ede9fe"/>
+      <text x="144" y="153" text-anchor="middle" class="hint">Ctrl+Z 가능</text>
+    </g>
+
+    <g transform="translate(548 540)">
+      <rect width="310" height="170" rx="22" fill="#fff"/>
+      <circle cx="44" cy="44" r="30" fill="#0ea5e9"/>
+      <text x="44" y="53" text-anchor="middle" class="num">5</text>
+      <text x="90" y="54" class="card-title">재생 확인</text>
+      <text x="90" y="90" class="card-body">Space로 듣고 믹서에서</text>
+      <text x="90" y="118" class="card-body">파트 음량을 맞춥니다.</text>
+      <rect x="90" y="135" width="116" height="24" rx="8" fill="#e0f2fe"/>
+      <text x="148" y="153" text-anchor="middle" class="hint">Space, Mixer</text>
+    </g>
+
+    <g transform="translate(1008 540)">
+      <rect width="310" height="170" rx="22" fill="#fff"/>
+      <circle cx="44" cy="44" r="30" fill="#111827"/>
+      <text x="44" y="53" text-anchor="middle" class="num">6</text>
+      <text x="90" y="54" class="card-title">저장/내보내기</text>
+      <text x="90" y="90" class="card-body">JSON으로 보관하고</text>
+      <text x="90" y="118" class="card-body">MusicXML, MIDI, PDF로 공유합니다.</text>
+      <rect x="90" y="135" width="148" height="24" rx="8" fill="#e5e7eb"/>
+      <text x="164" y="153" text-anchor="middle" class="hint">Ctrl+S, File</text>
+    </g>
+  </g>
+
+  <path d="M408 275h104" stroke="#60a5fa" stroke-width="8" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <path d="M868 275h104" stroke="#60a5fa" stroke-width="8" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <path d="M1162 380v120" stroke="#60a5fa" stroke-width="8" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <path d="M1008 625H905" stroke="#60a5fa" stroke-width="8" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <path d="M548 625H445" stroke="#60a5fa" stroke-width="8" stroke-linecap="round" marker-end="url(#arrow)"/>
+
+  <g transform="translate(286 805)">
+    <rect width="828" height="48" rx="24" fill="#0f172a" opacity=".72"/>
+    <text x="42" y="31" fill="#dbeafe" font-size="18" font-family="Malgun Gothic">핵심 습관:</text>
+    <g transform="translate(145 10)">
+      <rect width="36" height="28" rx="7" fill="#e5e7eb"/><text x="18" y="20" text-anchor="middle" class="key">N</text>
+      <text x="48" y="21" fill="#cbd5e1" font-size="16">입력 모드</text>
+    </g>
+    <g transform="translate(300 10)">
+      <rect width="36" height="28" rx="7" fill="#e5e7eb"/><text x="18" y="20" text-anchor="middle" class="key">5</text>
+      <text x="48" y="21" fill="#cbd5e1" font-size="16">4분음표</text>
+    </g>
+    <g transform="translate(458 10)">
+      <rect width="54" height="28" rx="7" fill="#e5e7eb"/><text x="27" y="20" text-anchor="middle" class="key">A-G</text>
+      <text x="66" y="21" fill="#cbd5e1" font-size="16">음 입력</text>
+    </g>
+    <g transform="translate(630 10)">
+      <rect width="68" height="28" rx="7" fill="#e5e7eb"/><text x="34" y="20" text-anchor="middle" class="key">Space</text>
+      <text x="80" y="21" fill="#cbd5e1" font-size="16">재생</text>
+    </g>
+  </g>
+</svg>

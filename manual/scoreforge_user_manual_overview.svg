@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="860" viewBox="0 0 1400 860" role="img" aria-labelledby="title desc">
+  <title id="title">ScoreForge 사용자 흐름 인포그래픽</title>
+  <desc id="desc">새 악보 만들기부터 입력, 편집, 재생, 내보내기까지의 주요 흐름을 보여주는 한국어 인포그래픽</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1f2937"/>
+      <stop offset="1" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#f97316"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#000" flood-opacity=".25"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#60a5fa"/>
+    </marker>
+    <style>
+      .title { font: 800 38px "Malgun Gothic", Arial, sans-serif; fill: #fff; }
+      .subtitle { font: 500 18px "Malgun Gothic", Arial, sans-serif; fill: #cbd5e1; }
+      .card { fill: #fff; stroke: #d8dee9; stroke-width: 1.2; filter: url(#shadow); }
+      .card-title { font: 800 23px "Malgun Gothic", Arial, sans-serif; fill: #111827; }
+      .body { font: 500 15px "Malgun Gothic", Arial, sans-serif; fill: #475569; }
+      .tag { font: 800 13px "Malgun Gothic", Arial, sans-serif; fill: #1d4ed8; }
+      .step { fill: #eff6ff; stroke: #93c5fd; }
+      .icon { fill: none; stroke: #111827; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+      .accent { fill: url(#accent); }
+      .arrow { stroke: #60a5fa; stroke-width: 4; fill: none; marker-end: url(#arrow); stroke-linecap: round; }
+      .mini-staff { stroke: #111827; stroke-width: 2; }
+      .note { fill: #111827; }
+    </style>
+  </defs>
+
+  <rect width="1400" height="860" rx="32" fill="url(#bg)"/>
+  <circle cx="1180" cy="70" r="160" fill="#2563eb" opacity=".16"/>
+  <circle cx="150" cy="820" r="190" fill="#f97316" opacity=".14"/>
+  <text x="70" y="76" class="title">ScoreForge 사용자 흐름</text>
+  <text x="72" y="112" class="subtitle">브라우저에서 악보를 만들고, 편집하고, 듣고, MuseScore와 주고받는 전체 작업 지도</text>
+
+  <g transform="translate(70,170)">
+    <rect class="card" width="360" height="200" rx="22"/>
+    <circle class="step" cx="58" cy="58" r="34"/>
+    <path class="icon" d="M46 60h25M50 48h17M50 72h17M78 43v58"/>
+    <text x="108" y="54" class="card-title">1. 새 악보 준비</text>
+    <text x="108" y="84" class="body">파일 메뉴 또는 시작 화면에서</text>
+    <text x="108" y="108" class="body">빈 악보, 데모 악보, 가져오기를 선택</text>
+    <text x="108" y="142" class="tag">악보 설정</text>
+    <text x="206" y="142" class="body">편성, 조표, 박자, 빠르기</text>
+  </g>
+
+  <path class="arrow" d="M450 270 C500 270 510 270 560 270"/>
+
+  <g transform="translate(580,170)">
+    <rect class="card" width="360" height="200" rx="22"/>
+    <circle class="step" cx="58" cy="58" r="34"/>
+    <g transform="translate(32,44)">
+      <line class="mini-staff" x1="0" y1="0" x2="55" y2="0"/>
+      <line class="mini-staff" x1="0" y1="9" x2="55" y2="9"/>
+      <line class="mini-staff" x1="0" y1="18" x2="55" y2="18"/>
+      <line class="mini-staff" x1="0" y1="27" x2="55" y2="27"/>
+      <line class="mini-staff" x1="0" y1="36" x2="55" y2="36"/>
+      <ellipse class="note" cx="34" cy="21" rx="7" ry="5" transform="rotate(-18 34 21)"/>
+      <path class="mini-staff" d="M40 20v-36"/>
+    </g>
+    <text x="108" y="54" class="card-title">2. 입력</text>
+    <text x="108" y="84" class="body">N으로 입력 모드를 켜고</text>
+    <text x="108" y="108" class="body">보표 클릭, A-G, 건반, MIDI, 드럼 패드 사용</text>
+    <text x="108" y="142" class="tag">성부</text>
+    <text x="164" y="142" class="body">V1-V4, 쉼표, 화음, 타이, 잇단음표</text>
+  </g>
+
+  <path class="arrow" d="M960 270 C1010 270 1020 270 1070 270"/>
+
+  <g transform="translate(1090,170)">
+    <rect class="card" width="240" height="200" rx="22"/>
+    <circle class="step" cx="50" cy="58" r="34"/>
+    <path class="icon" d="M38 54l17 17 32-39M44 90h80"/>
+    <text x="94" y="54" class="card-title">3. 편집</text>
+    <text x="94" y="84" class="body">선택, 복사, 삭제</text>
+    <text x="94" y="108" class="body">속성 패널 조정</text>
+    <text x="94" y="142" class="tag">Ctrl+Z</text>
+    <text x="94" y="166" class="body">언제든 되돌리기</text>
+  </g>
+
+  <path class="arrow" d="M1210 392 C1210 448 1210 476 1210 520"/>
+
+  <g transform="translate(970,540)">
+    <rect class="card" width="360" height="200" rx="22"/>
+    <circle class="step" cx="58" cy="58" r="34"/>
+    <path class="icon" d="M43 74V43l42 24-42 24zM92 43v48"/>
+    <text x="108" y="54" class="card-title">4. 재생과 확인</text>
+    <text x="108" y="84" class="body">Space로 재생하고 샘플 악기 음색 확인</text>
+    <text x="108" y="108" class="body">메트로놈, 스윙, 믹서, 재생 커서 사용</text>
+    <text x="108" y="142" class="tag">F11/F12</text>
+    <text x="196" y="142" class="body">타임라인과 내비게이터로 이동</text>
+  </g>
+
+  <path class="arrow" d="M950 640 C900 640 890 640 840 640"/>
+
+  <g transform="translate(470,540)">
+    <rect class="card" width="360" height="200" rx="22"/>
+    <circle class="step" cx="58" cy="58" r="34"/>
+    <path class="icon" d="M40 45h52v50H40zM54 58h25M54 72h25M54 86h16"/>
+    <text x="108" y="54" class="card-title">5. 저장/내보내기</text>
+    <text x="108" y="84" class="body">JSON 저장, MusicXML, MIDI 내보내기</text>
+    <text x="108" y="108" class="body">인쇄/PDF로 교재와 과제 제작</text>
+    <text x="108" y="142" class="tag">호환</text>
+    <text x="164" y="142" class="body">MuseScore와 MusicXML 왕복</text>
+  </g>
+
+  <path class="arrow" d="M450 640 C400 640 390 640 340 640"/>
+
+  <g transform="translate(70,540)">
+    <rect class="card" width="300" height="200" rx="22"/>
+    <circle class="step" cx="58" cy="58" r="34"/>
+    <path class="icon" d="M42 44h48M42 60h48M42 76h34M42 92h20"/>
+    <text x="108" y="54" class="card-title">6. 반복 작업</text>
+    <text x="108" y="84" class="body">악보를 수정하고 다시 듣고</text>
+    <text x="108" y="108" class="body">필요한 형식으로 계속 배포</text>
+    <text x="108" y="142" class="tag">학습</text>
+    <text x="164" y="142" class="body">수업용 예제와 연습곡 제작</text>
+  </g>
+
+  <g transform="translate(70,410)">
+    <rect x="0" y="0" width="1260" height="80" rx="20" fill="#0f172a" opacity=".72" stroke="#334155"/>
+    <text x="32" y="34" class="subtitle">핵심 단축키</text>
+    <text x="180" y="34" class="subtitle">N 입력</text>
+    <text x="310" y="34" class="subtitle">A-G 음 입력</text>
+    <text x="490" y="34" class="subtitle">0 쉼표</text>
+    <text x="625" y="34" class="subtitle">Ctrl+C/V 복사/붙여넣기</text>
+    <text x="900" y="34" class="subtitle">Space 재생</text>
+    <text x="1080" y="34" class="subtitle">Ctrl+S 저장</text>
+    <rect x="32" y="50" width="1190" height="8" rx="4" fill="url(#accent)"/>
+  </g>
+</svg>

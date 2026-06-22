@@ -1981,6 +1981,12 @@
         toast("MIDI 파일을 내려받았어요");
       } else if (act === "print") {
         window.print();
+      } else if (act === "manual-quick") {
+        window.open("manual/scoreforge_quick_start_user_manual.html", "_blank", "noopener");
+        toast("퀵스타트 설명서를 새 탭으로 열었어요");
+      } else if (act === "manual-user") {
+        window.open("manual/scoreforge_user_manual.html", "_blank", "noopener");
+        toast("유저 매뉴얼을 새 탭으로 열었어요");
       } else if (act.startsWith("demo-")) {
         const key = act.slice(5);
         if (IO.DEMOS[key]) {

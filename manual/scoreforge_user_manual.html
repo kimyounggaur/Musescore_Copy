@@ -1,0 +1,700 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ScoreForge 한글 사용자 설명서</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23111827'/%3E%3Cpath d='M21 44V14h24v7H29v6h14v7H29v10z' fill='white'/%3E%3Ccircle cx='45' cy='45' r='7' fill='%232563eb'/%3E%3C/svg%3E">
+<style>
+  @page { size: A4; margin: 12mm; }
+  :root {
+    --ink: #111827;
+    --muted: #5b6472;
+    --line: #d8dee9;
+    --soft: #f5f7fb;
+    --soft2: #eef4ff;
+    --blue: #2563eb;
+    --orange: #f97316;
+    --dark: #1f2937;
+    --paper: #fff;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: #e8ebf1;
+    color: var(--ink);
+    font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", Arial, sans-serif;
+    line-height: 1.65;
+  }
+  .page {
+    max-width: 1120px;
+    margin: 24px auto;
+    background: var(--paper);
+    box-shadow: 0 18px 60px rgba(15, 23, 42, .18);
+  }
+  .inner { padding: 44px 52px 58px; }
+  .cover {
+    min-height: 760px;
+    display: grid;
+    grid-template-columns: 1.05fr .95fr;
+    gap: 32px;
+    align-items: center;
+    background:
+      radial-gradient(circle at 82% 12%, rgba(37, 99, 235, .18), transparent 26%),
+      linear-gradient(135deg, #101827, #273244);
+    color: #fff;
+    padding: 52px;
+    break-after: page;
+  }
+  .cover h1 {
+    margin: 0 0 16px;
+    font-size: 50px;
+    line-height: 1.12;
+    letter-spacing: 0;
+  }
+  .cover p { color: #d8e0ee; font-size: 18px; margin: 0 0 24px; }
+  .cover .badge {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 12px;
+    border: 1px solid rgba(255,255,255,.22);
+    border-radius: 999px;
+    color: #dbeafe;
+    background: rgba(255,255,255,.08);
+    font-size: 13px;
+    font-weight: 800;
+  }
+  .cover-card {
+    background: #fff;
+    color: var(--ink);
+    border-radius: 20px;
+    padding: 22px;
+    box-shadow: 0 18px 48px rgba(0,0,0,.35);
+  }
+  .cover-card img { width: 100%; border-radius: 12px; border: 1px solid var(--line); display: block; }
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-top: 22px;
+  }
+  .meta-grid div {
+    padding: 12px;
+    border-radius: 12px;
+    background: rgba(255,255,255,.09);
+    border: 1px solid rgba(255,255,255,.14);
+  }
+  .meta-grid b { display: block; color: #fff; }
+  .meta-grid span { color: #bfdbfe; font-size: 12px; }
+
+  h2 {
+    margin: 0 0 18px;
+    padding-top: 12px;
+    font-size: 30px;
+    line-height: 1.25;
+  }
+  h3 {
+    margin: 28px 0 12px;
+    font-size: 21px;
+  }
+  h4 {
+    margin: 18px 0 8px;
+    font-size: 16px;
+  }
+  p { margin: 0 0 12px; }
+  a { color: var(--blue); text-decoration: none; }
+  code, kbd {
+    font-family: "Cascadia Mono", Consolas, monospace;
+    background: #eef2f7;
+    color: #0f172a;
+    border: 1px solid #d9e2ee;
+    border-radius: 5px;
+    padding: 1px 6px;
+    font-size: .92em;
+  }
+  kbd {
+    box-shadow: inset 0 -2px 0 rgba(15,23,42,.12);
+    font-weight: 800;
+  }
+  .toc {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    counter-reset: toc;
+  }
+  .toc a {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 52px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    color: var(--ink);
+    background: var(--soft);
+  }
+  .toc a::before {
+    counter-increment: toc;
+    content: counter(toc);
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    background: var(--blue);
+    color: #fff;
+    font-weight: 900;
+    flex: none;
+  }
+  section { margin-top: 42px; }
+  section:first-of-type { margin-top: 0; }
+  .lead {
+    color: var(--muted);
+    font-size: 16px;
+    margin-bottom: 18px;
+  }
+  .callout {
+    border-left: 5px solid var(--blue);
+    background: var(--soft2);
+    padding: 14px 16px;
+    border-radius: 10px;
+    margin: 16px 0;
+  }
+  .warn {
+    border-left-color: var(--orange);
+    background: #fff7ed;
+  }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 14px 0; }
+  .card {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: #fff;
+    padding: 14px;
+    break-inside: avoid;
+  }
+  .card b { display: block; margin-bottom: 5px; }
+  .card small { color: var(--muted); }
+  .step-list {
+    counter-reset: step;
+    display: grid;
+    gap: 10px;
+    margin: 14px 0;
+  }
+  .step {
+    counter-increment: step;
+    display: grid;
+    grid-template-columns: 38px 1fr;
+    gap: 12px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 12px;
+    background: #fff;
+    break-inside: avoid;
+  }
+  .step::before {
+    content: counter(step);
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    background: var(--dark);
+    color: #fff;
+    display: grid;
+    place-items: center;
+    font-weight: 900;
+  }
+  figure {
+    margin: 18px 0;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    overflow: hidden;
+    background: #fff;
+    break-inside: avoid;
+  }
+  figure img, figure svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  figcaption {
+    padding: 10px 14px;
+    color: var(--muted);
+    font-size: 13px;
+    background: #f8fafc;
+    border-top: 1px solid var(--line);
+  }
+  .mini-illus {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: linear-gradient(180deg, #fff, #f8fafc);
+    padding: 10px;
+    margin: 10px 0;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0;
+    break-inside: avoid;
+  }
+  th, td {
+    border: 1px solid var(--line);
+    padding: 9px 10px;
+    vertical-align: top;
+  }
+  th { background: #eef2ff; text-align: left; }
+  .checklist li { margin-bottom: 6px; }
+  .shortcut td:first-child { width: 170px; white-space: nowrap; }
+  .footer-note {
+    margin-top: 32px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 12px;
+  }
+  @media print {
+    body { background: #fff; }
+    .page { margin: 0; max-width: none; box-shadow: none; }
+    .inner { padding: 0; }
+    .cover { min-height: 250mm; margin: -12mm; padding: 20mm; }
+    h2, h3 { break-after: avoid; }
+    figure, table, .card, .step, .callout, .toc a, .mini-illus { break-inside: avoid; }
+    a { color: inherit; }
+  }
+  @media (max-width: 760px) {
+    .cover, .grid-2, .grid-3, .cards, .toc { grid-template-columns: 1fr; }
+    .inner, .cover { padding: 24px; }
+  }
+</style>
+</head>
+<body>
+<main class="page">
+  <div class="cover">
+    <div>
+      <span class="badge">ScoreForge User's Manual - Korean Edition</span>
+      <h1>ScoreForge<br>한글 사용자 설명서</h1>
+      <p>브라우저에서 악보를 만들고, 편집하고, 재생하고, MuseScore와 주고받기 위한 단계별 매뉴얼입니다.</p>
+      <div class="meta-grid">
+        <div><b>대상</b><span>처음 쓰는 사용자부터 수업 제작자까지</span></div>
+        <div><b>형식</b><span>HTML, SVG, PDF</span></div>
+        <div><b>버전</b><span>2026-06-22 기준 앱 기능</span></div>
+      </div>
+    </div>
+    <div class="cover-card">
+      <img src="assets/01-main-workspace.png" alt="ScoreForge 메인 작업 화면">
+    </div>
+  </div>
+
+  <div class="inner">
+    <section id="overview">
+      <h2>0. 한눈에 보는 작업 흐름</h2>
+      <p class="lead">ScoreForge는 설치 없이 브라우저에서 악보를 입력하고, 소리로 확인하고, 파일로 내보내는 정적 웹앱입니다. 기본 흐름은 새 악보 준비, 입력, 편집, 재생 확인, 내보내기입니다.</p>
+      <figure>
+        <img src="scoreforge_user_manual_overview.svg" alt="ScoreForge 전체 작업 흐름 인포그래픽">
+        <figcaption>그림 0-1. 새 악보부터 MusicXML/MIDI/PDF 내보내기까지의 전체 흐름</figcaption>
+      </figure>
+      <div class="toc">
+        <a href="#screen">화면 구조 이해</a>
+        <a href="#quickstart">10분 빠른 시작</a>
+        <a href="#input">음표와 쉼표 입력</a>
+        <a href="#editing">선택과 편집</a>
+        <a href="#symbols">기호와 텍스트</a>
+        <a href="#playback">재생과 믹서</a>
+        <a href="#layout">악보 설정과 조판</a>
+        <a href="#properties">속성 패널</a>
+        <a href="#navigation">내비게이터와 타임라인</a>
+        <a href="#files">파일 저장/가져오기/내보내기</a>
+        <a href="#shortcuts">단축키 표</a>
+        <a href="#trouble">문제 해결</a>
+      </div>
+    </section>
+
+    <section id="screen">
+      <h2>1. 화면 구조 이해</h2>
+      <p class="lead">화면은 크게 상단 툴바, 입력 팔레트, 중앙 악보, 오른쪽 속성 패널, 하단 건반과 상태바로 나뉩니다.</p>
+      <figure>
+        <img src="assets/01-main-workspace.png" alt="메인 작업 화면">
+        <figcaption>그림 1-1. 메인 작업 화면. 상단에는 파일/설정/재생/보기 도구가 있고, 중앙에는 흰 종이 형태의 악보가 있습니다.</figcaption>
+      </figure>
+      <div class="cards">
+        <div class="card"><b>상단 메인 툴바</b><small>파일 메뉴, 악보 설정, 실행 취소/다시 실행, 재생/정지, 메트로놈, 템포, 스윙, 믹서, 보표/파트 선택을 담당합니다.</small></div>
+        <div class="card"><b>입력 팔레트</b><small>입력 모드, 성부 V1-V4, 음길이, 임시표, 타이, 가사, 코드, 기호, 반복, 셈여림을 빠르게 넣습니다.</small></div>
+        <div class="card"><b>속성 패널</b><small>선택한 음표/쉼표/마디의 보임, 색상, 오프셋, 스템, 텍스트, 브레이크를 조정합니다.</small></div>
+      </div>
+      <div class="mini-illus">
+        <svg viewBox="0 0 1000 220" role="img" aria-label="화면 영역 도식">
+          <rect x="20" y="20" width="960" height="38" rx="8" fill="#1f2937"/>
+          <text x="40" y="46" fill="#fff" font-size="18" font-family="Malgun Gothic">메인 툴바</text>
+          <rect x="20" y="66" width="960" height="34" rx="8" fill="#273244"/>
+          <text x="40" y="90" fill="#fff" font-size="16" font-family="Malgun Gothic">입력 팔레트</text>
+          <rect x="20" y="112" width="710" height="88" rx="10" fill="#fff" stroke="#d8dee9"/>
+          <text x="40" y="164" fill="#111827" font-size="18" font-family="Malgun Gothic">악보 캔버스</text>
+          <rect x="744" y="112" width="236" height="88" rx="10" fill="#f8fafc" stroke="#d8dee9"/>
+          <text x="770" y="164" fill="#111827" font-size="18" font-family="Malgun Gothic">속성 패널</text>
+        </svg>
+      </div>
+      <h3>처음 켰을 때 확인할 것</h3>
+      <ul class="checklist">
+        <li>상단의 <b>템포 입력칸</b>이 원하는 BPM인지 확인합니다.</li>
+        <li>입력할 보표가 맞는지 <b>보표 선택 드롭다운</b>을 확인합니다.</li>
+        <li>악보가 작거나 크면 하단의 <b>확대/축소</b> 버튼 또는 <kbd>Ctrl</kbd>+마우스 휠을 사용합니다.</li>
+      </ul>
+    </section>
+
+    <section id="quickstart">
+      <h2>2. 10분 빠른 시작</h2>
+      <p class="lead">아래 절차를 그대로 따라 하면 4마디짜리 간단한 악보를 만들고 재생, 저장까지 할 수 있습니다.</p>
+      <div class="step-list">
+        <div class="step"><div><b>새 악보 또는 데모 악보를 엽니다.</b><br>파일 메뉴에서 새 악보를 선택하거나 시작 화면의 예제 악보를 사용합니다.</div></div>
+        <div class="step"><div><b>악보 설정을 엽니다.</b><br><b>악보 설정</b> 버튼에서 제목, 작곡가, 편성, 조표, 박자, 빠르기를 정합니다.</div></div>
+        <div class="step"><div><b>입력 모드를 켭니다.</b><br><kbd>N</kbd> 또는 <b>입력 모드</b> 버튼을 누릅니다. 마우스 커서가 보표 입력 상태로 바뀝니다.</div></div>
+        <div class="step"><div><b>음길이를 고릅니다.</b><br><kbd>5</kbd>는 4분음표, <kbd>4</kbd>는 8분음표, <kbd>3</kbd>은 16분음표입니다. 점음표는 <kbd>.</kbd>입니다.</div></div>
+        <div class="step"><div><b>음표를 넣습니다.</b><br>보표를 클릭하거나 <kbd>A</kbd>-<kbd>G</kbd>를 눌러 음을 입력합니다. 쉼표는 <kbd>0</kbd>입니다.</div></div>
+        <div class="step"><div><b>소리로 확인합니다.</b><br><kbd>Space</kbd>를 누르면 현재 선택 위치부터 재생됩니다. 처음부터 들으려면 되감기 버튼을 누릅니다.</div></div>
+        <div class="step"><div><b>저장합니다.</b><br><kbd>Ctrl</kbd>+<kbd>S</kbd>로 JSON 파일을 저장하거나 파일 메뉴에서 MusicXML/MIDI를 내보냅니다.</div></div>
+      </div>
+      <figure>
+        <img src="assets/02-score-settings.png" alt="악보 설정 다이얼로그">
+        <figcaption>그림 2-1. 악보 설정 다이얼로그. 편성, 조표, 박자, 템포, 페이지 스타일을 한 곳에서 조정합니다.</figcaption>
+      </figure>
+      <div class="callout">
+        <b>빠른 입력 습관</b><br>
+        입력 모드에서는 한 손은 숫자 음길이, 다른 손은 <kbd>A</kbd>-<kbd>G</kbd> 음이름을 맡기면 MuseScore식으로 빠르게 입력할 수 있습니다.
+      </div>
+    </section>
+
+    <section id="input">
+      <h2>3. 음표와 쉼표 입력</h2>
+      <p class="lead">ScoreForge는 보표 클릭, 키보드, 화면 피아노, MIDI, 드럼 패드 입력을 지원합니다. 사용자의 작업 습관에 맞춰 골라 쓰면 됩니다.</p>
+      <div class="grid-2">
+        <div>
+          <h3>3-1. 마우스로 입력</h3>
+          <ol>
+            <li><kbd>N</kbd>으로 입력 모드를 켭니다.</li>
+            <li>음길이를 선택합니다.</li>
+            <li>보표 위 원하는 높이에 마우스를 올려 고스트 음표를 확인합니다.</li>
+            <li>클릭하면 음표가 들어가고 커서가 다음 위치로 이동합니다.</li>
+          </ol>
+        </div>
+        <div class="mini-illus">
+          <svg viewBox="0 0 420 210" role="img" aria-label="마우스 입력 도식">
+            <rect width="420" height="210" rx="18" fill="#f8fafc"/>
+            <g stroke="#111827" stroke-width="2">
+              <line x1="40" y1="70" x2="360" y2="70"/>
+              <line x1="40" y1="88" x2="360" y2="88"/>
+              <line x1="40" y1="106" x2="360" y2="106"/>
+              <line x1="40" y1="124" x2="360" y2="124"/>
+              <line x1="40" y1="142" x2="360" y2="142"/>
+            </g>
+            <ellipse cx="180" cy="106" rx="13" ry="9" fill="#2563eb" opacity=".45" transform="rotate(-18 180 106)"/>
+            <path d="M228 72l42 28-18 3 14 32-15 6-14-31-13 13z" fill="#111827"/>
+            <text x="40" y="40" font-family="Malgun Gothic" font-size="19" font-weight="800">고스트 확인 후 클릭</text>
+            <text x="40" y="178" font-family="Malgun Gothic" font-size="15" fill="#5b6472">선택한 음길이와 높이가 바로 악보에 입력됩니다.</text>
+          </svg>
+        </div>
+      </div>
+      <h3>3-2. 키보드로 입력</h3>
+      <table>
+        <tr><th>동작</th><th>방법</th><th>팁</th></tr>
+        <tr><td>음 입력</td><td><kbd>A</kbd>-<kbd>G</kbd></td><td>마지막 입력 음 근처의 옥타브로 자동 추론합니다.</td></tr>
+        <tr><td>쉼표 입력</td><td><kbd>0</kbd></td><td>현재 커서 위치에 선택한 길이의 쉼표를 넣습니다.</td></tr>
+        <tr><td>화음 쌓기</td><td><kbd>Shift</kbd>+<kbd>A</kbd>-<kbd>G</kbd></td><td>직전 음표에 음을 추가합니다.</td></tr>
+        <tr><td>점음표</td><td><kbd>.</kbd></td><td>현재 음길이에 부점을 켜거나 끕니다.</td></tr>
+        <tr><td>잇단음표</td><td><kbd>Ctrl</kbd>+<kbd>3</kbd>-<kbd>9</kbd></td><td>선택한 음표 또는 쉼표를 n잇단으로 나눕니다.</td></tr>
+      </table>
+      <h3>3-3. 성부와 다중 보표</h3>
+      <p>피아노처럼 한 보표 안에 여러 리듬이 겹칠 때는 <b>V1-V4</b> 성부를 사용합니다. 관례상 V1/V3은 스템이 위로, V2/V4는 아래로 표시됩니다.</p>
+      <div class="cards">
+        <div class="card"><b>V1</b><small>기본 선율, 오른손 상성부</small></div>
+        <div class="card"><b>V2</b><small>왼손 또는 하성부 리듬</small></div>
+        <div class="card"><b>V3/V4</b><small>더 복잡한 다성부 정리</small></div>
+      </div>
+      <h3>3-4. 드럼과 TAB 입력</h3>
+      <p>악보 설정에서 <b>드럼 키트</b> 또는 <b>기타 + TAB</b> 편성을 선택하면 입력 방식이 해당 악기에 맞게 바뀝니다. 드럼 보표에서는 하단 드럼 패드가 나타나고, 기타+TAB에서는 표준 보표와 TAB가 연결됩니다.</p>
+    </section>
+
+    <section id="editing">
+      <h2>4. 선택과 편집</h2>
+      <p class="lead">ScoreForge의 편집은 선택, 변경, 확인의 반복입니다. 모든 주요 변경은 실행 취소/다시 실행으로 되돌릴 수 있습니다.</p>
+      <div class="grid-2">
+        <div>
+          <h3>4-1. 선택</h3>
+          <ul>
+            <li>음표나 쉼표를 클릭하면 단일 선택됩니다.</li>
+            <li><kbd>Shift</kbd>+클릭 또는 <kbd>Shift</kbd>+<kbd>←</kbd>/<kbd>→</kbd>로 범위를 선택합니다.</li>
+            <li>선택된 음표는 파란색으로 표시됩니다.</li>
+          </ul>
+          <h3>4-2. 기본 편집</h3>
+          <ul>
+            <li><kbd>Delete</kbd>: 선택한 음표를 같은 길이의 쉼표로 바꿉니다.</li>
+            <li><kbd>↑</kbd>/<kbd>↓</kbd>: 반음씩 이동합니다. <kbd>Ctrl</kbd>을 함께 누르면 옥타브 이동입니다.</li>
+            <li>마우스로 음표를 위아래로 드래그하면 음높이를 바꿉니다.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>4-3. 복사/붙여넣기</h3>
+          <ol>
+            <li>범위를 선택합니다.</li>
+            <li><kbd>Ctrl</kbd>+<kbd>C</kbd>로 복사합니다.</li>
+            <li>붙여넣을 위치를 선택합니다.</li>
+            <li><kbd>Ctrl</kbd>+<kbd>V</kbd>로 붙여넣습니다.</li>
+          </ol>
+          <div class="callout warn">
+            <b>범위 복사 규칙</b><br>
+            현재 구현은 한 보표 안의 범위를 기준으로 붙여넣습니다. 여러 파트 사이의 복사는 먼저 대상 보표를 선택한 뒤 붙여넣으세요.
+          </div>
+        </div>
+      </div>
+      <div class="mini-illus">
+        <svg viewBox="0 0 1000 240" role="img" aria-label="선택 편집 흐름">
+          <rect x="20" y="30" width="220" height="150" rx="18" fill="#eff6ff" stroke="#93c5fd"/>
+          <text x="50" y="75" font-family="Malgun Gothic" font-size="23" font-weight="800">1 선택</text>
+          <text x="50" y="115" font-family="Malgun Gothic" font-size="15" fill="#475569">클릭 또는 Shift 범위 선택</text>
+          <path d="M250 105h90" stroke="#2563eb" stroke-width="5" marker-end="url(#a)"/>
+          <rect x="360" y="30" width="260" height="150" rx="18" fill="#fff7ed" stroke="#fdba74"/>
+          <text x="390" y="75" font-family="Malgun Gothic" font-size="23" font-weight="800">2 변경</text>
+          <text x="390" y="115" font-family="Malgun Gothic" font-size="15" fill="#475569">음높이, 길이, 기호, 속성</text>
+          <path d="M630 105h90" stroke="#2563eb" stroke-width="5" marker-end="url(#a)"/>
+          <rect x="740" y="30" width="220" height="150" rx="18" fill="#ecfdf5" stroke="#86efac"/>
+          <text x="770" y="75" font-family="Malgun Gothic" font-size="23" font-weight="800">3 확인</text>
+          <text x="770" y="115" font-family="Malgun Gothic" font-size="15" fill="#475569">재생, 실행 취소, 저장</text>
+          <defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0l10 5-10 5z" fill="#2563eb"/></marker></defs>
+        </svg>
+      </div>
+    </section>
+
+    <section id="symbols">
+      <h2>5. 기호와 텍스트</h2>
+      <p class="lead">표현 기호는 악보의 연주 의도를 전달합니다. ScoreForge는 기본 셈여림, 아티큘레이션, 이음줄, 헤어핀, 템포, 리허설 마크, 스태프 텍스트, 코드 기호, 프렛보드를 지원합니다.</p>
+      <table>
+        <tr><th>분류</th><th>넣는 방법</th><th>설명</th></tr>
+        <tr><td>타이</td><td><kbd>T</kbd> 또는 타이 버튼</td><td>같은 음높이를 다음 음표와 붙입니다.</td></tr>
+        <tr><td>이음줄</td><td><kbd>S</kbd></td><td>범위 선택 후 누르면 양 끝 음표 사이에 슬러를 표시합니다.</td></tr>
+        <tr><td>셈여림</td><td>pp, p, mp, mf, f, ff 버튼</td><td>선택 위치에 다이내믹을 붙이고 재생 세기에 반영합니다.</td></tr>
+        <tr><td>헤어핀</td><td><kbd>&lt;</kbd>, <kbd>&gt;</kbd></td><td>범위 선택 후 크레셴도/디미누엔도를 표시합니다.</td></tr>
+        <tr><td>아티큘레이션</td><td><kbd>Shift</kbd>+<kbd>S/N/V/O</kbd></td><td>스타카토, 테누토, 악센트, 마르카토를 넣습니다.</td></tr>
+        <tr><td>템포</td><td><kbd>Shift</kbd>+<kbd>T</kbd></td><td>선택 위치에 템포 표시를 넣고 재생 템포맵에 반영합니다.</td></tr>
+        <tr><td>리허설</td><td><kbd>R</kbd></td><td>A, B, C 같은 리허설 마크를 표시합니다.</td></tr>
+        <tr><td>스태프 텍스트</td><td><kbd>Shift</kbd>+<kbd>L</kbd></td><td>pizz., arco, mute 같은 연주 지시를 입력합니다.</td></tr>
+      </table>
+      <h3>코드 기호와 프렛보드</h3>
+      <p><b>C7</b> 버튼 또는 명령 팔레트에서 코드 기호를 넣습니다. C, Am, G7처럼 일반적인 기타 코드에는 프렛보드 다이어그램이 자동으로 붙습니다.</p>
+      <div class="mini-illus">
+        <svg viewBox="0 0 980 260" role="img" aria-label="기호 예시">
+          <rect width="980" height="260" rx="18" fill="#f8fafc"/>
+          <g transform="translate(60,95)" stroke="#111827" stroke-width="2">
+            <line x1="0" y1="0" x2="830" y2="0"/><line x1="0" y1="18" x2="830" y2="18"/><line x1="0" y1="36" x2="830" y2="36"/><line x1="0" y1="54" x2="830" y2="54"/><line x1="0" y1="72" x2="830" y2="72"/>
+            <ellipse cx="120" cy="36" rx="13" ry="9" fill="#111827" transform="rotate(-18 120 36)"/><path d="M126 36v-60"/>
+            <ellipse cx="240" cy="18" rx="13" ry="9" fill="#111827" transform="rotate(-18 240 18)"/><path d="M246 18v-60"/>
+            <path d="M120 66 C160 100 205 100 245 66" fill="none" stroke="#111827" stroke-width="3"/>
+            <text x="100" y="-56" font-family="Georgia" font-size="32" font-style="italic">mf</text>
+            <text x="216" y="-62" font-family="Malgun Gothic" font-size="22">♩ = 96</text>
+            <text x="370" y="-62" font-family="Georgia" font-size="28" font-weight="800">C7</text>
+            <path d="M385 -48v44M400 -48v44M415 -48v44M430 -48v44M445 -48v44M460 -48v44M385 -48h75M385 -37h75M385 -26h75M385 -15h75M385 -4h75" stroke="#111827" stroke-width="1.5"/>
+            <circle cx="400" cy="-31" r="5" fill="#111827"/><circle cx="430" cy="-20" r="5" fill="#111827"/><circle cx="460" cy="-9" r="5" fill="#111827"/>
+            <path d="M570 -25l160 44" stroke="#f97316" stroke-width="4" fill="none"/>
+            <text x="575" y="-38" font-family="Malgun Gothic" font-size="18" fill="#f97316">gliss.</text>
+          </g>
+        </svg>
+      </div>
+    </section>
+
+    <section id="playback">
+      <h2>6. 재생과 믹서</h2>
+      <p class="lead">재생 기능은 입력한 악보를 실제 소리로 확인하는 단계입니다. smplr 기반 실제 악기 샘플을 우선 사용하고, 실패하면 내장 신스로 폴백합니다.</p>
+      <figure>
+        <img src="assets/07-mixer.png" alt="믹서 다이얼로그">
+        <figcaption>그림 6-1. 믹서. 파트별 음량, 팬, Mute, Solo를 조정합니다.</figcaption>
+      </figure>
+      <div class="grid-2">
+        <div>
+          <h3>재생 기본</h3>
+          <ul>
+            <li><kbd>Space</kbd>: 재생/일시정지</li>
+            <li><kbd>Esc</kbd>: 정지</li>
+            <li>선택한 음표가 있으면 그 위치부터 재생됩니다.</li>
+            <li>재생 중에는 주황색 커서와 음표 하이라이트가 현재 위치를 보여줍니다.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>소리 설정</h3>
+          <ul>
+            <li><b>악기 드롭다운</b>: 피아노, 일렉피아노, 오르간, 현악기, 플루트, 기타, 드럼 등</li>
+            <li><b>메트로놈</b>: 박자 기준 클릭음을 켭니다.</li>
+            <li><b>스윙</b>: 8분음표 계열을 약/중/강 스윙으로 재생합니다.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="callout">
+        <b>샘플 로딩 표시</b><br>
+        상단의 <b>샘플</b> 상태 배지가 대기, 로딩, 준비, 폴백 상태를 보여줍니다. 네트워크가 느리면 첫 재생 때 조금 기다릴 수 있습니다.
+      </div>
+    </section>
+
+    <section id="layout">
+      <h2>7. 악보 설정과 조판</h2>
+      <p class="lead">악보 설정은 음악 내용과 페이지 모양을 함께 다룹니다. 새 악보를 시작할 때뿐 아니라 작업 중에도 바꿀 수 있습니다.</p>
+      <figure>
+        <img src="assets/02-score-settings.png" alt="악보 설정 화면">
+        <figcaption>그림 7-1. 페이지 크기, 여백, 음표 간격, 보표 간격, 시스템 간격, 빔 두께도 설정할 수 있습니다.</figcaption>
+      </figure>
+      <h3>7-1. 편성 선택</h3>
+      <table>
+        <tr><th>편성</th><th>사용 상황</th><th>특징</th></tr>
+        <tr><td>독주 1단</td><td>멜로디, 리드 시트, 간단한 연습곡</td><td>가장 빠르게 시작할 수 있습니다.</td></tr>
+        <tr><td>피아노 2단</td><td>오른손/왼손 분리</td><td>높은음자리표와 낮은음자리표를 함께 표시합니다.</td></tr>
+        <tr><td>플루트+피아노</td><td>반주가 있는 독주곡</td><td>다중 악기와 다중 보표를 테스트하기 좋습니다.</td></tr>
+        <tr><td>현악4중주</td><td>파트별 재생과 총보 작업</td><td>여러 파트의 음색과 보표 이름을 표시합니다.</td></tr>
+        <tr><td>드럼 키트</td><td>리듬 패턴</td><td>드럼 패드와 X 음표머리를 사용합니다.</td></tr>
+        <tr><td>기타+TAB</td><td>기타 악보</td><td>표준 보표와 TAB를 연결합니다.</td></tr>
+      </table>
+      <h3>7-2. 브레이크 사용</h3>
+      <p>입력 팔레트의 <b>↵</b>, <b>Pg</b>, <b>Sec</b> 버튼으로 선택한 마디 뒤에 시스템 줄바꿈, 페이지 나눔, 섹션 브레이크를 넣습니다. MusicXML 내보내기에도 기본 페이지/시스템 나눔 정보가 반영됩니다.</p>
+      <div class="mini-illus">
+        <svg viewBox="0 0 900 230" role="img" aria-label="브레이크 도식">
+          <rect width="900" height="230" rx="18" fill="#f8fafc"/>
+          <g font-family="Malgun Gothic" font-size="18" font-weight="800">
+            <rect x="50" y="70" width="170" height="70" rx="10" fill="#fff" stroke="#d8dee9"/><text x="92" y="112">마디 1</text>
+            <rect x="235" y="70" width="170" height="70" rx="10" fill="#fff" stroke="#d8dee9"/><text x="277" y="112">마디 2</text>
+            <line x1="422" y1="45" x2="422" y2="165" stroke="#2563eb" stroke-width="3" stroke-dasharray="8 8"/>
+            <text x="435" y="112" fill="#2563eb">시스템 줄바꿈</text>
+            <rect x="600" y="70" width="170" height="70" rx="10" fill="#fff" stroke="#d8dee9"/><text x="642" y="112">마디 3</text>
+          </g>
+        </svg>
+      </div>
+    </section>
+
+    <section id="properties">
+      <h2>8. 속성 패널</h2>
+      <p class="lead">속성 패널은 선택한 요소를 빠르게 세부 조정하는 곳입니다. MuseScore의 Properties 패널처럼, 선택 상태에 따라 표시되는 항목이 달라집니다.</p>
+      <figure>
+        <img src="assets/03-properties-panel.png" alt="속성 패널">
+        <figcaption>그림 8-1. 음표 선택 후 속성 패널. 보임, 색상, 오프셋, 스템, 음표머리, 텍스트와 기호를 조정합니다.</figcaption>
+      </figure>
+      <div class="cards">
+        <div class="card"><b>보임</b><small>체크를 끄면 해당 요소가 흐리게 표시됩니다. 교육용 숨김 예제에 유용합니다.</small></div>
+        <div class="card"><b>색상</b><small>특정 음, 리듬, 오류 표시를 색으로 강조할 수 있습니다.</small></div>
+        <div class="card"><b>오프셋</b><small>X/Y 값을 조절해 자동 배치에서 조금 벗어난 위치로 이동합니다.</small></div>
+        <div class="card"><b>스템 방향</b><small>자동, 위, 아래 중 선택합니다. 다성부에서 가독성을 높입니다.</small></div>
+        <div class="card"><b>음표머리</b><small>일반, X, 다이아 형태를 선택할 수 있습니다.</small></div>
+        <div class="card"><b>텍스트/코드</b><small>템포, 리허설, 스태프 텍스트, 코드 기호를 한 자리에서 수정합니다.</small></div>
+      </div>
+    </section>
+
+    <section id="navigation">
+      <h2>9. 내비게이터와 타임라인</h2>
+      <p class="lead">악보가 길어질수록 이동 도구가 중요합니다. 내비게이터는 악보의 축소 지도이고, 타임라인은 마디별 음표 밀도와 마커를 보여주는 이동 패널입니다.</p>
+      <div class="grid-2">
+        <figure>
+          <img src="assets/05-navigator.png" alt="내비게이터">
+          <figcaption>그림 9-1. 내비게이터. 축소된 악보 지도에서 마디를 클릭해 이동합니다.</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/06-timeline.png" alt="타임라인">
+          <figcaption>그림 9-2. 타임라인. 마디별 음표 밀도, 리허설 마크, 템포 지점을 확인합니다.</figcaption>
+        </figure>
+      </div>
+      <h3>이동 방법</h3>
+      <ul>
+        <li><kbd>F12</kbd>: 내비게이터 열기</li>
+        <li><kbd>F11</kbd>: 타임라인 열기</li>
+        <li><kbd>Ctrl</kbd>+<kbd>F</kbd> 또는 <kbd>Ctrl</kbd>+<kbd>G</kbd>: 마디 번호나 리허설 마크로 이동</li>
+        <li>리허설 마크 A로 이동하려면 <code>r:A</code>를 입력합니다.</li>
+      </ul>
+    </section>
+
+    <section id="files">
+      <h2>10. 파일 저장, 가져오기, 내보내기</h2>
+      <p class="lead">ScoreForge는 자체 JSON 저장, MusicXML 왕복, MIDI 내보내기, 인쇄/PDF 저장을 지원합니다. 브라우저 자동 저장도 함께 동작합니다.</p>
+      <table>
+        <tr><th>작업</th><th>메뉴</th><th>용도</th></tr>
+        <tr><td>JSON 저장</td><td>파일 - 저장 또는 <kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>ScoreForge에서 나중에 다시 열 원본 파일</td></tr>
+        <tr><td>JSON 열기</td><td>파일 - 열기</td><td>이전에 저장한 ScoreForge 악보 열기</td></tr>
+        <tr><td>MusicXML 내보내기</td><td>파일 - MusicXML 내보내기</td><td>MuseScore 등 다른 악보 프로그램과 호환</td></tr>
+        <tr><td>MusicXML/.mxl 가져오기</td><td>파일 - 열기 또는 드래그&드롭</td><td>외부 악보를 ScoreForge로 가져오기</td></tr>
+        <tr><td>MIDI 내보내기</td><td>파일 - MIDI 내보내기</td><td>DAW, 시퀀서, 반주 제작에 활용</td></tr>
+        <tr><td>PDF 저장</td><td>파일 - 인쇄/PDF 저장</td><td>과제, 수업자료, 배포용 악보</td></tr>
+      </table>
+      <div class="mini-illus">
+        <svg viewBox="0 0 980 270" role="img" aria-label="파일 호환 도식">
+          <rect width="980" height="270" rx="18" fill="#f8fafc"/>
+          <g font-family="Malgun Gothic" text-anchor="middle">
+            <rect x="70" y="78" width="210" height="110" rx="18" fill="#1f2937"/><text x="175" y="126" fill="#fff" font-size="24" font-weight="800">ScoreForge</text><text x="175" y="154" fill="#cbd5e1" font-size="15">브라우저 악보</text>
+            <rect x="390" y="40" width="170" height="70" rx="14" fill="#eff6ff" stroke="#93c5fd"/><text x="475" y="83" fill="#111827" font-size="20" font-weight="800">JSON</text>
+            <rect x="390" y="132" width="170" height="70" rx="14" fill="#fff7ed" stroke="#fdba74"/><text x="475" y="175" fill="#111827" font-size="20" font-weight="800">MusicXML</text>
+            <rect x="680" y="40" width="170" height="70" rx="14" fill="#ecfdf5" stroke="#86efac"/><text x="765" y="83" fill="#111827" font-size="20" font-weight="800">MIDI</text>
+            <rect x="680" y="132" width="170" height="70" rx="14" fill="#f5f3ff" stroke="#c4b5fd"/><text x="765" y="175" fill="#111827" font-size="20" font-weight="800">PDF</text>
+          </g>
+          <g stroke="#2563eb" stroke-width="4" marker-end="url(#arrFile)">
+            <path d="M285 112 C330 92 345 78 385 75" fill="none"/>
+            <path d="M285 142 C330 158 345 166 385 166" fill="none"/>
+            <path d="M565 75 C610 75 625 75 675 75" fill="none"/>
+            <path d="M565 166 C610 166 625 166 675 166" fill="none"/>
+          </g>
+          <defs><marker id="arrFile" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0l10 5-10 5z" fill="#2563eb"/></marker></defs>
+        </svg>
+      </div>
+      <div class="callout warn">
+        <b>가져오기 리포트 확인</b><br>
+        MusicXML에 ScoreForge가 아직 지원하지 않는 표기가 있으면 가져오기 결과 다이얼로그에 요약됩니다. 이 목록을 보고 필요한 부분을 수동으로 보정하세요.
+      </div>
+    </section>
+
+    <section id="shortcuts">
+      <h2>11. 단축키 표</h2>
+      <p class="lead">자주 쓰는 기능은 단축키로 익히면 훨씬 빨라집니다.</p>
+      <figure>
+        <img src="assets/08-help-shortcuts.png" alt="도움말 단축키 다이얼로그">
+        <figcaption>그림 11-1. 앱 안의 도움말 다이얼로그에서도 단축키를 확인할 수 있습니다.</figcaption>
+      </figure>
+      <table class="shortcut">
+        <tr><th>키</th><th>동작</th><th>사용 팁</th></tr>
+        <tr><td><kbd>N</kbd></td><td>입력 모드 켜기/끄기</td><td>입력과 선택 모드를 빠르게 오갑니다.</td></tr>
+        <tr><td><kbd>3</kbd>-<kbd>7</kbd></td><td>음길이 선택</td><td>3=16분, 4=8분, 5=4분, 6=2분, 7=온음표</td></tr>
+        <tr><td><kbd>A</kbd>-<kbd>G</kbd></td><td>음 입력 또는 선택 음 재지정</td><td>입력 모드 여부에 따라 동작이 다릅니다.</td></tr>
+        <tr><td><kbd>0</kbd></td><td>쉼표</td><td>입력 모드에서는 쉼표 입력, 선택 모드에서는 삭제와 비슷하게 씁니다.</td></tr>
+        <tr><td><kbd>.</kbd></td><td>점음표</td><td>현재 길이에 부점을 붙입니다.</td></tr>
+        <tr><td><kbd>T</kbd></td><td>타이</td><td>같은 음높이의 다음 음과 붙입니다.</td></tr>
+        <tr><td><kbd>S</kbd></td><td>이음줄</td><td>범위 선택 후 사용하면 좋습니다.</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>3</kbd>-<kbd>9</kbd></td><td>잇단음표</td><td>선택한 음표/쉼표를 n개로 나눕니다.</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>C/V/X</kbd></td><td>복사/붙여넣기/잘라내기</td><td>범위 선택과 함께 쓰세요.</td></tr>
+        <tr><td><kbd>Space</kbd></td><td>재생/일시정지</td><td>선택한 위치부터 재생합니다.</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>저장</td><td>JSON 파일을 내려받습니다.</td></tr>
+        <tr><td><kbd>F11</kbd>/<kbd>F12</kbd></td><td>타임라인/내비게이터</td><td>긴 악보에서 이동 속도를 높입니다.</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td>명령 팔레트</td><td>기능 이름으로 검색해 실행합니다.</td></tr>
+      </table>
+      <figure>
+        <img src="assets/04-command-palette.png" alt="명령 팔레트">
+        <figcaption>그림 11-2. 명령 팔레트. 메뉴 위치가 기억나지 않을 때 기능 이름으로 검색합니다.</figcaption>
+      </figure>
+    </section>
+
+    <section id="trouble">
+      <h2>12. 문제 해결</h2>
+      <p class="lead">아래 항목은 실제 사용 중 가장 자주 만나는 상황과 해결 방법입니다.</p>
+      <table>
+        <tr><th>문제</th><th>원인</th><th>해결</th></tr>
+        <tr><td>음표가 입력되지 않음</td><td>입력 모드가 꺼져 있거나 다른 보표가 선택됨</td><td><kbd>N</kbd>을 눌러 입력 모드를 켜고 보표 선택 드롭다운을 확인합니다.</td></tr>
+        <tr><td>원하는 옥타브가 아님</td><td>키보드 입력은 마지막 음 근처로 옥타브를 추론함</td><td>입력 후 <kbd>Ctrl</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd>로 옥타브를 조정합니다.</td></tr>
+        <tr><td>소리가 안 남</td><td>브라우저 오디오 권한 또는 샘플 로딩 지연</td><td>한 번 화면을 클릭한 뒤 다시 재생하고, 샘플 상태 배지를 확인합니다.</td></tr>
+        <tr><td>MusicXML 가져오기 후 일부 기호가 없음</td><td>지원 범위를 벗어난 표기</td><td>가져오기 리포트를 확인하고 속성 패널/팔레트로 보정합니다.</td></tr>
+        <tr><td>악보가 너무 빽빽함</td><td>마디/줄 또는 음표 간격이 좁음</td><td>악보 설정에서 마디/줄을 줄이거나 음표 간격을 키웁니다.</td></tr>
+        <tr><td>패널이 좁음</td><td>브라우저 폭이 작음</td><td>확대 비율을 낮추거나 속성 버튼으로 패널을 접습니다.</td></tr>
+      </table>
+      <h3>작업 전 체크리스트</h3>
+      <ul class="checklist">
+        <li>제목, 작곡가, 편성, 박자, 조표를 먼저 정했습니다.</li>
+        <li>입력할 보표와 성부가 맞습니다.</li>
+        <li>중요한 작업 전에는 <kbd>Ctrl</kbd>+<kbd>S</kbd>로 JSON을 저장했습니다.</li>
+        <li>외부 프로그램으로 넘길 때는 MusicXML과 PDF를 함께 내보냈습니다.</li>
+      </ul>
+      <div class="footer-note">
+        이 설명서는 ScoreForge 정적 웹앱의 현재 구현 기능을 기준으로 작성되었습니다. 앱이 업데이트되면 메뉴명이나 일부 동작은 달라질 수 있습니다.
+      </div>
+    </section>
+  </div>
+</main>
+</body>
+</html>
