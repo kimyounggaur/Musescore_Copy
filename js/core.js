@@ -456,12 +456,29 @@ window.SF = window.SF || {};
     staffScale: 1,
     systemGap: 1,
     staffGap: 1,
+    noteSpacing: 1,
+    beamThickness: 1,
     measuresPerSystem: 0,
   };
   function ensureLayout(score) {
     score.layout = { ...DEFAULT_LAYOUT, ...(score.layout || {}) };
+    const pageDefaults = pageSizeDefaults(score.layout.pageSize, score.layout.orientation);
+    score.layout.width = Math.max(720, Math.min(1600, +(score.layout.width || pageDefaults.width)));
+    score.layout.height = Math.max(900, Math.min(2200, +(score.layout.height || pageDefaults.height)));
+    score.layout.marginTop = Math.max(20, Math.min(160, +(score.layout.marginTop || DEFAULT_LAYOUT.marginTop)));
+    score.layout.marginRight = Math.max(20, Math.min(180, +(score.layout.marginRight || DEFAULT_LAYOUT.marginRight)));
+    score.layout.marginBottom = Math.max(20, Math.min(180, +(score.layout.marginBottom || DEFAULT_LAYOUT.marginBottom)));
+    score.layout.marginLeft = Math.max(20, Math.min(180, +(score.layout.marginLeft || DEFAULT_LAYOUT.marginLeft)));
+    score.layout.systemGap = Math.max(0.75, Math.min(1.8, +(score.layout.systemGap || 1)));
+    score.layout.staffGap = Math.max(0.75, Math.min(1.8, +(score.layout.staffGap || 1)));
+    score.layout.noteSpacing = Math.max(0.75, Math.min(1.55, +(score.layout.noteSpacing || 1)));
+    score.layout.beamThickness = Math.max(0.7, Math.min(1.8, +(score.layout.beamThickness || 1)));
     score.layout.measuresPerSystem = Math.max(0, Math.min(16, score.layout.measuresPerSystem | 0 || 0));
     return score.layout;
+  }
+  function pageSizeDefaults(pageSize, orientation) {
+    const base = pageSize === "Letter" ? { width: 1000, height: 1294 } : { width: 1000, height: 1414 };
+    return orientation === "landscape" ? { width: base.height, height: base.width } : base;
   }
 
   function fullRest(score) {
@@ -589,6 +606,8 @@ window.SF = window.SF || {};
     if (mm.repeatCount === undefined) mm.repeatCount = 2;
     if (mm.endingStart === undefined) mm.endingStart = null;
     if (mm.endingStop === undefined) mm.endingStop = false;
+    if (mm.breakType === undefined) mm.breakType = null;
+    if (mm.sectionName === undefined) mm.sectionName = "";
     syncMeasureEvents(mm);
     return mm;
   }
@@ -730,6 +749,18 @@ window.SF = window.SF || {};
     clearEndings(score, fromM, toM);
     forEachMeasureAt(score, fromM, mm => { mm.endingStart = label; });
     forEachMeasureAt(score, toM, mm => { mm.endingStop = true; });
+  }
+  function setMeasureBreak(score, mIdx, type, sectionName) {
+    const maxM = Math.max(0, score.measures.length - 1);
+    mIdx = Math.max(0, Math.min(maxM, mIdx | 0));
+    const cleanType = ["system", "page", "section"].includes(type) ? type : null;
+    forEachMeasureAt(score, mIdx, mm => {
+      mm.breakType = cleanType;
+      mm.sectionName = cleanType === "section" ? String(sectionName || mm.sectionName || "Section").trim().slice(0, 32) : "";
+    });
+  }
+  function clearMeasureBreak(score, mIdx) {
+    setMeasureBreak(score, mIdx, null, "");
   }
   function staffRefs(score) {
     ensureParts(score);
@@ -1378,10 +1409,10 @@ window.SF = window.SF || {};
     lyricsOf, cloneLyrics, setLyric, normalizeEventLyrics,
     STEP_EN, STEP_KO, STEP_SEMIS, KEY_NAMES, CLEFS, DRUM_MAP, drumSpec, GUITAR_STANDARD_TUNING, midiToStringFret, stringFretToMidi, applyTabToEvent, FRETBOARD_LIBRARY, getDefaultFretboard, SOUND_FLAGS, detectSoundFlag, keySigSteps, beamGroups, beatLen,
     PART_LIBRARY, ENSEMBLES,
-    createScore, measureLen, fullRest, newId, DEFAULT_LAYOUT, ensureLayout,
+    createScore, measureLen, fullRest, newId, DEFAULT_LAYOUT, ensureLayout, pageSizeDefaults,
     VOICE_COUNT, normalizeVoice, ensureMeasureVoices, getVoiceEvents, measureEntries, forEachEvent, voiceIsEmpty, hasVisibleContent,
     ensureParts, ensureMeasureMeta, staffRefs, visibleStaffRefs, isStaffEmpty, staffRef, staffMeasures, activeRef, activeClef, isPercussionRef, setActiveStaff, ensembleKey, applyEnsemble,
-    toggleStartRepeat, toggleEndRepeat, setRepeatCount, setEnding, clearEndings,
+    toggleStartRepeat, toggleEndRepeat, setRepeatCount, setEnding, clearEndings, setMeasureBreak, clearMeasureBreak,
     eventStartTick, findEvent, nextEvent, prevEvent,
     replaceRange, inputAt, addDrumNote, deleteEvent, makeTupletAt, consolidateRests, normalizeTies, isTiedFrom,
     addGraceBefore, findGrace, cloneGraceList,

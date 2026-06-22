@@ -13,6 +13,25 @@
   const MARGIN = 52;
   const STAFF_H = 4 * SP;
 
+  function pageMetrics(score) {
+    const layout = C.ensureLayout(score);
+    return {
+      width: layout.width || PAGE_W,
+      height: layout.height || 1414,
+      marginTop: layout.marginTop || MARGIN,
+      marginRight: layout.marginRight || MARGIN,
+      marginBottom: layout.marginBottom || MARGIN,
+      marginLeft: layout.marginLeft || MARGIN,
+      systemGap: layout.systemGap || 1,
+      staffGap: layout.staffGap || 1,
+      noteSpacing: layout.noteSpacing || 1,
+      beamThickness: layout.beamThickness || 1,
+    };
+  }
+  function pageWidth(score) {
+    return pageMetrics(score || C.state.score).width;
+  }
+
   /* ---------------- 글리프 ---------------- */
   const GLYPHS = {
     gClef:      "", fClef: "",
@@ -83,6 +102,10 @@
   });
 
   function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+  function safeColor(s) {
+    const v = String(s || "").trim();
+    return /^#[0-9a-fA-F]{6}$/.test(v) ? v : "";
+  }
 
   /* 글리프 1개를 SVG 문자열로 (x,y = 기준점) */
   function glyph(name, x, y, opts = {}) {
@@ -177,12 +200,12 @@
     const k = Math.abs(score.keySig);
     return 14 + 28 + (k ? k * 9.5 + 7 : 0) + (firstSystem ? 30 : 0) + 10;
   }
-  function staffGroupHeight(refs) {
+  function staffGroupHeight(refs, metrics) {
     if (!refs.length) return STAFF_H;
     const hOf = (ref) => ref.staffType === "tab" ? 5 * SP : STAFF_H;
     let y = 0, lastPart = refs[0].partIdx, prevH = hOf(refs[0]);
     refs.forEach((ref, i) => {
-      if (i > 0) y += prevH + (ref.partIdx === lastPart ? 70 : 90);
+      if (i > 0) y += prevH + (ref.partIdx === lastPart ? 70 : 90) * metrics.staffGap;
       ref._relY = y;
       lastPart = ref.partIdx;
       prevH = hOf(ref);
@@ -228,6 +251,7 @@
   function layout(score, opts = {}) {
     C.ensureParts(score);
     computeAccidentals(score);
+    const metrics = pageMetrics(score);
     const refs = C.visibleStaffRefs ? C.visibleStaffRefs(score, opts.viewMode, { hideEmptyStaves: opts.hideEmptyStaves }) : C.staffRefs(score);
     const count = measureCount(score, refs);
     const lyricVerses = new Set();
@@ -238,12 +262,12 @@
     const hasFretboards = refs.some(ref => ref.measures.some(mm => C.measureEntries(mm, { score, activeVoice: opts.activeVoice }).some(({ ev }) => ev.fretboard)));
     const hasDyn = refs.some(ref => ref.measures.some(mm => C.measureEntries(mm, { score, activeVoice: opts.activeVoice }).some(({ ev }) => ev.dynamic))) ||
       (score.spanners || []).some(sp => sp.type === "cresc" || sp.type === "dim");
-    const groupH = staffGroupHeight(refs);
-    const PITCH = Math.max(150, groupH + 74 + (hasFretboards ? 58 : hasAboveText ? 18 : 0) + (hasLyrics ? 18 * lyricLineCount + 8 : 0) + (hasDyn ? 16 : 0));
+    const groupH = staffGroupHeight(refs, metrics);
+    const PITCH = Math.max(150, groupH + (74 * metrics.systemGap) + (hasFretboards ? 58 : hasAboveText ? 18 : 0) + (hasLyrics ? 18 * lyricLineCount + 8 : 0) + (hasDyn ? 16 : 0));
     const lyricOff = STAFF_H + (hasDyn ? 52 : 34);
 
     // 마디 자연 폭
-    const natural = Array.from({ length: count }, (_, mIdx) => measureNaturalWidth(refs, mIdx, score, opts.activeVoice));
+    const natural = Array.from({ length: count }, (_, mIdx) => measureNaturalWidth(refs, mIdx, score, opts.activeVoice) * metrics.noteSpacing);
 
     // 그리디 줄바꿈
     const systems = [];
@@ -252,36 +276,44 @@
       const first = systems.length === 0;
       const nameW = refs.length > 1 ? (first ? 96 : 54) : 0;
       const hw = headerWidth(score, first);
-      const usable = PAGE_W - MARGIN * 2 - nameW;
+      const usable = metrics.width - metrics.marginLeft - metrics.marginRight - nameW;
       const perSystem = score.layout?.measuresPerSystem | 0;
       let sum = 0; const idxs = [];
+      let breakAfter = null;
       while (i < count) {
         const w = natural[i];
         if (perSystem > 0 && idxs.length >= perSystem) break;
         if (idxs.length && hw + sum + w > usable) break;
-        idxs.push(i); sum += w; i++;
+        idxs.push(i); sum += w;
+        const mm = C.ensureMeasureMeta(score.measures[i] || {});
+        breakAfter = mm.breakType || null;
+        i++;
+        if (breakAfter && i < count) break;
       }
-      systems.push({ idxs, hw, sum, nameW, usable });
+      systems.push({ idxs, hw, sum, nameW, usable, breakAfter });
     }
 
     // 시스템별 좌표 채우기
-    const out = { systems: [], eventsById: new Map(), pitch: PITCH, hasLyrics, refs };
+    const out = { systems: [], eventsById: new Map(), pitch: PITCH, hasLyrics, refs, pageW: metrics.width, metrics };
+    let yCursor = metrics.marginTop;
     systems.forEach((sys, si) => {
-      const yTop = 44 + si * PITCH;
+      const yTop = yCursor;
       const isLast = si === systems.length - 1;
       let scale = (sys.usable - sys.hw) / sys.sum;
       if (isLast && scale > 1 / 0.7) scale = 1;
       scale = Math.max(scale, 0.5);
 
-      const staffX0 = MARGIN + sys.nameW;
+      const staffX0 = metrics.marginLeft + sys.nameW;
       const S = {
-        yTop, pageX0: MARGIN, nameW: sys.nameW,
-        x0: staffX0, x1: isLast && scale === 1 ? staffX0 + sys.hw + sys.sum : PAGE_W - MARGIN,
+        yTop, pageX0: metrics.marginLeft, nameW: sys.nameW,
+        x0: staffX0, x1: isLast && scale === 1 ? staffX0 + sys.hw + sys.sum : metrics.width - metrics.marginRight,
         headerW: sys.hw, measures: [],
         staffLayouts: [],
         middleY: yTop + STAFF_H / 2,
         first: si === 0,
         lyricOff,
+        breakAfter: sys.breakAfter,
+        pageW: metrics.width,
       };
       for (const ref of refs) {
         const SL = { ...ref, sys: S, yTop: yTop + ref._relY, x0: S.x0, x1: S.x1, headerW: S.headerW, middleY: yTop + ref._relY + STAFF_H / 2, lyricOff };
@@ -327,8 +359,9 @@
         x += mW;
       }
       out.systems.push(S);
+      yCursor += PITCH + (sys.breakAfter === "page" ? 88 : sys.breakAfter === "section" ? 58 : 0);
     });
-    out.height = 44 + systems.length * PITCH + 26;
+    out.height = Math.max(metrics.height, yCursor + metrics.marginBottom);
     out.score = score;
     lastLayout = out;
     return out;
@@ -372,6 +405,7 @@
       svg += barlines(S, score);
       svg += measureNumbers(S);
       svg += renderVoltas(S, score);
+      svg += renderBreakMarks(S, score);
       for (const M of S.measures) {
         for (const SM of M.staffMeasures) {
           const beams = computeBeams(score, SM, SM.staff);
@@ -384,7 +418,7 @@
 
     return {
       svg:
-        `<svg id="score-svg" viewBox="0 0 ${PAGE_W} ${Math.max(L.height, 230)}" xmlns="http://www.w3.org/2000/svg" ` +
+        `<svg id="score-svg" viewBox="0 0 ${L.pageW || PAGE_W} ${Math.max(L.height, 230)}" xmlns="http://www.w3.org/2000/svg" ` +
         `font-family="BravuraSF" preserveAspectRatio="xMidYMin meet">` +
         `<g id="score-main">${svg}</g>` +
         `<g id="overlay-ghost" pointer-events="none"></g>` +
@@ -540,6 +574,21 @@
     return `<text class="mnum" x="${S.x0 + 2}" y="${S.yTop - 14}">${S.measures[0].idx + 1}</text>`;
   }
 
+  function renderBreakMarks(S, score) {
+    let s = "";
+    for (const M of S.measures) {
+      const mm = C.ensureMeasureMeta(score.measures[M.idx] || {});
+      if (!mm.breakType) continue;
+      const label = mm.breakType === "page" ? "Page" : mm.breakType === "section" ? (mm.sectionName || "Section") : "System";
+      const y = Math.max(...S.staffLayouts.map(st => st.yTop + (st.staffType === "tab" ? 5 * SP : STAFF_H))) + 26;
+      s += `<g class="break-mark" data-break="${esc(mm.breakType)}">` +
+        `<line x1="${r2(M.x1)}" y1="${r2(S.yTop - 20)}" x2="${r2(M.x1)}" y2="${r2(y - 9)}"/>` +
+        `<text x="${r2(M.x1 - 4)}" y="${r2(y)}" text-anchor="end">${esc(label)}</text>` +
+        `</g>`;
+    }
+    return s;
+  }
+
   /* ---- 빔 계산 ----
    * 기본은 박(beat) 단위 그룹. 단, x/4 박자에서 순수 8분음표 런은
    * 관례대로 2박 단위(박 1+2, 3+4)로 병합한다. 16분음표가 끼면 박 단위 유지.
@@ -604,7 +653,11 @@
     for (const le of M.events) {
       const ev = le.ev;
       const isSel = sel && sel.has(ev.id);
-      const cls = `ev${isSel ? " sel" : ""}`;
+      const cls = `ev${isSel ? " sel" : ""}${ev.hidden ? " hidden-event" : ""}${ev.small ? " small-event" : ""}`;
+      const dx = +ev.offsetX || 0, dy = +ev.offsetY || 0;
+      const transform = dx || dy ? ` transform="translate(${r2(dx)},${r2(dy)})"` : "";
+      const color = safeColor(ev.color);
+      const style = color ? ` style="color:${color}"` : "";
       let body = "";
       if (ev.type === "rest") body = renderRest(score, S, M, le);
       else body = renderNote(score, S, le, beamedIds.has(le.id), stemInfo.get(le.id));
@@ -617,7 +670,7 @@
       // 히트 영역
       const hitX = le.x - 16, hitW = 32;
       body += `<rect class="hit" x="${r2(hitX)}" y="${S.yTop - 62}" width="${hitW}" height="${STAFF_H + 100}" fill="transparent"/>`;
-      s += `<g class="${cls}" data-ref="${ev.id}">${body}</g>`;
+      s += `<g class="${cls}" data-ref="${ev.id}"${transform}${style}>${body}</g>`;
     }
     s += renderLyricSpans(M, S);
     s += renderTuplets(score, M, S);
@@ -801,6 +854,15 @@
     }
     return headShape(x, y, "black");
   }
+  function noteHeadShape(x, y, kind, notehead) {
+    if (notehead === "x") {
+      return `<path class="custom-head" d="M ${r2(x - 5.5)} ${r2(y - 4.5)} L ${r2(x + 5.5)} ${r2(y + 4.5)} M ${r2(x + 5.5)} ${r2(y - 4.5)} L ${r2(x - 5.5)} ${r2(y + 4.5)}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>`;
+    }
+    if (notehead === "diamond") {
+      return `<path class="custom-head" d="M ${r2(x)} ${r2(y - 6)} L ${r2(x + 6)} ${r2(y)} L ${r2(x)} ${r2(y + 6)} L ${r2(x - 6)} ${r2(y)} Z" fill="currentColor"/>`;
+    }
+    return headShape(x, y, kind);
+  }
 
   function renderNote(score, S, le, beamed, stem) {
     const ev = le.ev;
@@ -808,7 +870,8 @@
     if (ev.drumId) return renderDrumNote(score, S, le, beamed, stem);
     let s = renderGraceBefore(score, S, le);
     const kind = ev.dur.d === 1 ? "whole" : ev.dur.d === 2 ? "half" : "black";
-    const dir = stem ? stem.dir : stemDirForVoice(score, ev.notes, S, le.voice || ev.voice || 1);
+    const manualStem = ev.stemDirection && ev.stemDirection !== "auto" ? ev.stemDirection : null;
+    const dir = stem ? stem.dir : (manualStem || stemDirForVoice(score, ev.notes, S, le.voice || ev.voice || 1));
     const sorted = ev.notes.slice().sort((a, b) => C.absStep(a) - C.absStep(b)); // 낮은 음부터
     const stemX = dir === "up" ? le.x + 4.8 : le.x - 4.8;
 
@@ -848,7 +911,7 @@
     for (const n of sorted) {
       const y = yForStep(S, score, C.absStep(n));
       const ox = offs.get(n) || 0;
-      s += headShape(le.x + ox, y, kind);
+      s += noteHeadShape(le.x + ox, y, kind, ev.notehead);
       if (ev.dur.dots) {
         const off = C.absStep(n) - bottom;
         const dotY = off % 2 === 0 ? y - SP / 2 : y; // 줄 위 음표는 점을 위 칸으로
@@ -931,7 +994,8 @@
   function renderDrumNote(score, S, le, beamed, stem) {
     const ev = le.ev;
     const y = drumY(S, ev);
-    const dir = stem ? stem.dir : stemDirForVoice(score, ev.notes && ev.notes.length ? ev.notes : [C.spellMidi(ev.midi || C.drumSpec(ev.drumId).midi, 0)], S, le.voice || ev.voice || 1);
+    const manualStem = ev.stemDirection && ev.stemDirection !== "auto" ? ev.stemDirection : null;
+    const dir = stem ? stem.dir : (manualStem || stemDirForVoice(score, ev.notes && ev.notes.length ? ev.notes : [C.spellMidi(ev.midi || C.drumSpec(ev.drumId).midi, 0)], S, le.voice || ev.voice || 1));
     const stemX = dir === "up" ? le.x + 4.8 : le.x - 4.8;
     let s = drumHeadShape(le.x, y, ev.notehead || C.drumSpec(ev.drumId).notehead);
     if (ev.dur.dots) {
@@ -1069,7 +1133,7 @@
     return s;
 
     function beamPoly(bx1, by1, bx2, by2, off) {
-      const t = 5; // 빔 두께 0.5sp
+      const t = 5 * (score.layout?.beamThickness || 1); // 기본 0.5sp
       const o = off || 0;
       const top1 = by1 + o, top2 = by2 + o;
       const inner = sgn === -1 ? t : -t; // 빔은 팁에서 안쪽으로
@@ -1336,6 +1400,7 @@
 
   SF.engrave = {
     SP, PAGE_W, MARGIN, STAFF_H,
+    pageMetrics, pageWidth,
     loadFont, isFontReady: () => fontReady,
     layout, render, hitTest, yForStep, stepForY,
     drawGhost, drawInputCursor, clearOverlays,

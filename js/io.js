@@ -178,7 +178,15 @@
       xml += ` <part id="P${pIdx + 1}">\n`;
       for (let mIdx = 0; mIdx < maxMeasures; mIdx++) {
         const mmMeta = C.ensureMeasureMeta(score.measures[mIdx] || {});
+        const prevMeta = mIdx > 0 ? C.ensureMeasureMeta(score.measures[mIdx - 1] || {}) : null;
         xml += `  <measure number="${mIdx + 1}">\n`;
+        if (prevMeta && prevMeta.breakType) {
+          const attrs = prevMeta.breakType === "page" ? ` new-page="yes"` : ` new-system="yes"`;
+          xml += `   <print${attrs}/>\n`;
+          if (prevMeta.breakType === "section" && prevMeta.sectionName && pIdx === 0) {
+            xml += `   <direction placement="above"><direction-type><words>${xmlEsc(prevMeta.sectionName)}</words></direction-type></direction>\n`;
+          }
+        }
         if (mIdx === 0) {
           xml += `   <attributes>
     <divisions>${DIV}</divisions>
@@ -489,7 +497,7 @@
 
     measEls.forEach((me, mIdx) => {
       let cur = SF.F(0, 1), maxCur = cur;
-      const meta = measureMeta[mIdx] = { startRepeat: false, endRepeat: false, repeatCount: 2, endingStart: null, endingStop: false };
+      const meta = measureMeta[mIdx] = { startRepeat: false, endRepeat: false, repeatCount: 2, endingStart: null, endingStop: false, breakType: null, sectionName: "" };
       for (const el of [...me.children]) {
         const tag = el.tagName;
         if (tag === "attributes") {
@@ -518,6 +526,10 @@
           }
           if (parseInt(textOf(el, "staves"), 10) > 1) countWarn("staves", "여러 단 보표 중 첫 단만 가져옴");
           if (el.querySelector("transpose")) countWarn("transpose", "조옮김 악기 정보는 무시(적힌 음 그대로)");
+        } else if (tag === "print") {
+          const target = measureMeta[Math.max(0, mIdx - 1)] || meta;
+          if (el.getAttribute("new-page") === "yes") target.breakType = "page";
+          else if (el.getAttribute("new-system") === "yes") target.breakType = "system";
         } else if (tag === "direction" || tag === "sound") {
           const soundEl = tag === "sound" ? el : el.querySelector("sound");
           const t = soundEl?.getAttribute("tempo") || textOf(el, "metronome > per-minute");

@@ -157,9 +157,15 @@ select.tsel {
   padding: 1px 5px; background: #1d2025;
 }
 
-/* ---------------- 캔버스(종이) ---------------- */
+/* ---------------- 작업 영역/캔버스(종이) ---------------- */
+#workspace {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+}
 #canvas {
-  flex: 1; overflow: auto; position: relative;
+  flex: 1; min-width: 0; overflow: auto; position: relative;
   background:
     radial-gradient(1200px 500px at 50% -200px, rgba(124, 91, 242, .12), transparent),
     var(--bg);
@@ -192,6 +198,89 @@ select.tsel {
 #svg-host { display: block; }
 #score-svg { display: block; width: 100%; height: auto; }
 
+#properties-panel {
+  width: 286px;
+  flex: none;
+  background: #262a31;
+  border-left: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+#properties-panel.collapsed { display: none; }
+.panel-head {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px 0 14px;
+  border-bottom: 1px solid var(--line);
+}
+.panel-head b { font-size: 13.5px; }
+.panel-head .tbtn { min-width: 26px; height: 26px; padding: 0 6px; }
+.props-body {
+  overflow: auto;
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+}
+.prop-sec {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #20242b;
+  padding: 10px;
+}
+.prop-sec h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #cbd2df;
+}
+.prop-grid {
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  gap: 7px 8px;
+  align-items: center;
+}
+.prop-grid label {
+  color: var(--text-dim);
+  font-size: 12px;
+  text-align: right;
+}
+.prop-grid input,
+.prop-grid select {
+  min-width: 0;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #171a1f;
+  color: var(--text);
+  padding: 0 7px;
+  font: inherit;
+  font-size: 12.5px;
+}
+.prop-grid input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  justify-self: start;
+}
+.prop-grid input[type="color"] { padding: 2px; }
+.prop-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.prop-actions .chip {
+  border-radius: 7px;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+.prop-empty {
+  color: var(--text-dim);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
 /* ---- 악보 SVG ---- */
 #score-svg { color: var(--ink); }
 .staff line { stroke: #20242b; stroke-width: 1.1; }
@@ -202,6 +291,13 @@ select.tsel {
 .barline .repeat-dot { fill: #20242b; }
 .volta path { fill: none; stroke: var(--ink); stroke-width: 1.2; stroke-linecap: square; stroke-linejoin: round; }
 .volta text { fill: var(--ink); font-family: Georgia, "Times New Roman", serif; font-size: 13px; font-weight: 700; }
+.break-mark line { stroke: rgba(31, 111, 235, .5); stroke-width: 1.1; stroke-dasharray: 4 4; }
+.break-mark text {
+  fill: #1f6feb;
+  font-family: system-ui, sans-serif;
+  font-size: 10.5px;
+  font-weight: 800;
+}
 .tab-clef { fill: #20242b; font-family: system-ui, sans-serif; letter-spacing: 0; }
 .tab-fret-bg { fill: var(--paper); stroke: none; }
 .tab-fret { fill: var(--ink); font-family: Arial, Helvetica, sans-serif; font-size: 12px; font-weight: 700; }
@@ -244,6 +340,8 @@ select.tsel {
 .ev.sel .ledger, .ev.sel .stem { stroke: var(--select); }
 .ev.playing { color: var(--accent); }
 .ev.playing .ledger, .ev.playing .stem { stroke: var(--accent); }
+.ev.hidden-event { opacity: .24; }
+.ev.small-event { opacity: .86; }
 .ev .hit { cursor: inherit; }
 .ghost { color: #97a0ae; opacity: .85; }
 .ghost .stem, .ghost .ledger { stroke: #97a0ae; }
@@ -319,6 +417,7 @@ dialog {
   color: var(--text); padding: 0; max-width: min(92vw, 560px);
   box-shadow: var(--shadow);
 }
+#dlg-settings { max-width: min(94vw, 760px); }
 dialog::backdrop { background: rgba(10, 12, 16, .6); backdrop-filter: blur(2px); }
 .dlg-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px 0; }
 .dlg-head h2 { margin: 0; font-size: 17px; }
@@ -352,6 +451,54 @@ dialog::backdrop { background: rgba(10, 12, 16, .6); backdrop-filter: blur(2px);
 .mixer-row b { font-size: 13px; }
 .mixer-row label { display: inline-flex; align-items: center; gap: 4px; color: var(--text-dim); font-size: 12px; }
 .mixer-row input[type="range"] { width: 100%; }
+
+.navigator-view,
+.timeline-view {
+  width: min(720px, calc(92vw - 40px));
+  max-height: 68vh;
+  overflow: auto;
+}
+.navigator-map {
+  display: block;
+  background: #f7f8fa;
+  border: 1px solid #d9dee8;
+  border-radius: 6px;
+  margin: 0 auto;
+  color: #20242b;
+}
+.nav-measure {
+  fill: rgba(31, 111, 235, .08);
+  stroke: rgba(31, 111, 235, .42);
+  cursor: pointer;
+}
+.nav-measure:hover { fill: rgba(31, 111, 235, .22); }
+.timeline-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(54px, 1fr));
+  gap: 6px;
+}
+.timeline-cell {
+  height: 46px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #1d2025;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  padding: 5px;
+  font: inherit;
+  text-align: left;
+}
+.timeline-cell:hover { border-color: rgba(79, 141, 249, .7); }
+.timeline-cell b { font-size: 11px; }
+.timeline-cell span { color: var(--text-dim); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.timeline-density {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #4f8df9, #ff7a1a);
+  align-self: end;
+}
 
 /* 시작 다이얼로그 */
 #dlg-welcome .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0 6px; }
@@ -407,6 +554,7 @@ dialog::backdrop { background: rgba(10, 12, 16, .6); backdrop-filter: blur(2px);
 
 /* ---------------- 반응형 ---------------- */
 @media (max-width: 900px) {
+  #properties-panel { display: none; }
   .brand small { display: none; }
   .tbtn span.lbl { display: none; }
   .topbar, .palette-bar { padding: 5px 6px; gap: 4px; }
@@ -420,7 +568,8 @@ dialog::backdrop { background: rgba(10, 12, 16, .6); backdrop-filter: blur(2px);
 /* ---------------- 인쇄 ---------------- */
 @media print {
   body { display: block; background: #fff; overflow: visible; }
-  .topbar, .palette-bar, #piano-bar, .statusbar, #toast, dialog, #lyric-editor { display: none !important; }
+  .topbar, .palette-bar, #piano-bar, .statusbar, #toast, dialog, #lyric-editor, #properties-panel { display: none !important; }
+  #workspace { display: block; }
   #canvas { overflow: visible; padding: 0; background: #fff; }
   .paper-sizer { height: auto !important; width: auto !important; margin: 0; }
   #paper {

@@ -52,6 +52,8 @@
     refreshToolbar();
     refreshCursor();
     updateStatus();
+    renderPropertiesPanel();
+    refreshOpenOverlays();
     if (!opts.noSave) IO.autosave(score);
   }
 
@@ -63,17 +65,18 @@
   function applyZoom() {
     const host = $("#paper");
     const wrap = $("#canvas");
+    const pageW = E.pageWidth ? E.pageWidth(C.state.score) : E.PAGE_W;
     const avail = wrap.clientWidth - 28;
-    ui.fitScale = Math.min(1, avail / E.PAGE_W);
+    ui.fitScale = Math.min(1, avail / pageW);
     const s = ui.fitScale * ui.zoom;
-    host.style.width = E.PAGE_W + "px";
+    host.style.width = pageW + "px";
     host.style.transform = `scale(${s})`;
     host.style.transformOrigin = "top left";
     const svg = $("#score-svg");
     const h = svg ? svg.viewBox.baseVal.height : 600;
     const headH = $("#paper-head").offsetHeight;
     wrap.querySelector(".paper-sizer").style.height = (h + headH + 70) * s + "px";
-    wrap.querySelector(".paper-sizer").style.width = E.PAGE_W * s + "px";
+    wrap.querySelector(".paper-sizer").style.width = pageW * s + "px";
     $("#zoom-label").textContent = Math.round(ui.zoom * 100) + "%";
   }
 
@@ -84,7 +87,7 @@
     const r = svg.getBoundingClientRect();
     if (r.width === 0) return null;
     return {
-      x: (evt.clientX - r.left) / r.width * E.PAGE_W,
+      x: (evt.clientX - r.left) / r.width * (E.pageWidth ? E.pageWidth(C.state.score) : E.PAGE_W),
       y: (evt.clientY - r.top) / r.height * svg.viewBox.baseVal.height,
     };
   }
@@ -1527,6 +1530,9 @@
     $("#btn-repeat-count").textContent = `×${mm?.repeatCount || 2}`;
     $("#btn-volta-1").classList.toggle("on", !!(mr && C.ensureMeasureMeta(score.measures[mr.from] || {}).endingStart === "1"));
     $("#btn-volta-2").classList.toggle("on", !!(mr && C.ensureMeasureMeta(score.measures[mr.from] || {}).endingStart === "2"));
+    $("#btn-break-system").classList.toggle("on", !!(mm && mm.breakType === "system"));
+    $("#btn-break-page").classList.toggle("on", !!(mm && mm.breakType === "page"));
+    $("#btn-break-section").classList.toggle("on", !!(mm && mm.breakType === "section"));
 
     $("#btn-undo").disabled = !C.canUndo();
     $("#btn-redo").disabled = !C.canRedo();
@@ -1590,6 +1596,300 @@
       : "N 또는 ✏️=입력 모드 · 음표 클릭=선택 · 드래그=음높이 · 스페이스=재생";
   }
   function durName2(ev) { return C.durName(ev.dur); }
+
+  /* ---------------- 속성 패널 ---------------- */
+  function htmlEsc(s) {
+    return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+  }
+  function checked(v) { return v ? "checked" : ""; }
+  function selectedPropIds() {
+    const ids = selectedIds();
+    if (ids && ids.size) return [...ids];
+    const found = targetEvent();
+    return found ? [found.ev.id] : [];
+  }
+  function firstSelectedRef() {
+    const ids = selectedPropIds();
+    return ids.length ? C.findEvent(C.state.score, ids[0]) : null;
+  }
+  function renderPropertiesPanel() {
+    const host = $("#properties-body");
+    if (!host) return;
+    const score = C.state.score;
+    const ids = selectedPropIds();
+    const found = firstSelectedRef();
+    const range = selectedMeasureRange();
+    const layout = C.ensureLayout(score);
+    let html = `<section class="prop-sec"><h3>악보</h3><div class="prop-grid">
+      <label>마디</label><span>${score.measures.length}</span>
+      <label>보표</label><span>${C.staffRefs(score).length}</span>
+      <label>용지</label><span>${htmlEsc(layout.pageSize)} ${layout.orientation === "landscape" ? "가로" : "세로"}</span>
+      <label>마디/줄</label><span>${layout.measuresPerSystem || "자동"}</span>
+    </div></section>`;
+    if (!found) {
+      host.innerHTML = html + `<section class="prop-sec"><div class="prop-empty">음표나 쉼표를 선택하면 이곳에서 보임, 색상, 오프셋, 기호, 브레이크를 바로 조정할 수 있어요.</div></section>`;
+      return;
+    }
+    const ev = found.ev;
+    const mm = C.ensureMeasureMeta(score.measures[range?.to ?? found.m] || {});
+    const dynOptions = ["", "pp", "p", "mp", "mf", "f", "ff"].map(d => `<option value="${d}" ${ev.dynamic === d ? "selected" : ""}>${d || "없음"}</option>`).join("");
+    const stemOptions = ["auto", "up", "down"].map(v => `<option value="${v}" ${(ev.stemDirection || "auto") === v ? "selected" : ""}>${v === "auto" ? "자동" : v === "up" ? "위" : "아래"}</option>`).join("");
+    const headOptions = ["normal", "x", "diamond"].map(v => `<option value="${v}" ${(ev.notehead || "normal") === v ? "selected" : ""}>${v === "normal" ? "일반" : v === "x" ? "X" : "다이아"}</option>`).join("");
+    const breakOptions = ["", "system", "page", "section"].map(v => {
+      const label = v === "" ? "없음" : v === "system" ? "시스템" : v === "page" ? "페이지" : "섹션";
+      return `<option value="${v}" ${(mm.breakType || "") === v ? "selected" : ""}>${label}</option>`;
+    }).join("");
+    html += `<section class="prop-sec"><h3>${ids.length > 1 ? `${ids.length}개 선택` : ev.type === "note" ? "음표" : "쉼표"}</h3><div class="prop-grid">
+      <label>위치</label><span>${found.name} · V${found.voice || 1} · 마디 ${found.m + 1}</span>
+      <label>보임</label><input type="checkbox" data-prop="visible" ${checked(!ev.hidden)}>
+      <label>색상</label><input type="color" data-prop="color" value="${htmlEsc(ev.color || "#14171c")}">
+      <label>X</label><input type="number" data-prop="offsetX" step="1" value="${+ev.offsetX || 0}">
+      <label>Y</label><input type="number" data-prop="offsetY" step="1" value="${+ev.offsetY || 0}">
+      <label>마디 브레이크</label><select data-measure-break>${breakOptions}</select>
+    </div><div class="prop-actions">
+      <button class="chip" data-prop-action="reset-offset">오프셋 초기화</button>
+      <button class="chip" data-prop-action="clear-color">색상 초기화</button>
+    </div></section>`;
+    if (ev.type === "note") {
+      const arts = ["staccato", "tenuto", "accent", "marcato", "fermata"];
+      html += `<section class="prop-sec"><h3>음표 모양</h3><div class="prop-grid">
+        <label>스템</label><select data-prop="stemDirection">${stemOptions}</select>
+        <label>머리</label><select data-prop="notehead">${headOptions}</select>
+        <label>작게</label><input type="checkbox" data-prop="small" ${checked(ev.small)}>
+        <label>Velocity</label><input type="number" data-prop="velocityOffset" min="-64" max="64" step="1" value="${+ev.velocityOffset || 0}">
+      </div><div class="prop-actions">` +
+        arts.map(a => `<button class="chip" data-artic-prop="${a}">${a}</button>`).join("") +
+        `</div></section>`;
+    }
+    html += `<section class="prop-sec"><h3>기호/텍스트</h3><div class="prop-grid">
+      <label>셈여림</label><select data-prop="dynamic">${dynOptions}</select>
+      <label>템포</label><input type="number" data-prop="tempo" min="30" max="280" value="${ev.tempo || ""}" placeholder="없음">
+      <label>리허설</label><input type="text" data-prop="rehearsal" value="${htmlEsc(ev.rehearsal || "")}" maxlength="12">
+      <label>스태프 텍스트</label><input type="text" data-prop="staffText" value="${htmlEsc(ev.staffText || "")}" maxlength="48">
+      <label>코드</label><input type="text" data-prop="chordSymbol" value="${htmlEsc(ev.chordSymbol ? (ev.chordSymbol.normalized || ev.chordSymbol.raw || "") : "")}" maxlength="24">
+    </div></section>`;
+    host.innerHTML = html;
+  }
+  function mutateSelectedEvents(label, fn) {
+    const ids = selectedPropIds();
+    if (!ids.length) return;
+    C.mutate(label, (score) => {
+      for (const id of ids) {
+        const f = C.findEvent(score, id);
+        if (f) fn(f.ev, f, score);
+      }
+    });
+    update();
+  }
+  function applyPropertyInput(input) {
+    const prop = input.dataset.prop;
+    mutateSelectedEvents("속성 변경", (ev) => {
+      if (prop === "visible") ev.hidden = !input.checked;
+      else if (prop === "color") {
+        const v = input.value;
+        if (/^#[0-9a-fA-F]{6}$/.test(v)) ev.color = v;
+      } else if (prop === "offsetX" || prop === "offsetY" || prop === "velocityOffset") {
+        const v = Math.round(+input.value || 0);
+        if (v) ev[prop] = v; else delete ev[prop];
+      } else if (prop === "stemDirection") {
+        if (input.value === "auto") delete ev.stemDirection; else ev.stemDirection = input.value;
+      } else if (prop === "notehead") {
+        if (input.value === "normal") delete ev.notehead; else ev.notehead = input.value;
+      } else if (prop === "small") {
+        ev.small = !!input.checked;
+        if (!ev.small) delete ev.small;
+      } else if (prop === "dynamic") {
+        if (input.value) ev.dynamic = input.value; else delete ev.dynamic;
+      } else if (prop === "tempo") {
+        if (!String(input.value || "").trim()) delete ev.tempo;
+        else ev.tempo = Math.max(30, Math.min(280, Math.round(+input.value || 0)));
+      } else if (prop === "rehearsal") {
+        const text = input.value.trim().slice(0, 12);
+        if (text) ev.rehearsal = text; else delete ev.rehearsal;
+      } else if (prop === "staffText") {
+        const text = input.value.trim().slice(0, 48);
+        if (text) {
+          ev.staffText = text;
+          const flag = C.detectSoundFlag(text);
+          if (flag) ev.soundFlag = flag; else delete ev.soundFlag;
+        } else {
+          delete ev.staffText; delete ev.soundFlag;
+        }
+      } else if (prop === "chordSymbol") {
+        const parsed = C.parseChordSymbol(input.value);
+        if (parsed) {
+          ev.chordSymbol = C.cloneChordSymbol(parsed);
+          if (!ev.fretboard || !ev.fretboard.manual) {
+            const fb = C.getDefaultFretboard(parsed);
+            if (fb) ev.fretboard = fb; else delete ev.fretboard;
+          }
+        } else {
+          delete ev.chordSymbol; delete ev.fretboard;
+        }
+      }
+    });
+  }
+  function applyMeasureBreak(type, fromPanel) {
+    const range = selectedMeasureRange();
+    if (!range) { flashHint("브레이크를 붙일 마디를 먼저 선택하세요"); return; }
+    let sectionName = "";
+    if (type === "section") {
+      sectionName = prompt("섹션 이름", C.ensureMeasureMeta(C.state.score.measures[range.to] || {}).sectionName || "Section") || "";
+      if (!sectionName.trim()) type = null;
+    }
+    C.mutate("마디 브레이크", (score) => C.setMeasureBreak(score, range.to, type || null, sectionName));
+    update();
+    if (!fromPanel) toast(type ? "브레이크를 표시했어요" : "브레이크를 지웠어요");
+  }
+  function bindProperties() {
+    $("#btn-props").addEventListener("click", () => {
+      $("#properties-panel").classList.toggle("collapsed");
+      $("#btn-props").classList.toggle("on", !$("#properties-panel").classList.contains("collapsed"));
+      applyZoom();
+    });
+    $("#btn-props-close").addEventListener("click", () => {
+      $("#properties-panel").classList.add("collapsed");
+      $("#btn-props").classList.remove("on");
+      applyZoom();
+    });
+    $("#properties-panel").addEventListener("change", (e) => {
+      const input = e.target.closest("[data-prop]");
+      if (input) { applyPropertyInput(input); return; }
+      const br = e.target.closest("[data-measure-break]");
+      if (br) applyMeasureBreak(br.value || null, true);
+    });
+    $("#properties-panel").addEventListener("click", (e) => {
+      const art = e.target.closest("[data-artic-prop]");
+      if (art) { applyArticulation(art.dataset.articProp); return; }
+      const action = e.target.closest("[data-prop-action]");
+      if (!action) return;
+      mutateSelectedEvents("속성 초기화", (ev) => {
+        if (action.dataset.propAction === "reset-offset") { delete ev.offsetX; delete ev.offsetY; }
+        if (action.dataset.propAction === "clear-color") delete ev.color;
+      });
+    });
+  }
+
+  /* ---------------- 내비게이터/타임라인/이동 ---------------- */
+  function refreshOpenOverlays() {
+    if ($("#dlg-navigator")?.open) renderNavigator();
+    if ($("#dlg-timeline")?.open) renderTimelinePanel();
+  }
+  function scrollToMeasure(mIdx) {
+    const layout = layoutCache || E.getLayout();
+    if (!layout) return;
+    const sys = layout.systems.find(S => S.measures.some(M => M.idx === mIdx));
+    if (!sys) return;
+    const M = sys.measures.find(x => x.idx === mIdx);
+    const ref = C.activeRef(C.state.score);
+    const ev = C.getVoiceEvents(ref.measures[mIdx] || ref.measures[0], ui.currentVoice, C.state.score)[0];
+    if (ev) { ui.selection = ev.id; ui.selAnchor = ev.id; ui.cursorId = ev.id; }
+    update();
+    setTimeout(() => {
+      const canvas = $("#canvas");
+      const headH = $("#paper-head").offsetHeight;
+      const s = ui.fitScale * ui.zoom;
+      canvas.scrollTo({ top: Math.max(0, (sys.yTop + headH - 80) * s), left: Math.max(0, (M.x0 - 80) * s), behavior: "smooth" });
+    }, 0);
+  }
+  function renderNavigator() {
+    const host = $("#navigator-view");
+    const layout = layoutCache || E.getLayout();
+    if (!host || !layout) return;
+    const w = 300;
+    const scale = w / (layout.pageW || E.PAGE_W);
+    const h = Math.max(220, layout.height * scale);
+    let svg = `<svg class="navigator-map" viewBox="0 0 ${r1(w)} ${r1(h)}" width="${r1(w)}" height="${r1(Math.min(540, h))}">`;
+    svg += `<rect x="0" y="0" width="${r1(w)}" height="${r1(h)}" fill="#fff"/>`;
+    for (const S of layout.systems) {
+      const y1 = Math.min(...S.staffLayouts.map(st => st.yTop)) * scale;
+      const y2 = Math.max(...S.staffLayouts.map(st => st.yTop + (st.staffType === "tab" ? 5 * E.SP : E.STAFF_H))) * scale;
+      svg += `<line x1="${r1(S.x0 * scale)}" y1="${r1(y1)}" x2="${r1(S.x1 * scale)}" y2="${r1(y1)}" stroke="#98a2b3" stroke-width="1"/>`;
+      svg += `<line x1="${r1(S.x0 * scale)}" y1="${r1(y2)}" x2="${r1(S.x1 * scale)}" y2="${r1(y2)}" stroke="#98a2b3" stroke-width="1"/>`;
+      for (const M of S.measures) {
+        svg += `<rect class="nav-measure" data-midx="${M.idx}" x="${r1(M.x0 * scale)}" y="${r1(y1 - 8)}" width="${r1(Math.max(5, (M.x1 - M.x0) * scale))}" height="${r1(y2 - y1 + 16)}" rx="2"/>`;
+      }
+    }
+    svg += `</svg>`;
+    host.innerHTML = svg;
+  }
+  function measureDensity(score, mIdx) {
+    let notes = 0, markers = [];
+    for (const ref of C.staffRefs(score)) {
+      const mm = ref.measures[mIdx];
+      if (!mm) continue;
+      for (const { ev } of C.measureEntries(mm, { score })) {
+        if (ev.type === "note") notes += Math.max(1, ev.notes.length);
+        if (ev.rehearsal) markers.push("R:" + ev.rehearsal);
+        if (ev.tempo) markers.push("♩=" + ev.tempo);
+        if (ev.staffText) markers.push(ev.staffText);
+      }
+    }
+    return { notes, markers };
+  }
+  function renderTimelinePanel() {
+    const host = $("#timeline-view");
+    if (!host) return;
+    const score = C.state.score;
+    const maxNotes = Math.max(1, ...score.measures.map((_, i) => measureDensity(score, i).notes));
+    host.innerHTML = `<div class="timeline-grid">` + score.measures.map((_, i) => {
+      const d = measureDensity(score, i);
+      const width = Math.max(8, Math.round(d.notes / maxNotes * 100));
+      const marker = d.markers.slice(0, 2).join(" · ");
+      return `<button class="timeline-cell" data-midx="${i}"><b>${i + 1}</b><span>${htmlEsc(marker || `${d.notes} notes`)}</span><i class="timeline-density" style="width:${width}%"></i></button>`;
+    }).join("") + `</div>`;
+  }
+  function openNavigator() {
+    renderNavigator();
+    const dlg = $("#dlg-navigator");
+    if (!dlg.open) dlg.showModal();
+  }
+  function openTimelinePanel() {
+    renderTimelinePanel();
+    const dlg = $("#dlg-timeline");
+    if (!dlg.open) dlg.showModal();
+  }
+  function gotoQuery() {
+    const raw = prompt("이동: 마디 번호, r:A", "");
+    if (raw === null) return;
+    const q = raw.trim();
+    if (!q) return;
+    let mIdx = null;
+    const rm = q.match(/^r\s*:\s*(.+)$/i);
+    if (rm) {
+      const target = rm[1].trim().toLowerCase();
+      for (let m = 0; m < C.state.score.measures.length; m++) {
+        let hit = false;
+        for (const ref of C.staffRefs(C.state.score)) {
+          for (const { ev } of C.measureEntries(ref.measures[m], { score: C.state.score })) {
+            if (String(ev.rehearsal || "").toLowerCase() === target) hit = true;
+          }
+        }
+        if (hit) { mIdx = m; break; }
+      }
+    } else {
+      const n = parseInt(q.replace(/^m\s*/i, ""), 10);
+      if (!isNaN(n)) mIdx = n - 1;
+    }
+    if (mIdx === null || mIdx < 0 || mIdx >= C.state.score.measures.length) {
+      flashHint("이동할 위치를 찾지 못했어요");
+      return;
+    }
+    scrollToMeasure(mIdx);
+  }
+  function bindNavigationPanels() {
+    $("#btn-navigator").addEventListener("click", openNavigator);
+    $("#btn-timeline").addEventListener("click", openTimelinePanel);
+    $("#navigator-view").addEventListener("click", (e) => {
+      const item = e.target.closest("[data-midx]");
+      if (item) scrollToMeasure(+item.dataset.midx);
+    });
+    $("#timeline-view").addEventListener("click", (e) => {
+      const item = e.target.closest("[data-midx]");
+      if (item) scrollToMeasure(+item.dataset.midx);
+    });
+  }
+  function r1(n) { return Math.round(n * 10) / 10; }
 
   /* ---------------- 토스트/힌트 ---------------- */
   let toastTimer = null;
@@ -1756,6 +2056,12 @@
       { id: "staff-text", label: "스태프 텍스트", run: applyStaffText },
       { id: "repeat-start", label: "시작 반복", run: applyStartRepeat },
       { id: "repeat-end", label: "끝 반복", run: applyEndRepeat },
+      { id: "break-system", label: "시스템 줄바꿈", run: () => applyMeasureBreak("system") },
+      { id: "break-page", label: "페이지 나눔", run: () => applyMeasureBreak("page") },
+      { id: "break-section", label: "섹션 브레이크", run: () => applyMeasureBreak("section") },
+      { id: "navigator", label: "내비게이터 열기", run: openNavigator },
+      { id: "timeline", label: "타임라인 열기", run: openTimelinePanel },
+      { id: "goto", label: "마디/리허설 이동", run: gotoQuery },
       { id: "musicxml", label: "MusicXML 내보내기", run: () => IO.download(IO.safeName(C.state.score.meta.title) + ".musicxml", IO.exportMusicXML(C.state.score), "application/vnd.recordare.musicxml+xml") },
       { id: "midi", label: "MIDI 내보내기", run: () => IO.download(IO.safeName(C.state.score.meta.title) + ".mid", P.exportMidi(C.state.score), "audio/midi") },
       { id: "settings", label: "악보 설정", run: openSettings },
@@ -1810,7 +2116,15 @@
     $("#set-key").value = String(score.keySig);
     $("#set-time").value = score.timeSig.num + "/" + score.timeSig.den;
     $("#set-tempo").value = score.tempo;
-    $("#set-measures-system").value = C.ensureLayout(score).measuresPerSystem || "";
+    const layout = C.ensureLayout(score);
+    $("#set-measures-system").value = layout.measuresPerSystem || "";
+    $("#set-page-size").value = layout.pageSize || "A4";
+    $("#set-orientation").value = layout.orientation || "portrait";
+    $("#set-margin").value = layout.marginLeft || 52;
+    $("#set-note-spacing").value = layout.noteSpacing || 1;
+    $("#set-system-gap").value = layout.systemGap || 1;
+    $("#set-staff-gap").value = layout.staffGap || 1;
+    $("#set-beam-thickness").value = layout.beamThickness || 1;
     $("#dlg-settings").showModal();
   }
 
@@ -1825,6 +2139,14 @@
       const newEnsemble = $("#set-ensemble").value;
       const newTempo = Math.max(30, Math.min(280, +$("#set-tempo").value || 100));
       const measuresPerSystem = Math.max(0, Math.min(16, +$("#set-measures-system").value || 0));
+      const pageSize = $("#set-page-size").value;
+      const orientation = $("#set-orientation").value;
+      const page = C.pageSizeDefaults(pageSize, orientation);
+      const margin = Math.max(20, Math.min(180, +$("#set-margin").value || 52));
+      const noteSpacing = Math.max(0.75, Math.min(1.55, +$("#set-note-spacing").value || 1));
+      const systemGap = Math.max(0.75, Math.min(1.8, +$("#set-system-gap").value || 1));
+      const staffGap = Math.max(0.75, Math.min(1.8, +$("#set-staff-gap").value || 1));
+      const beamThickness = Math.max(0.7, Math.min(1.8, +$("#set-beam-thickness").value || 1));
       C.mutate("악보 설정", (s2) => {
         s2.meta.title = $("#set-title").value.trim() || "제목 없음";
         s2.meta.composer = $("#set-composer").value.trim();
@@ -1837,7 +2159,12 @@
         }
         s2.keySig = newKey;
         s2.tempo = newTempo;
-        C.ensureLayout(s2).measuresPerSystem = measuresPerSystem;
+        Object.assign(C.ensureLayout(s2), {
+          pageSize, orientation,
+          width: page.width, height: page.height,
+          marginTop: margin, marginRight: margin, marginBottom: margin, marginLeft: margin,
+          measuresPerSystem, noteSpacing, systemGap, staffGap, beamThickness,
+        });
         if (s2.timeSig.num !== num || s2.timeSig.den !== den) C.rebar(s2, { num, den });
       });
       stopPlayback();
@@ -1927,13 +2254,16 @@
         if (K === "C") { e.preventDefault(); copySelection(); return; }
         if (K === "V") { e.preventDefault(); pasteClipboard(); return; }
         if (K === "X") { e.preventDefault(); if (copySelection({ quiet: true })) { deleteSelection(); toast("잘라냈어요"); } return; }
-        if (K === "K") { e.preventDefault(); openCommandPalette(); return; }
+        if ((K === "P" && e.shiftKey) || K === "K") { e.preventDefault(); openCommandPalette(); return; }
+        if (K === "F" || K === "G") { e.preventDefault(); gotoQuery(); return; }
         if (/^[2-9]$/.test(k)) { e.preventDefault(); applyTuplet(+k); return; }
         if (K === "ARROWUP" || k === "ArrowUp") { e.preventDefault(); transposeSelection(12); return; }
         if (k === "ArrowDown") { e.preventDefault(); transposeSelection(-12); return; }
         return;
       }
 
+      if (k === "F11") { e.preventDefault(); openTimelinePanel(); return; }
+      if (k === "F12") { e.preventDefault(); openNavigator(); return; }
       if (k === " ") { e.preventDefault(); togglePlay(); return; }
       if (k === "Escape") {
         if (P.player.playing) { stopPlayback(); return; }
@@ -2067,6 +2397,9 @@
     $("#btn-repeat-count").addEventListener("click", applyRepeatCount);
     $("#btn-volta-1").addEventListener("click", () => applyVolta("1"));
     $("#btn-volta-2").addEventListener("click", () => applyVolta("2"));
+    $("#btn-break-system").addEventListener("click", () => applyMeasureBreak("system"));
+    $("#btn-break-page").addEventListener("click", () => applyMeasureBreak("page"));
+    $("#btn-break-section").addEventListener("click", () => applyMeasureBreak("section"));
     $("#btn-delete").addEventListener("click", deleteSelection);
     $("#btn-piano").addEventListener("click", () => {
       ui.pianoVisible = !ui.pianoVisible;
@@ -2181,6 +2514,8 @@
     bindDragDrop();
     bindMixer();
     bindCommandPalette();
+    bindProperties();
+    bindNavigationPanels();
     initMidi();
 
     const saved = IO.loadAutosave();

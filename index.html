@@ -82,6 +82,9 @@
   <select id="staff-select" class="tsel" title="입력할 보표"></select>
   <select id="view-select" class="tsel" title="총보/파트 보기"></select>
   <button id="btn-hide-empty" class="tbtn" title="총보에서 빈 보표 숨김">빈보표</button>
+  <button id="btn-navigator" class="tbtn" title="내비게이터 (F12)">Nav</button>
+  <button id="btn-timeline" class="tbtn" title="타임라인 (F11)">Time</button>
+  <button id="btn-props" class="tbtn on" title="속성 패널 보이기/숨기기">속성</button>
   <select id="instrument-select" class="tsel" title="활성 파트의 재생 악기"></select>
   <span id="sample-status" class="sample-status" title="실제 악기 샘플 음원">샘플</span>
 
@@ -156,6 +159,9 @@
   <button id="btn-repeat-count" class="tbtn" title="반복 횟수 설정">×2</button>
   <button id="btn-volta-1" class="tbtn" title="1번 엔딩(볼타)">1.</button>
   <button id="btn-volta-2" class="tbtn" title="2번 엔딩(볼타)">2.</button>
+  <button id="btn-break-system" class="tbtn" title="선택 마디 뒤 시스템 줄바꿈">↵</button>
+  <button id="btn-break-page" class="tbtn" title="선택 마디 뒤 페이지 나눔">Pg</button>
+  <button id="btn-break-section" class="tbtn" title="선택 마디 뒤 섹션 브레이크">Sec</button>
 
   <div class="tsep"></div>
   <button class="tbtn artic-btn" data-artic="staccato" title="스타카토 — 짧게 끊어서 (Shift+S)">
@@ -208,22 +214,31 @@
   <button class="drum-btn" data-drum="high-tom" title="High tom">High Tom</button>
 </div>
 
-<!-- ═══════════ 악보 캔버스 ═══════════ -->
-<main id="canvas">
-  <div class="paper-sizer">
-    <div id="paper">
-      <div id="paper-head">
-        <h1 id="t-title" spellcheck="false" title="클릭해서 제목 수정"></h1>
-        <div id="t-composer" spellcheck="false" title="클릭해서 작곡가 수정"></div>
-      </div>
-      <div id="svg-host"></div>
-      <div id="lyric-editor">
-        <input type="text" placeholder="가사" autocomplete="off">
-        <div class="tip">Space=다음 · Esc=닫기</div>
+<!-- ═══════════ 작업 영역 ═══════════ -->
+<div id="workspace">
+  <main id="canvas">
+    <div class="paper-sizer">
+      <div id="paper">
+        <div id="paper-head">
+          <h1 id="t-title" spellcheck="false" title="클릭해서 제목 수정"></h1>
+          <div id="t-composer" spellcheck="false" title="클릭해서 작곡가 수정"></div>
+        </div>
+        <div id="svg-host"></div>
+        <div id="lyric-editor">
+          <input type="text" placeholder="가사" autocomplete="off">
+          <div class="tip">Space=다음 · Esc=닫기</div>
+        </div>
       </div>
     </div>
-  </div>
-</main>
+  </main>
+  <aside id="properties-panel">
+    <div class="panel-head">
+      <b>속성</b>
+      <button id="btn-props-close" class="tbtn" title="속성 패널 닫기">×</button>
+    </div>
+    <div id="properties-body" class="props-body"></div>
+  </aside>
+</div>
 
 <!-- ═══════════ 화면 피아노 ═══════════ -->
 <div id="piano-bar"><div id="piano-keys"></div></div>
@@ -282,6 +297,26 @@
       <input id="set-tempo" type="number" min="30" max="280">
       <label for="set-measures-system">마디/줄</label>
       <input id="set-measures-system" type="number" min="0" max="16" placeholder="자동">
+      <label for="set-page-size">용지</label>
+      <select id="set-page-size">
+        <option value="A4">A4</option>
+        <option value="Letter">Letter</option>
+      </select>
+      <label for="set-orientation">방향</label>
+      <select id="set-orientation">
+        <option value="portrait">세로</option>
+        <option value="landscape">가로</option>
+      </select>
+      <label for="set-margin">여백</label>
+      <input id="set-margin" type="number" min="20" max="180" step="2">
+      <label for="set-note-spacing">음표 간격</label>
+      <input id="set-note-spacing" type="number" min="0.75" max="1.55" step="0.05">
+      <label for="set-system-gap">시스템 간격</label>
+      <input id="set-system-gap" type="number" min="0.75" max="1.8" step="0.05">
+      <label for="set-staff-gap">보표 간격</label>
+      <input id="set-staff-gap" type="number" min="0.75" max="1.8" step="0.05">
+      <label for="set-beam-thickness">빔 두께</label>
+      <input id="set-beam-thickness" type="number" min="0.7" max="1.8" step="0.05">
     </div>
 
     <div class="form-row">
@@ -305,6 +340,28 @@
       <form method="dialog"><button class="tbtn">취소</button></form>
       <button id="set-apply" class="tbtn primary">적용</button>
     </div>
+  </div>
+</dialog>
+
+<!-- ═══════════ 내비게이터 다이얼로그 ═══════════ -->
+<dialog id="dlg-navigator">
+  <div class="dlg-head">
+    <h2>내비게이터</h2>
+    <form method="dialog"><button class="dlg-close" title="닫기">✕</button></form>
+  </div>
+  <div class="dlg-body">
+    <div id="navigator-view" class="navigator-view"></div>
+  </div>
+</dialog>
+
+<!-- ═══════════ 타임라인 다이얼로그 ═══════════ -->
+<dialog id="dlg-timeline">
+  <div class="dlg-head">
+    <h2>타임라인</h2>
+    <form method="dialog"><button class="dlg-close" title="닫기">✕</button></form>
+  </div>
+  <div class="dlg-body">
+    <div id="timeline-view" class="timeline-view"></div>
   </div>
 </dialog>
 
