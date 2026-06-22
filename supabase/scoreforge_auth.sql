@@ -70,6 +70,7 @@ create trigger on_auth_user_created
 grant usage on schema public to anon, authenticated;
 grant select, insert on public.profiles to authenticated;
 
+drop policy if exists "profiles_select_own" on public.profiles;
 drop policy if exists "profiles_select_self_or_admin" on public.profiles;
 create policy "profiles_select_self_or_admin"
 on public.profiles
