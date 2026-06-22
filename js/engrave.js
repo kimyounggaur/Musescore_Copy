@@ -133,14 +133,13 @@
     for (const ref of C.staffRefs(score)) {
       for (let m = 0; m < ref.measures.length; m++) {
         const eff = new Map(); // "step:oct" → alter
-        const evs = ref.measures[m].events;
-        for (let e = 0; e < evs.length; e++) {
-          const ev = evs[e];
-          if (ev.type !== "note") continue;
+        for (const entry of C.measureEntries(ref.measures[m], { score, includeSilent: true })) {
+          const ev = entry.ev;
+          if (ev.type !== "note" || ev.drumId) continue;
           for (const note of ev.notes) {
             const k = note.step + ":" + note.oct;
             const cur = eff.has(k) ? eff.get(k) : C.keyAlterFor(note.step, score.keySig);
-            if (C.isTiedFrom(score, m, e, note, ref)) {
+            if (C.isTiedFrom(score, m, entry.e, note, { ...ref, voice: entry.voice })) {
               note.__acc = null;            // 타이로 이어진 음은 임시표 생략
               eff.set(k, note.alter);
             } else if (note.alter !== cur) {
@@ -180,45 +179,44 @@
   }
   function staffGroupHeight(refs) {
     if (!refs.length) return STAFF_H;
-    let y = 0, lastPart = refs[0].partIdx;
+    const hOf = (ref) => ref.staffType === "tab" ? 5 * SP : STAFF_H;
+    let y = 0, lastPart = refs[0].partIdx, prevH = hOf(refs[0]);
     refs.forEach((ref, i) => {
-      if (i > 0) y += STAFF_H + (ref.partIdx === lastPart ? 70 : 90);
+      if (i > 0) y += prevH + (ref.partIdx === lastPart ? 70 : 90);
       ref._relY = y;
       lastPart = ref.partIdx;
+      prevH = hOf(ref);
     });
-    return y + STAFF_H;
+    return y + prevH;
   }
   function measureCount(score, refs) {
     return Math.max(1, ...refs.map(r => r.measures.length));
   }
-  function measureNaturalWidth(refs, mIdx) {
+  function measureNaturalWidth(refs, mIdx, score, activeVoice) {
     const seg = new Map();
     for (const ref of refs) {
       const mm = ref.measures[mIdx];
       if (!mm) continue;
-      if (mm.events.length === 1 && mm.events[0].full) {
-        seg.set("0/1", Math.max(seg.get("0/1") || 0, eventWidth(mm.events[0])));
+      const entries = C.measureEntries(mm, { score, activeVoice });
+      if (entries.length === 1 && entries[0].ev.full) {
+        seg.set("0/1", Math.max(seg.get("0/1") || 0, eventWidth(entries[0].ev)));
         continue;
       }
-      let tick = Fraction.ZERO;
-      for (const ev of mm.events) {
+      for (const { ev, tick } of entries) {
         const key = tick.toString();
-        seg.set(key, Math.max(seg.get(key) || 0, eventWidth(ev)));
-        tick = tick.add(C.durValue(ev.dur));
+        seg.set(key, Math.max(seg.get(key) || 0, eventWidth(ev) + (ev.voice > 1 ? 8 : 0)));
       }
     }
     return Math.max(64, 16 + [...seg.values()].reduce((a, w) => a + w, 0));
   }
-  function segmentMapFor(refs, mIdx, scale) {
+  function segmentMapFor(refs, mIdx, scale, score, activeVoice) {
     const seg = new Map();
     for (const ref of refs) {
       const mm = ref.measures[mIdx];
-      if (!mm || (mm.events.length === 1 && mm.events[0].full)) continue;
-      let tick = Fraction.ZERO;
-      for (const ev of mm.events) {
+      if (!mm) continue;
+      for (const { ev, tick } of C.measureEntries(mm, { score, activeVoice })) {
         const key = tick.toString();
         seg.set(key, Math.max(seg.get(key) || 0, eventWidth(ev)));
-        tick = tick.add(C.durValue(ev.dur));
       }
     }
     return [...seg.entries()]
@@ -233,18 +231,19 @@
     const refs = C.visibleStaffRefs ? C.visibleStaffRefs(score, opts.viewMode, { hideEmptyStaves: opts.hideEmptyStaves }) : C.staffRefs(score);
     const count = measureCount(score, refs);
     const lyricVerses = new Set();
-    refs.forEach(ref => ref.measures.forEach(mm => mm.events.forEach(ev => C.lyricsOf(ev).forEach(l => lyricVerses.add(l.verse)))));
+    refs.forEach(ref => ref.measures.forEach(mm => C.measureEntries(mm, { score, activeVoice: opts.activeVoice }).forEach(({ ev }) => C.lyricsOf(ev).forEach(l => lyricVerses.add(l.verse)))));
     const hasLyrics = lyricVerses.size > 0;
     const lyricLineCount = Math.max(1, lyricVerses.size);
-    const hasAboveText = refs.some(ref => ref.measures.some(mm => mm.events.some(ev => ev.tempo || ev.rehearsal || ev.staffText || ev.chordSymbol)));
-    const hasDyn = refs.some(ref => ref.measures.some(mm => mm.events.some(ev => ev.dynamic))) ||
+    const hasAboveText = refs.some(ref => ref.measures.some(mm => C.measureEntries(mm, { score, activeVoice: opts.activeVoice }).some(({ ev }) => ev.tempo || ev.rehearsal || ev.staffText || ev.chordSymbol)));
+    const hasFretboards = refs.some(ref => ref.measures.some(mm => C.measureEntries(mm, { score, activeVoice: opts.activeVoice }).some(({ ev }) => ev.fretboard)));
+    const hasDyn = refs.some(ref => ref.measures.some(mm => C.measureEntries(mm, { score, activeVoice: opts.activeVoice }).some(({ ev }) => ev.dynamic))) ||
       (score.spanners || []).some(sp => sp.type === "cresc" || sp.type === "dim");
     const groupH = staffGroupHeight(refs);
-    const PITCH = Math.max(150, groupH + 74 + (hasAboveText ? 18 : 0) + (hasLyrics ? 18 * lyricLineCount + 8 : 0) + (hasDyn ? 16 : 0));
+    const PITCH = Math.max(150, groupH + 74 + (hasFretboards ? 58 : hasAboveText ? 18 : 0) + (hasLyrics ? 18 * lyricLineCount + 8 : 0) + (hasDyn ? 16 : 0));
     const lyricOff = STAFF_H + (hasDyn ? 52 : 34);
 
     // 마디 자연 폭
-    const natural = Array.from({ length: count }, (_, mIdx) => measureNaturalWidth(refs, mIdx));
+    const natural = Array.from({ length: count }, (_, mIdx) => measureNaturalWidth(refs, mIdx, score, opts.activeVoice));
 
     // 그리디 줄바꿈
     const systems = [];
@@ -254,9 +253,11 @@
       const nameW = refs.length > 1 ? (first ? 96 : 54) : 0;
       const hw = headerWidth(score, first);
       const usable = PAGE_W - MARGIN * 2 - nameW;
+      const perSystem = score.layout?.measuresPerSystem | 0;
       let sum = 0; const idxs = [];
       while (i < count) {
         const w = natural[i];
+        if (perSystem > 0 && idxs.length >= perSystem) break;
         if (idxs.length && hw + sum + w > usable) break;
         idxs.push(i); sum += w; i++;
       }
@@ -290,7 +291,7 @@
       for (const mIdx of sys.idxs) {
         const mW = natural[mIdx] * scale;
         const M = { idx: mIdx, x0: x, x1: x + mW, events: [], staffMeasures: [] };
-        const segs = segmentMapFor(refs, mIdx, scale);
+        const segs = segmentMapFor(refs, mIdx, scale, score, opts.activeVoice);
         const segX = new Map();
         let ex = x + 12 * scale;
         for (const seg of segs) {
@@ -300,18 +301,20 @@
         for (const SL of S.staffLayouts) {
           const mm = SL.measures[mIdx] || { events: [C.fullRest(score)] };
           const SM = { idx: mIdx, x0: x, x1: x + mW, events: [], staff: SL };
-          if (mm.events.length === 1 && mm.events[0].full) {
-            const ev = mm.events[0];
-            SM.events.push(mkEv(ev, mIdx, 0, x + mW / 2, S, SL, score, Fraction.ZERO));
+          const entries = C.measureEntries(mm, { score, activeVoice: opts.activeVoice });
+          if (entries.length === 1 && entries[0].ev.full) {
+            const ent = entries[0];
+            SM.events.push(mkEv(ent.ev, mIdx, ent.e, x + mW / 2, S, SL, score, Fraction.ZERO, ent.voice));
           } else {
-            let tick = Fraction.ZERO;
-            mm.events.forEach((ev, eIdx) => {
+            entries.forEach((ent) => {
+              const ev = ent.ev;
+              const tick = ent.tick;
               const key = tick.toString();
               const baseX = segX.get(key) ?? (x + 12 * scale);
               const accW = (ev.type === "note" && ev.notes.some(n => n.__acc)) ? 11 : 0;
-              const cx = baseX + accW + 6.5 + (ev.dur.d === 1 ? 3 : 0);
-              SM.events.push(mkEv(ev, mIdx, eIdx, cx, S, SL, score, tick));
-              tick = tick.add(C.durValue(ev.dur));
+              const voiceOffset = ent.voice > 1 ? (ent.voice % 2 === 0 ? 7 : -7) : 0;
+              const cx = baseX + accW + 6.5 + (ev.dur.d === 1 ? 3 : 0) + voiceOffset;
+              SM.events.push(mkEv(ev, mIdx, ent.e, cx, S, SL, score, tick, ent.voice));
             });
           }
           for (const le of SM.events) {
@@ -331,9 +334,9 @@
     return out;
   }
 
-  function mkEv(ev, mIdx, eIdx, cx, S, SL, score, tick) {
+  function mkEv(ev, mIdx, eIdx, cx, S, SL, score, tick, voice = 1) {
     return {
-      id: ev.id, ev, mIdx, eIdx, x: cx, sys: S, staff: SL,
+      id: ev.id, ev, mIdx, eIdx, voice, x: cx, sys: S, staff: SL,
       partIdx: SL.partIdx, staffIdx: SL.staffIdx, globalIdx: SL.globalIdx, tick,
       startTime: null, // playback에서 채움
     };
@@ -395,8 +398,9 @@
   function staffLines(S) {
     let s = `<g class="staff">`;
     for (const SL of S.staffLayouts) {
-      for (let i = 0; i < 5; i++) {
-        const y = SL.yTop + i * SP;
+      const lines = SL.staffType === "tab" ? 6 : 5;
+      for (let i = 0; i < lines; i++) {
+        const y = SL.yTop + i * (SL.staffType === "tab" ? SP : SP);
         s += `<line x1="${SL.x0}" y1="${y}" x2="${SL.x1}" y2="${y}"/>`;
       }
       const label = S.first ? SL.name : SL.shortName;
@@ -417,7 +421,12 @@
     let s = "";
     for (const SL of S.staffLayouts) {
       const cx = SL.x0 + 14;
-      if (SL.clef === "treble") {
+      if (SL.staffType === "tab") {
+        s += `<text class="tab-clef" x="${r2(cx - 10)}" y="${r2(SL.yTop + 2.8 * SP)}" font-weight="800" font-size="16">TAB</text>`;
+      } else if (SL.clef === "percussion" || SL.instrumentType === "percussion") {
+        const y = SL.yTop + SP * 1.1;
+        s += `<g class="perc-clef" transform="translate(${r2(cx - 4)},${r2(y)})"><rect x="-4" y="-9" width="3.2" height="28" rx="1.4"/><rect x="4" y="-9" width="3.2" height="28" rx="1.4"/></g>`;
+      } else if (SL.clef === "treble") {
         const gLineY = yForStep(SL, score, C.absStep({ step: 4, oct: 4 })); // G4 줄
         s += glyph("gClef", cx, gLineY);
       } else {
@@ -425,7 +434,7 @@
         s += glyph("fClef", cx, fLineY);
       }
       const k = score.keySig;
-      if (k !== 0) {
+      if (k !== 0 && SL.staffType !== "tab" && SL.clef !== "percussion" && SL.instrumentType !== "percussion") {
         const steps = C.keySigSteps(k, SL.clef);
         const gname = k > 0 ? "sharp" : "flat";
         steps.forEach((as, i) => {
@@ -545,31 +554,33 @@
     const groupOf = (t) => { for (let i = 0; i < bounds.length; i++) if (t.lt(bounds[i])) return i; return bounds.length - 1; };
 
     const runs = [];
-    let cur = null;
-    M.events.forEach((le) => {
-      const ev = le.ev;
-      const beamable = ev.type === "note" && ev.dur.d >= 8 && !ev.full;
-      const gi = groupOf(le.tick);
-      if (beamable && cur && cur.gi === gi) {
-        cur.items.push(le);
-        cur.endTick = le.tick.add(C.durValue(ev.dur));
-        cur.all8 = cur.all8 && ev.dur.d === 8;
-      } else if (beamable) {
-        cur = {
-          gi, items: [le],
-          startTick: le.tick,
-          endTick: le.tick.add(C.durValue(ev.dur)),
-          all8: ev.dur.d === 8,
-        };
-        runs.push(cur);
-      } else {
-        cur = null;
-      }
-    });
+    for (let voice = 1; voice <= C.VOICE_COUNT; voice++) {
+      let cur = null;
+      M.events.filter(le => (le.voice || 1) === voice).forEach((le) => {
+        const ev = le.ev;
+        const beamable = ev.type === "note" && ev.dur.d >= 8 && !ev.full;
+        const gi = groupOf(le.tick);
+        if (beamable && cur && cur.gi === gi) {
+          cur.items.push(le);
+          cur.endTick = le.tick.add(C.durValue(ev.dur));
+          cur.all8 = cur.all8 && ev.dur.d === 8;
+        } else if (beamable) {
+          cur = {
+            gi, voice, items: [le],
+            startTick: le.tick,
+            endTick: le.tick.add(C.durValue(ev.dur)),
+            all8: ev.dur.d === 8,
+          };
+          runs.push(cur);
+        } else {
+          cur = null;
+        }
+      });
+    }
     if (ts.den === 4 && ts.num % 2 === 0) {
       for (let i = 0; i + 1 < runs.length; i++) {
         const a = runs[i], b = runs[i + 1];
-        if (a.all8 && b.all8 && b.gi === a.gi + 1 && a.gi % 2 === 0 && a.endTick.eq(b.startTick)) {
+        if (a.voice === b.voice && a.all8 && b.all8 && b.gi === a.gi + 1 && a.gi % 2 === 0 && a.endTick.eq(b.startTick)) {
           a.items.push(...b.items);
           a.endTick = b.endTick;
           runs.splice(i + 1, 1);
@@ -602,6 +613,7 @@
       }
       if (ev.dynamic) body += renderDynamic(ev.dynamic, le.x, S.yTop + STAFF_H + 28);
       body += renderEventText(ev, le, S);
+      body += renderAdvancedNotation(score, M, S, le);
       // 히트 영역
       const hitX = le.x - 16, hitW = 32;
       body += `<rect class="hit" x="${r2(hitX)}" y="${S.yTop - 62}" width="${hitW}" height="${STAFF_H + 100}" fill="transparent"/>`;
@@ -609,6 +621,35 @@
     }
     s += renderLyricSpans(M, S);
     s += renderTuplets(score, M, S);
+    return s;
+  }
+
+  function renderAdvancedNotation(score, M, S, le) {
+    const ev = le.ev;
+    if (ev.type !== "note") return "";
+    let s = "";
+    if (ev.tremolo) {
+      const y = S.staffType === "tab" ? S.yTop + 2 * SP : Math.min(...ev.notes.map(n => yForStep(S, score, C.absStep(n)))) - 9;
+      const strokes = Math.max(1, Math.min(3, ev.tremolo.strokes || 2));
+      for (let i = 0; i < strokes; i++) {
+        const yy = y + i * 5;
+        s += `<line class="tremolo-mark" x1="${r2(le.x - 8)}" y1="${r2(yy)}" x2="${r2(le.x + 8)}" y2="${r2(yy - 5)}"/>`;
+      }
+    }
+    if (ev.arpeggiate) {
+      const top = S.yTop - 4, bottom = S.yTop + STAFF_H + 4;
+      const x = le.x - 17;
+      s += `<path class="arpeggio-mark" d="M ${r2(x)} ${r2(top)} C ${r2(x - 5)} ${r2(top + 6)}, ${r2(x + 5)} ${r2(top + 10)}, ${r2(x)} ${r2(top + 16)} C ${r2(x - 5)} ${r2(top + 22)}, ${r2(x + 5)} ${r2(top + 26)}, ${r2(x)} ${r2(Math.min(bottom, top + 34))}"/>`;
+    }
+    if (ev.glissando) {
+      const idx = M.events.indexOf(le);
+      const nx = M.events.slice(idx + 1).find(c => c.staff.globalIdx === le.staff.globalIdx && c.ev.type === "note");
+      if (nx) {
+        const y1 = ev.drumId ? drumY(S, ev) : S.staffType === "tab" ? tabY(S, ev.tab) : yForStep(S, score, C.absStep(ev.notes[0]));
+        const y2 = nx.ev.drumId ? drumY(S, nx.ev) : S.staffType === "tab" ? tabY(S, nx.ev.tab) : yForStep(S, score, C.absStep(nx.ev.notes[0]));
+        s += `<line class="glissando-mark" x1="${r2(le.x + 12)}" y1="${r2(y1)}" x2="${r2(nx.x - 12)}" y2="${r2(y2)}"/>`;
+      }
+    }
     return s;
   }
 
@@ -656,8 +697,34 @@
     if (ev.chordSymbol) {
       const y = S.yTop - 2;
       s += `<text class="chord-symbol" x="${r2(le.x)}" y="${r2(y)}" text-anchor="middle">${esc(C.displayChordSymbol(ev.chordSymbol))}</text>`;
+      if (ev.fretboard) s += renderFretboard(ev.fretboard, le.x, S.yTop - 70);
     }
     return s;
+  }
+
+  function renderFretboard(fb, x, y) {
+    const strings = fb.strings || 6;
+    const frets = fb.frets || 4;
+    const w = 34, h = 42;
+    const sx = w / (strings - 1);
+    const fy = h / frets;
+    const left = x - w / 2;
+    let s = `<g class="fretboard" transform="translate(${r2(left)},${r2(y)})">`;
+    for (let i = 0; i < strings; i++) s += `<line x1="${r2(i * sx)}" y1="8" x2="${r2(i * sx)}" y2="${r2(h)}"/>`;
+    for (let f = 0; f <= frets; f++) s += `<line x1="0" y1="${r2(8 + f * fy)}" x2="${r2(w)}" y2="${r2(8 + f * fy)}" class="${f === 0 && (fb.firstFret || 1) === 1 ? "nut" : ""}"/>`;
+    const pos = fb.positions || [];
+    for (let i = 0; i < strings; i++) {
+      const val = pos[i];
+      const px = i * sx;
+      if (val === "x") s += `<text x="${r2(px)}" y="5" text-anchor="middle">x</text>`;
+      else if (val === 0) s += `<text x="${r2(px)}" y="5" text-anchor="middle">o</text>`;
+      else if (typeof val === "number") {
+        const fret = Math.max(1, val - (fb.firstFret || 1) + 1);
+        s += `<circle cx="${r2(px)}" cy="${r2(8 + (fret - 0.5) * fy)}" r="3.2"/>`;
+      }
+    }
+    if ((fb.firstFret || 1) > 1) s += `<text class="fret-num" x="${r2(w + 4)}" y="${r2(8 + fy)}">${fb.firstFret}</text>`;
+    return s + `</g>`;
   }
 
   function renderTuplets(score, M, S) {
@@ -709,12 +776,39 @@
     const avg = notes.reduce((a, n) => a + C.absStep(n), 0) / notes.length;
     return avg < mid ? "up" : "down";
   }
+  function stemDirForVoice(score, notes, S, voice) {
+    voice = C.normalizeVoice(voice || 1);
+    if (voice === 1 || voice === 3) return "up";
+    if (voice === 2 || voice === 4) return "down";
+    return stemDirForStaff(score, notes, S);
+  }
+  function drumY(S, ev) {
+    const spec = C.drumSpec(ev.drumId);
+    const line = ev.staffLine ?? spec.staffLine ?? 4;
+    return S.yTop + STAFF_H - line * (SP / 2);
+  }
+  function tabY(S, tab) {
+    const stringNo = Math.max(1, Math.min(6, tab?.string || 1));
+    return S.yTop + (stringNo - 1) * SP;
+  }
+  function drumHeadShape(x, y, notehead) {
+    if (notehead === "x" || notehead === "circle-x") {
+      const circle = notehead === "circle-x" ? `<circle cx="${r2(x)}" cy="${r2(y)}" r="6.2" fill="none" stroke="currentColor" stroke-width="1.3"/>` : "";
+      return `<g class="drum-head">${circle}<path d="M ${r2(x - 5.5)} ${r2(y - 4.5)} L ${r2(x + 5.5)} ${r2(y + 4.5)} M ${r2(x + 5.5)} ${r2(y - 4.5)} L ${r2(x - 5.5)} ${r2(y + 4.5)}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></g>`;
+    }
+    if (notehead === "diamond") {
+      return `<path class="drum-head" d="M ${r2(x)} ${r2(y - 6)} L ${r2(x + 6)} ${r2(y)} L ${r2(x)} ${r2(y + 6)} L ${r2(x - 6)} ${r2(y)} Z" fill="currentColor"/>`;
+    }
+    return headShape(x, y, "black");
+  }
 
   function renderNote(score, S, le, beamed, stem) {
     const ev = le.ev;
+    if (S.staffType === "tab") return renderTabNote(score, S, le, beamed, stem);
+    if (ev.drumId) return renderDrumNote(score, S, le, beamed, stem);
     let s = renderGraceBefore(score, S, le);
     const kind = ev.dur.d === 1 ? "whole" : ev.dur.d === 2 ? "half" : "black";
-    const dir = stem ? stem.dir : stemDirForStaff(score, ev.notes, S);
+    const dir = stem ? stem.dir : stemDirForVoice(score, ev.notes, S, le.voice || ev.voice || 1);
     const sorted = ev.notes.slice().sort((a, b) => C.absStep(a) - C.absStep(b)); // 낮은 음부터
     const stemX = dir === "up" ? le.x + 4.8 : le.x - 4.8;
 
@@ -815,6 +909,45 @@
     return s;
   }
 
+  function renderTabNote(score, S, le, beamed, stem) {
+    const ev = le.ev;
+    if (ev.type === "rest") return renderRest(score, S, null, le);
+    const tab = ev.tab || (ev.notes && ev.notes[0] ? C.midiToStringFret(C.midiOf(ev.notes[0]), le.staff.part?.tuning || C.GUITAR_STANDARD_TUNING) : null) || { string: 1, fret: 0 };
+    const y = tabY(S, tab);
+    const text = tab.fret === "x" ? "x" : String(tab.fret);
+    const w = Math.max(12, text.length * 7 + 5);
+    let s = `<rect class="tab-fret-bg" x="${r2(le.x - w / 2)}" y="${r2(y - 7)}" width="${r2(w)}" height="13" rx="2"/>` +
+      `<text class="tab-fret" x="${r2(le.x)}" y="${r2(y + 4)}" text-anchor="middle">${esc(text)}</text>`;
+    if (ev.dur.d !== 1) {
+      const dir = stem ? stem.dir : "up";
+      const stemX = le.x + 7;
+      const tipY = stem ? stem.tipY : y - 3 * SP;
+      s += `<line class="stem tab-stem" x1="${r2(stemX)}" y1="${r2(y)}" x2="${r2(stemX)}" y2="${r2(tipY)}"/>`;
+      if (!beamed && ev.dur.d >= 8) s += glyph(ev.dur.d >= 16 ? "flag16Up" : "flag8Up", stemX, tipY);
+    }
+    return s;
+  }
+
+  function renderDrumNote(score, S, le, beamed, stem) {
+    const ev = le.ev;
+    const y = drumY(S, ev);
+    const dir = stem ? stem.dir : stemDirForVoice(score, ev.notes && ev.notes.length ? ev.notes : [C.spellMidi(ev.midi || C.drumSpec(ev.drumId).midi, 0)], S, le.voice || ev.voice || 1);
+    const stemX = dir === "up" ? le.x + 4.8 : le.x - 4.8;
+    let s = drumHeadShape(le.x, y, ev.notehead || C.drumSpec(ev.drumId).notehead);
+    if (ev.dur.dots) {
+      for (let d = 0; d < ev.dur.dots; d++) s += `<circle class="dot" cx="${r2(le.x + 10 + d * 6)}" cy="${r2(y - SP / 2)}" r="2.1" fill="currentColor"/>`;
+    }
+    if (ev.dur.d !== 1) {
+      const tipY = stem ? stem.tipY : y + (dir === "up" ? -3.5 * SP : 3.5 * SP);
+      s += `<line class="stem" x1="${r2(stemX)}" y1="${r2(y + (dir === "up" ? -1 : 1))}" x2="${r2(stemX)}" y2="${r2(tipY)}"/>`;
+      if (!beamed && ev.dur.d >= 8) {
+        const fname = ev.dur.d >= 16 ? (dir === "up" ? "flag16Up" : "flag16Down") : (dir === "up" ? "flag8Up" : "flag8Down");
+        s += glyph(fname, stemX, tipY);
+      }
+    }
+    return s;
+  }
+
   function renderGraceBefore(score, S, le) {
     const list = le.ev.graceBefore || [];
     if (!list.length) return "";
@@ -842,9 +975,11 @@
   function renderRest(score, S, M, le) {
     const ev = le.ev;
     let s = "";
-    const midY = S.middleY;
+    const voice = C.normalizeVoice(le.voice || ev.voice || 1);
+    const restShift = voice === 2 || voice === 4 ? SP * 1.2 : voice === 3 ? -SP * 1.2 : 0;
+    const midY = S.middleY + restShift;
     if (ev.full || ev.dur.d === 1) {
-      const y = S.yTop + SP; // 2번째 줄에 매달림
+      const y = S.yTop + SP + restShift; // 2번째 줄에 매달림
       s += fontReady ? glyph("restWhole", le.x - 6, y)
         : `<rect x="${r2(le.x - 6.5)}" y="${r2(y)}" width="13" height="5.2" fill="currentColor"/>`;
     } else if (ev.dur.d === 2) {
@@ -871,16 +1006,20 @@
     // 방향: 전체 음의 평균
     const all = [];
     for (const le of items) for (const n of le.ev.notes) all.push(n);
-    const dir = stemDirForStaff(score, all, S);
+    const dir = rn.voice ? stemDirForVoice(score, all, S, rn.voice) : stemDirForStaff(score, all, S);
 
     const xs = items.map(le => dir === "up" ? le.x + 4.8 : le.x - 4.8);
     // 각 이벤트의 극단 머리 y(스템 방향 쪽)
     const headYs = items.map(le => {
+      if (S.staffType === "tab") return tabY(S, le.ev.tab);
+      if (le.ev.drumId) return drumY(S, le.ev);
       const steps = le.ev.notes.map(C.absStep);
       const ext = dir === "up" ? Math.max(...steps) : Math.min(...steps);
       return yForStep(S, score, ext);
     });
     const baseYs = items.map(le => {
+      if (S.staffType === "tab") return tabY(S, le.ev.tab);
+      if (le.ev.drumId) return drumY(S, le.ev);
       const steps = le.ev.notes.map(C.absStep);
       const ext = dir === "up" ? Math.min(...steps) : Math.max(...steps);
       return yForStep(S, score, ext);
@@ -943,19 +1082,18 @@
     let s = "";
     for (const ref of C.staffRefs(score)) {
       for (let m = 0; m < ref.measures.length; m++) {
-        const evs = ref.measures[m].events;
-        for (let e = 0; e < evs.length; e++) {
-          const ev = evs[e];
+        for (const entry of C.measureEntries(ref.measures[m], { score, includeSilent: true })) {
+          const ev = entry.ev;
           if (ev.type !== "note") continue;
           const tied = ev.notes.filter(n => n.tie);
           if (!tied.length) continue;
-          const nx = C.nextEvent(score, m, e, ref);
+          const nx = C.nextEvent(score, m, entry.e, { ...ref, voice: entry.voice });
           if (!nx) continue;
           const le1 = L.eventsById.get(ev.id);
           const le2 = L.eventsById.get(nx.ev.id);
           if (!le1 || !le2) continue;
           for (const n of tied) {
-            const dir = stemDirForStaff(score, ev.notes, le1.staff); // 타이는 스템 반대쪽
+            const dir = stemDirForVoice(score, ev.notes, le1.staff, entry.voice); // 타이는 스템 반대쪽
             const curveDown = dir === "up";
             if (le1.sys === le2.sys) {
               s += tiePath(le1.x + 7, le2.x - 7, yForStep(le1.staff, score, C.absStep(n)), curveDown);

@@ -74,11 +74,31 @@
       attack: 0.05, decayTau: 0, sustain: 0.9, release: 0.15,
       filter: null, percussive: false, vibrato: { rate: 5.2, depth: 5 }, breath: 0.04,
     },
+    guitar: {
+      label: "기타", gm: 24,
+      partials: [
+        { type: "triangle", ratio: 1, gain: 0.42 },
+        { type: "sine", ratio: 2, gain: 0.12 },
+        { type: "sine", ratio: 3, gain: 0.06 },
+      ],
+      attack: 0.004, decayTau: 0.5, sustain: 0.0001, release: 0.18,
+      filter: { type: "lowpass", base: 1800, perVel: 2600, q: 0.35 }, percussive: true,
+    },
     chiptune: {
       label: "8비트", gm: 80,
       partials: [{ type: "square", ratio: 1, gain: 0.16 }],
       attack: 0.002, decayTau: 0, sustain: 0.8, release: 0.04,
       filter: { type: "lowpass", base: 5000, perVel: 2000, q: 0.2 }, percussive: false,
+    },
+    drums: {
+      label: "드럼 키트", gm: 0,
+      partials: [
+        { type: "triangle", ratio: 0.5, gain: 0.22 },
+        { type: "square", ratio: 1.0, gain: 0.08 },
+        { type: "sine", ratio: 2.4, gain: 0.04 },
+      ],
+      attack: 0.001, decayTau: 0.16, sustain: 0.0001, release: 0.05,
+      filter: { type: "lowpass", base: 900, perVel: 2600, q: 0.8 }, percussive: true,
     },
   };
 
@@ -424,8 +444,9 @@
     const seen = new Set(["0/1"]);
     for (const ref of refs) {
       for (let m = 0; m < ref.measures.length; m++) {
-        let tick = Fraction.ZERO;
-        for (const ev of ref.measures[m].events) {
+        for (const entry of C.measureEntries(ref.measures[m], { score })) {
+          const ev = entry.ev;
+          const tick = entry.tick;
           if (ev.tempo && !isNaN(+ev.tempo)) {
             const abs = L.mul(new Fraction(m, 1)).add(tick);
             const key = abs.toString();
@@ -433,7 +454,6 @@
             if (key === "0/1") changes[0].tempo = tempo;
             else if (!seen.has(key)) { changes.push({ abs, tempo }); seen.add(key); }
           }
-          tick = tick.add(C.durValue(ev.dur));
         }
       }
     }
@@ -503,12 +523,15 @@
 
     for (const ref of refs) {
       let vel = VELS.mf;
+      let soundFlag = null;
       for (const item of expandedPlan) {
         const m = item.m;
-        const evs = ref.measures[m]?.events || [C.fullRest(score)];
-        let tick = Fraction.ZERO;
-        for (let e = 0; e < evs.length; e++) {
-          const ev = evs[e];
+        const entries = ref.measures[m] ? C.measureEntries(ref.measures[m], { score }) : [{ ev: C.fullRest(score), e: 0, voice: 1, tick: Fraction.ZERO }];
+        for (const entry of entries) {
+          const ev = entry.ev;
+          const e = entry.e;
+          const voice = entry.voice;
+          const tick = entry.tick;
           const abs = L.mul(new Fraction(m, 1)).add(tick);
           const evLen = C.durValue(ev.dur);
           const t = item.startSec + tempoMap.secondsAt(abs) - item.baseStartSec + swingDelay(score, tempoMap, abs, tick, evLen);
@@ -517,6 +540,7 @@
             vel = VELS[ev.dynamic];
             dynList.push({ t, v: vel });
           }
+          if (ev.soundFlag) soundFlag = ev.soundFlag === "arco" || ev.soundFlag === "open" ? null : ev.soundFlag;
           posById.set(ev.id, { t, vel });
           timelineEvents.push({ id: ev.id, t, mIdx: m, pass: item.pass, partIdx: ref.partIdx, staffIdx: ref.staffIdx });
           if (ev.type === "note") {
@@ -537,24 +561,25 @@
             });
             const midis = [];
             for (const note of ev.notes) {
-              const midi = C.midiOf(note);
-              const key = item.planIdx + ":" + ref.globalIdx + ":" + m + ":" + e + ":" + midi;
+              const midi = ev.drumId ? (ev.midi || C.drumSpec(ev.drumId).midi) : C.midiOf(note);
+              const key = item.planIdx + ":" + ref.globalIdx + ":" + voice + ":" + m + ":" + e + ":" + midi;
               if (consumed.has(key)) continue;
               // 타이 체인 길이 합산
               let totalLen = evLen;
-              let cur = { ...ref, m, e, ev }, curNote = note;
+              let cur = { ...ref, m, e, voice, ev }, curNote = note;
               while (curNote.tie) {
-                const nx = C.nextEvent(score, cur.m, cur.e, ref);
+                const nx = C.nextEvent(score, cur.m, cur.e, { ...ref, voice });
                 if (!nx || nx.ev.type !== "note") break;
                 const n2 = nx.ev.notes.find(n => C.midiOf(n) === midi && n.step === curNote.step);
                 if (!n2) break;
-                consumed.add(item.planIdx + ":" + ref.globalIdx + ":" + nx.m + ":" + nx.e + ":" + midi);
+                consumed.add(item.planIdx + ":" + ref.globalIdx + ":" + voice + ":" + nx.m + ":" + nx.e + ":" + midi);
                 totalLen = totalLen.add(C.durValue(nx.ev.dur));
                 cur = nx; curNote = n2;
               }
               midis.push({ midi, durSec: tempoMap.durationSec(abs, totalLen), durVal: totalLen });
             }
             if (midis.length) {
+              if (ev.arpeggiate) midis.forEach((n, i) => { n.offsetSec = i * 0.028; });
               const ar = ev.artics || [];
               let gate = 0.95, boost = 0;
               if (slurCover.has(ev.id)) gate = 1.02;            // 레가토
@@ -563,18 +588,21 @@
               if (ar.includes("fermata")) gate = Math.max(gate, 1.05);
               if (ar.includes("accent")) boost += 0.14;
               if (ar.includes("marcato")) { boost += 0.2; if (!ar.includes("staccato")) gate = Math.min(gate, 0.92); }
+              if (soundFlag === "pizzicato" || soundFlag === "palmMute") gate = Math.min(gate, 0.38);
+              if (soundFlag === "mute") { gate = Math.min(gate, 0.72); boost -= 0.08; }
+              if (soundFlag === "tremolo") { gate = Math.min(gate, 0.55); boost += 0.04; }
+              if (ev.tremolo) { gate = Math.min(gate, 0.42); boost += 0.03; }
               events.push({
                 id: ev.id, t, durSec: dval, midis, mIdx: m,
                 absVal: L.mul(new Fraction(item.planIdx, 1)).add(tick),
                 partIdx: ref.partIdx, staffIdx: ref.staffIdx,
-                channel: Math.min(15, ref.partIdx),
-                instrument: ref.instrument,
+                channel: ev.drumId ? 9 : Math.min(15, ref.partIdx),
+                instrument: ev.drumId ? "drums" : ref.instrument,
                 mixer: mixerFor(score, ref.part),
                 velBase: vel, boost, gate,
               });
             }
           }
-          tick = tick.add(evLen);
         }
       }
     }
@@ -668,8 +696,9 @@
         const preset = INSTRUMENTS[ev.instrument] || INSTRUMENTS[score.instrument] || INSTRUMENTS.piano;
         for (const n of ev.midis) {
           const dur = Math.max(0.05, n.durSec * (ev.gate || 0.95));
-          if (!scheduleSampleNote(ev.instrument || score.instrument, n.midi, when, dur, ev.vel || 0.7)) {
-            scheduleNote(preset, n.midi, when, dur, ev.vel || 0.7, ev.mixer?.pan || 0);
+          const noteWhen = when + (n.offsetSec || 0);
+          if (!scheduleSampleNote(ev.instrument || score.instrument, n.midi, noteWhen, dur, ev.vel || 0.7)) {
+            scheduleNote(preset, n.midi, noteWhen, dur, ev.vel || 0.7, ev.mixer?.pan || 0);
           }
         }
         player.nextIdx++;

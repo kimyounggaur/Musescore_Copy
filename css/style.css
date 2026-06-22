@@ -84,6 +84,33 @@ button.tbtn, .tbtn {
   min-width: 28px; padding: 0 7px;
 }
 .artic-btn { min-width: 30px; }
+.voice-buttons { display: inline-flex; align-items: center; gap: 3px; flex: none; }
+.voice-btn { min-width: 34px; padding: 0 7px; font-size: 12.5px; font-weight: 800; }
+.drum-pad {
+  display: none; align-items: center; gap: 6px;
+  padding: 6px 10px; background: #242830; border-bottom: 1px solid var(--line);
+  overflow-x: auto; scrollbar-width: thin;
+}
+.drum-pad.show { display: flex; }
+.drum-btn {
+  appearance: none; height: 30px; padding: 0 10px;
+  border: 1px solid var(--line); border-radius: 7px;
+  background: #1d2025; color: var(--text); font: inherit; font-size: 12.5px; font-weight: 700;
+  white-space: nowrap; cursor: pointer;
+}
+.drum-btn:hover { background: var(--panel-2); border-color: rgba(79, 141, 249, .55); }
+.drum-btn:active { transform: translateY(1px); }
+.cmd-palette { width: min(520px, calc(100vw - 40px)); padding: 10px; }
+#cmd-input {
+  width: 100%; height: 38px; border-radius: 8px; border: 1px solid var(--line);
+  background: #1d2025; color: var(--text); font: inherit; padding: 0 12px; outline: none;
+}
+.cmd-list { margin-top: 8px; display: grid; gap: 4px; max-height: 320px; overflow: auto; }
+.cmd-item {
+  width: 100%; height: 34px; border: 0; border-radius: 7px; background: transparent;
+  color: var(--text); font: inherit; text-align: left; padding: 0 10px; cursor: pointer;
+}
+.cmd-item:hover, .cmd-item.active { background: rgba(79, 141, 249, .22); }
 
 .tempo-box { display: inline-flex; align-items: center; gap: 5px; padding: 0 6px; color: var(--text-dim); }
 .tempo-box svg { width: 14px; height: 18px; }
@@ -175,6 +202,15 @@ select.tsel {
 .barline .repeat-dot { fill: #20242b; }
 .volta path { fill: none; stroke: var(--ink); stroke-width: 1.2; stroke-linecap: square; stroke-linejoin: round; }
 .volta text { fill: var(--ink); font-family: Georgia, "Times New Roman", serif; font-size: 13px; font-weight: 700; }
+.tab-clef { fill: #20242b; font-family: system-ui, sans-serif; letter-spacing: 0; }
+.tab-fret-bg { fill: var(--paper); stroke: none; }
+.tab-fret { fill: var(--ink); font-family: Arial, Helvetica, sans-serif; font-size: 12px; font-weight: 700; }
+.fretboard line { stroke: var(--ink); stroke-width: .85; }
+.fretboard line.nut { stroke-width: 2.2; }
+.fretboard circle { fill: var(--ink); }
+.fretboard text { fill: var(--ink); font-family: Arial, Helvetica, sans-serif; font-size: 7.5px; font-weight: 700; }
+.fretboard .fret-num { font-size: 7px; }
+.glissando-mark, .tremolo-mark, .arpeggio-mark { stroke: var(--ink); stroke-width: 1.25; fill: none; stroke-linecap: round; stroke-linejoin: round; }
 .mnum { font-size: 11px; fill: #8b93a0; font-family: inherit; }
 .ev { color: var(--ink); cursor: pointer; }
 #canvas.input-mode .ev { cursor: crosshair; }

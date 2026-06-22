@@ -88,6 +88,8 @@
   <div class="tspacer"></div>
 
   <button id="btn-piano" class="tbtn" title="화면 피아노 건반 보이기/숨기기">🎹 <span class="lbl">건반</span></button>
+  <button id="btn-midi" class="tbtn" title="Web MIDI 입력 켜기/끄기">MIDI</button>
+  <select id="midi-select" class="tsel compact" title="MIDI 입력 장치"></select>
   <button id="btn-help" class="tbtn" title="도움말·단축키">
     <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.4 9.2a2.7 2.7 0 1 1 3.5 3.3c-.7.3-.9.8-.9 1.5v.4"/><circle cx="12" cy="17.3" r="0.6" fill="currentColor"/></svg>
   </button>
@@ -99,6 +101,14 @@
     <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m4 20 .8-3.2L16.6 5a1.8 1.8 0 0 1 2.6 0l.8.8a1.8 1.8 0 0 1 0 2.6L8.2 19.2 4 20Z"/><path d="m14.5 7 2.5 2.5"/></svg>
     <span>입력 모드</span> <kbd>N</kbd>
   </button>
+
+  <div class="tsep"></div>
+  <span id="voice-buttons" class="voice-buttons" role="group" aria-label="성부 선택">
+    <button class="tbtn voice-btn" data-voice="1" title="Voice 1 (Alt+1)">V1</button>
+    <button class="tbtn voice-btn" data-voice="2" title="Voice 2 (Alt+2)">V2</button>
+    <button class="tbtn voice-btn" data-voice="3" title="Voice 3 (Alt+3)">V3</button>
+    <button class="tbtn voice-btn" data-voice="4" title="Voice 4 (Alt+4)">V4</button>
+  </span>
 
   <div class="tsep"></div>
   <span id="dur-buttons" role="group" aria-label="음길이"></span>
@@ -136,6 +146,9 @@
   <button id="btn-tempo-mark" class="tbtn" title="선택 위치에 템포 표시 (Shift+T)">♩=</button>
   <button id="btn-rehearsal" class="tbtn" title="리허설 마크 (R)">R</button>
   <button id="btn-staff-text" class="tbtn" title="스태프 텍스트 (Shift+L)">Txt</button>
+  <button id="btn-gliss" class="tbtn" title="글리산도">Gliss.</button>
+  <button id="btn-arpeggio" class="tbtn" title="아르페지오">Arp.</button>
+  <button id="btn-tremolo" class="tbtn" title="트레몰로">Trem.</button>
 
   <div class="tsep"></div>
   <button id="btn-repeat-start" class="tbtn" title="시작 반복 마디선">|:</button>
@@ -180,6 +193,19 @@
     <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 7h14M9.5 7V5.4A1.4 1.4 0 0 1 10.9 4h2.2a1.4 1.4 0 0 1 1.4 1.4V7M7 7l.8 12a1.6 1.6 0 0 0 1.6 1.5h5.2a1.6 1.6 0 0 0 1.6-1.5L17 7"/><path d="M10.2 11v5.5M13.8 11v5.5"/></svg>
     <span class="lbl">삭제</span>
   </button>
+</div>
+
+<!-- ═══════════ 드럼 입력 패드 ═══════════ -->
+<div id="drum-pad" class="drum-pad" aria-label="드럼 입력 패드">
+  <button class="drum-btn" data-drum="kick" title="Kick (K)">Kick</button>
+  <button class="drum-btn" data-drum="snare" title="Snare (S)">Snare</button>
+  <button class="drum-btn" data-drum="closed-hihat" title="Closed hihat (H)">Closed HH</button>
+  <button class="drum-btn" data-drum="open-hihat" title="Open hihat (O)">Open HH</button>
+  <button class="drum-btn" data-drum="crash" title="Crash (C)">Crash</button>
+  <button class="drum-btn" data-drum="ride" title="Ride">Ride</button>
+  <button class="drum-btn" data-drum="low-tom" title="Low tom">Low Tom</button>
+  <button class="drum-btn" data-drum="mid-tom" title="Mid tom">Mid Tom</button>
+  <button class="drum-btn" data-drum="high-tom" title="High tom">High Tom</button>
 </div>
 
 <!-- ═══════════ 악보 캔버스 ═══════════ -->
@@ -234,11 +260,14 @@
         <option value="piano">피아노 2단</option>
         <option value="flute-piano">플루트 + 피아노 3단</option>
         <option value="string-quartet">현악4중주</option>
+        <option value="drumkit">드럼 키트</option>
+        <option value="guitar-tab">기타 + TAB</option>
       </select>
       <label for="set-clef">음자리표</label>
       <select id="set-clef">
         <option value="treble">높은음자리표 𝄞</option>
         <option value="bass">낮은음자리표 𝄢</option>
+        <option value="percussion">타악 보표</option>
       </select>
       <label for="set-key">조표</label>
       <select id="set-key"></select>
@@ -251,6 +280,8 @@
       </select>
       <label for="set-tempo">빠르기 ♩=</label>
       <input id="set-tempo" type="number" min="30" max="280">
+      <label for="set-measures-system">마디/줄</label>
+      <input id="set-measures-system" type="number" min="0" max="16" placeholder="자동">
     </div>
 
     <div class="form-row">
@@ -343,7 +374,8 @@
       <div class="hrow"><span>선택 음표 음높이 변경</span><kbd>↑</kbd> <kbd>↓</kbd> 또는 드래그</div>
       <div class="hrow"><span>음이름으로 재지정</span><kbd>A</kbd>~<kbd>G</kbd></div>
       <div class="hrow"><span>복사/붙여넣기/잘라내기</span><kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>V</kbd> / <kbd>X</kbd></div>
-      <div class="hrow"><span>코드 기호 입력</span><kbd>Ctrl</kbd>+<kbd>K</kbd></div>
+      <div class="hrow"><span>명령 팔레트</span><kbd>Ctrl</kbd>+<kbd>K</kbd></div>
+      <div class="hrow"><span>코드 기호 입력</span>명령 팔레트 또는 툴바 <b>C7</b></div>
       <div class="hrow"><span>리허설/스태프 텍스트</span><kbd>R</kbd> / <kbd>Shift</kbd>+<kbd>L</kbd></div>
       <div class="hrow"><span>시작/끝 반복</span>툴바 <b>|:</b> / <b>:|</b></div>
       <div class="hrow"><span>1·2번 엔딩</span>범위 선택 후 툴바 <b>1.</b> / <b>2.</b></div>
@@ -394,6 +426,14 @@
     <div class="dlg-actions">
       <form method="dialog"><button class="tbtn primary">확인</button></form>
     </div>
+  </div>
+</dialog>
+
+<!-- ═══════════ 명령 팔레트 ═══════════ -->
+<dialog id="dlg-command">
+  <div class="cmd-palette">
+    <input id="cmd-input" type="text" placeholder="명령 검색" autocomplete="off">
+    <div id="cmd-list" class="cmd-list"></div>
   </div>
 </dialog>
 

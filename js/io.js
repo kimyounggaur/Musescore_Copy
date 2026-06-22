@@ -109,17 +109,27 @@
     n = Math.round(+n || 0);
     return n > 0 ? "#".repeat(n) : n < 0 ? "b".repeat(-n) : "";
   }
-  function exportHarmony(chord, staffTag) {
+  function exportFrame(fb) {
+    if (!fb || !Array.isArray(fb.positions)) return "";
+    const notes = fb.positions.map((val, idx) => {
+      const string = idx + 1;
+      const fret = val === "x" ? -1 : Math.max(0, val | 0 || 0);
+      return `<frame-note><string>${string}</string><fret>${fret}</fret></frame-note>`;
+    }).join("");
+    return `<frame><frame-strings>${fb.strings || 6}</frame-strings><frame-frets>${fb.frets || 4}</frame-frets><first-fret>${fb.firstFret || 1}</first-fret>${notes}</frame>`;
+  }
+  function exportHarmony(chord, staffTag, fretboard) {
     const ch = C.cloneChordSymbol(chord);
+    const frame = exportFrame(fretboard);
     if (!ch || !ch.root) {
       const raw = ch ? (ch.normalized || ch.raw || "") : "";
-      return raw ? `   <harmony><root><root-step>C</root-step></root><kind text="${xmlEsc(raw)}">other</kind>${staffTag}</harmony>\n` : "";
+      return raw ? `   <harmony><root><root-step>C</root-step></root><kind text="${xmlEsc(raw)}">other</kind>${frame}${staffTag}</harmony>\n` : "";
     }
     const q = CHORD_KIND_EXPORT[ch.quality] || { kind: "other", text: ch.quality || ch.normalized || "" };
     const rootAlter = ch.rootAlter ? `<root-alter>${ch.rootAlter}</root-alter>` : "";
     const kindText = q.text !== undefined ? ` text="${xmlEsc(q.text)}"` : "";
     const bass = ch.bass ? `<bass><bass-step>${ch.bass}</bass-step>${ch.bassAlter ? `<bass-alter>${ch.bassAlter}</bass-alter>` : ""}</bass>` : "";
-    return `   <harmony><root><root-step>${ch.root}</root-step>${rootAlter}</root><kind${kindText}>${q.kind}</kind>${bass}${staffTag}</harmony>\n`;
+    return `   <harmony><root><root-step>${ch.root}</root-step>${rootAlter}</root><kind${kindText}>${q.kind}</kind>${bass}${frame}${staffTag}</harmony>\n`;
   }
 
   function exportMusicXML(score) {
@@ -156,8 +166,9 @@
  <part-list>\n`;
     score.parts.forEach((part, pIdx) => {
       const gm = (SF.playback.INSTRUMENTS[part.instrument] || SF.playback.INSTRUMENTS.piano).gm;
+      const channel = part.instrument === "drums" ? 10 : pIdx + 1;
       xml += `  <score-part id="P${pIdx + 1}"><part-name>${xmlEsc(part.name || "악기")}</part-name>
-   <midi-instrument id="P${pIdx + 1}-I1"><midi-channel>${pIdx + 1}</midi-channel><midi-program>${gm + 1}</midi-program></midi-instrument>
+   <midi-instrument id="P${pIdx + 1}-I1"><midi-channel>${channel}</midi-channel><midi-program>${gm + 1}</midi-program></midi-instrument>
   </score-part>\n`;
     });
     xml += ` </part-list>\n`;
@@ -190,12 +201,20 @@
         partRefs.forEach((ref, sIdx) => {
           if (sIdx > 0) xml += `   <backup><duration>${measureUnits}</duration></backup>\n`;
           const mm = ref.measures[mIdx] || { events: [{ id: "", type: "rest", full: true, dur: { n: L.n, d: L.d, dots: 0 }, notes: [] }] };
-          mm.events.forEach((ev, eIdx) => {
+          const voiceLists = [];
+          for (let voice = 1; voice <= C.VOICE_COUNT; voice++) {
+            const evs = C.getVoiceEvents(mm, voice, score);
+            if (voice === 1 || !C.voiceIsEmpty(evs)) voiceLists.push({ voice, evs });
+          }
+          voiceLists.forEach((voiceList, vListIdx) => {
+          if (vListIdx > 0) xml += `   <backup><duration>${measureUnits}</duration></backup>\n`;
+          const { voice, evs } = voiceList;
+          evs.forEach((ev, eIdx) => {
             const staffTag = partRefs.length > 1 ? `<staff>${sIdx + 1}</staff>` : "";
             const tp = ev.dur.tuplet;
             const timeMod = tp ? `<time-modification><actual-notes>${tp.actual}</actual-notes><normal-notes>${tp.normal}</normal-notes></time-modification>` : "";
-            const tpStart = tp && (!mm.events[eIdx - 1] || mm.events[eIdx - 1].dur.tuplet?.id !== tp.id);
-            const tpStop = tp && (!mm.events[eIdx + 1] || mm.events[eIdx + 1].dur.tuplet?.id !== tp.id);
+            const tpStart = tp && (!evs[eIdx - 1] || evs[eIdx - 1].dur.tuplet?.id !== tp.id);
+            const tpStop = tp && (!evs[eIdx + 1] || evs[eIdx + 1].dur.tuplet?.id !== tp.id);
             if (ev.tempo) {
               xml += `   <direction placement="above"><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${Math.round(+ev.tempo)}</per-minute></metronome></direction-type><sound tempo="${Math.round(+ev.tempo)}"/></direction>\n`;
             }
@@ -206,7 +225,7 @@
               xml += `   <direction placement="above"><direction-type><words>${xmlEsc(ev.staffText)}</words></direction-type>${partRefs.length > 1 ? `<staff>${sIdx + 1}</staff>` : ""}</direction>\n`;
             }
             if (ev.chordSymbol) {
-              xml += exportHarmony(ev.chordSymbol, staffTag);
+              xml += exportHarmony(ev.chordSymbol, staffTag, ev.fretboard);
             }
             if (ev.dynamic && DYN_SOUND[ev.dynamic]) {
               xml += `   <direction placement="below"><direction-type><dynamics><${ev.dynamic}/></dynamics></direction-type>` +
@@ -218,30 +237,41 @@
 
             if (ev.type === "rest") {
               if (ev.full) {
-                xml += `   <note><rest measure="yes"/><duration>${measureUnits}</duration><voice>1</voice>${staffTag}</note>\n`;
+                xml += `   <note><rest measure="yes"/><duration>${measureUnits}</duration><voice>${voice}</voice>${staffTag}</note>\n`;
               } else {
                 let notations = "";
                 if (tpStart) notations += `<tuplet type="start"/>`;
                 if (tpStop) notations += `<tuplet type="stop"/>`;
-                xml += `   <note><rest/><duration>${units(ev.dur)}</duration><voice>1</voice><type>${TYPE_NAMES[ev.dur.d]}</type>${"<dot/>".repeat(ev.dur.dots || 0)}${timeMod}${staffTag}${notations ? `<notations>${notations}</notations>` : ""}</note>\n`;
+                xml += `   <note><rest/><duration>${units(ev.dur)}</duration><voice>${voice}</voice><type>${TYPE_NAMES[ev.dur.d]}</type>${"<dot/>".repeat(ev.dur.dots || 0)}${timeMod}${staffTag}${notations ? `<notations>${notations}</notations>` : ""}</note>\n`;
               }
             } else {
+              if (ev.drumId) {
+                const spec = C.drumSpec(ev.drumId);
+                let notations = "";
+                if (tpStart) notations += `<tuplet type="start"/>`;
+                if (tpStop) notations += `<tuplet type="stop"/>`;
+                xml += `   <note><unpitched><display-step>${xmlEsc(ev.displayStep || spec.displayStep)}</display-step><display-octave>${ev.displayOctave || spec.displayOctave}</display-octave></unpitched>` +
+                  `<duration>${units(ev.dur)}</duration><instrument id="P${pIdx + 1}-${xmlEsc(ev.drumId)}"/><voice>${voice}</voice><type>${TYPE_NAMES[ev.dur.d]}</type>${"<dot/>".repeat(ev.dur.dots || 0)}${timeMod}${staffTag}` +
+                  `${ev.notehead && ev.notehead !== "normal" ? `<notehead>${ev.notehead === "circle-x" ? "circle-x" : ev.notehead}</notehead>` : ""}` +
+                  `${notations ? `<notations>${notations}</notations>` : ""}</note>\n`;
+                return;
+              }
               for (const gr of ev.graceBefore || []) {
                 (gr.notes || []).forEach((note, nIdx) => {
                   xml += `   <note>${nIdx > 0 ? "<chord/>" : `<grace slash="${(gr.kind || "acciaccatura") === "acciaccatura" ? "yes" : "no"}"/>`}<pitch><step>${C.STEP_EN[note.step]}</step>` +
                     (note.alter ? `<alter>${note.alter}</alter>` : "") +
-                    `<octave>${note.oct}</octave></pitch><voice>1</voice><type>eighth</type>${staffTag}</note>\n`;
+                    `<octave>${note.oct}</octave></pitch><voice>${voice}</voice><type>eighth</type>${staffTag}</note>\n`;
                 });
               }
               ev.notes.forEach((note, nIdx) => {
-                const stop = C.isTiedFrom(score, mIdx, eIdx, note, ref);
+                const stop = C.isTiedFrom(score, mIdx, eIdx, note, { ...ref, voice });
                 const start = !!note.tie;
                 xml += `   <note>${nIdx > 0 ? "<chord/>" : ""}<pitch><step>${C.STEP_EN[note.step]}</step>` +
                   (note.alter ? `<alter>${note.alter}</alter>` : "") +
                   `<octave>${note.oct}</octave></pitch>` +
                   `<duration>${units(ev.dur)}</duration>` +
                   (stop ? `<tie type="stop"/>` : "") + (start ? `<tie type="start"/>` : "") +
-                  `<voice>1</voice><type>${TYPE_NAMES[ev.dur.d]}</type>${"<dot/>".repeat(ev.dur.dots || 0)}${timeMod}${staffTag}`;
+                  `<voice>${voice}</voice><type>${TYPE_NAMES[ev.dur.d]}</type>${"<dot/>".repeat(ev.dur.dots || 0)}${timeMod}${staffTag}`;
                 let notations = "";
                 if (stop) notations += `<tied type="stop"/>`;
                 if (start) notations += `<tied type="start"/>`;
@@ -258,6 +288,7 @@
                     (ar.includes("tenuto") ? "<tenuto/>" : "");
                   if (artXml) notations += `<articulations>${artXml}</articulations>`;
                   if (ar.includes("fermata")) notations += `<fermata/>`;
+                  if (ev.tab) notations += `<technical><string>${Math.max(1, Math.min(6, ev.tab.string || 1))}</string><fret>${Math.max(0, Math.min(24, ev.tab.fret || 0))}</fret></technical>`;
                 }
                 if (notations) xml += `<notations>${notations}</notations>`;
                 if (nIdx === 0) {
@@ -272,6 +303,7 @@
             for (const w of wedgeStop.get(ev.id) || []) {
               xml += `   <direction placement="below"><direction-type><wedge type="stop" number="${w.num}"/></direction-type>${partRefs.length > 1 ? `<staff>${sIdx + 1}</staff>` : ""}</direction>\n`;
             }
+          });
           });
         });
         if (mmMeta.endRepeat || mmMeta.endingStop) {
@@ -353,6 +385,37 @@
     sf: "f", sfz: "f", fz: "f", rf: "f", rfz: "f", fp: "f", sffz: "ff", pf: "mf",
   };
   const STEP_IDX = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
+  function drumIdFromUnpitched(step, octave, notehead) {
+    const key = String(step || "").toUpperCase() + String(octave || "");
+    const byPos = {
+      F4: "kick",
+      A4: "low-tom",
+      C5: "snare",
+      D5: "mid-tom",
+      E5: "high-tom",
+      F5: notehead === "x" ? "ride" : "ride",
+      G5: notehead === "circle-x" ? "open-hihat" : "closed-hihat",
+      A5: "crash",
+    };
+    return byPos[key] || (notehead === "x" || notehead === "circle-x" ? "closed-hihat" : "snare");
+  }
+  function parseFrame(frameEl) {
+    if (!frameEl) return null;
+    const strings = parseInt(textOf(frameEl, "frame-strings"), 10) || 6;
+    const positions = Array(strings).fill("x");
+    for (const n of frameEl.querySelectorAll("frame-note")) {
+      const string = parseInt(textOf(n, "string"), 10);
+      const fret = parseInt(textOf(n, "fret"), 10);
+      if (string >= 1 && string <= strings) positions[string - 1] = fret < 0 ? "x" : fret;
+    }
+    return {
+      strings,
+      frets: parseInt(textOf(frameEl, "frame-frets"), 10) || 4,
+      firstFret: parseInt(textOf(frameEl, "first-fret"), 10) || 1,
+      positions,
+      fingers: [],
+    };
+  }
 
   function parseMusicXML(text) {
     const doc = new DOMParser().parseFromString(text, "application/xml");
@@ -405,10 +468,10 @@
     // ---- 본문 스캔 ----
     let divisions = 1;
     let timeSig = null, keySig = null, clef = null, tempo = null;
-    let chosenVoice = null, chosenStaff = null;
+    let chosenStaff = null;
     let pendingDynamic = null;
-    let pendingChordSymbol = null;
-    let pendingTempo = null, pendingRehearsal = null, pendingStaffText = null;
+    let pendingChordSymbol = null, pendingFretboard = null;
+    let pendingTempo = null, pendingRehearsal = null, pendingStaffText = null, pendingSoundFlag = null;
     const pendingWedges = new Map(); // number → {type, startItem|null}
     const wedgePairs = [];
     const items = []; // 선택 성부의 음표들
@@ -416,6 +479,8 @@
     const measureMeta = [];
     let pendingGrace = [];
     let lastNoteItem = null;
+    let hasPercussion = false;
+    let hasTab = false;
 
     const durFrac = (el) => {
       const d = Math.round(+textOf(el, "duration") || 0);
@@ -466,7 +531,7 @@
             if (rehearsal) pendingRehearsal = rehearsal;
             const words = [...el.querySelectorAll("direction-type words")]
               .map(w => w.textContent.trim()).filter(Boolean).join(" ");
-            if (words) pendingStaffText = words;
+            if (words) { pendingStaffText = words; pendingSoundFlag = C.detectSoundFlag(words); }
             const dynEl = el.querySelector("direction-type dynamics > *");
             if (dynEl) {
               const mark = DYN_IMPORT[dynEl.tagName];
@@ -508,6 +573,7 @@
             ? root + alterSuffix(rootAlter) + kindText + (bass ? "/" + bass + alterSuffix(bassAlter) : "")
             : kindText;
           pendingChordSymbol = C.parseChordSymbol(raw);
+          pendingFretboard = parseFrame(el.querySelector("frame")) || (pendingChordSymbol ? C.getDefaultFretboard(pendingChordSymbol) : null);
         } else if (tag === "barline") {
           const repeat = el.querySelector("repeat");
           if (repeat) {
@@ -527,15 +593,13 @@
           const isChord = !!el.querySelector(":scope > chord");
           const isRest = !!el.querySelector(":scope > rest");
           const isGrace = !!el.querySelector(":scope > grace");
-          const voice = textOf(el, ":scope > voice") || "1";
+          const voice = Math.max(1, Math.min(C.VOICE_COUNT || 4, parseInt(textOf(el, ":scope > voice") || "1", 10) || 1));
           const staff = textOf(el, ":scope > staff") || "1";
           const dF = durFrac(el);
-          if (chosenVoice === null && !isRest) chosenVoice = voice;
           if (chosenStaff === null) chosenStaff = staff;
-          const mine = (chosenVoice === null || voice === chosenVoice) && staff === chosenStaff;
+          const mine = staff === chosenStaff;
           if (!mine) {
             if (staff !== chosenStaff) countWarn("staves", "여러 단 보표 중 첫 단만 가져옴");
-            else countWarn("voice", "두 번째 이후 성부는 건너뜀");
             if (!isChord) { cur = cur.add(dF); if (cur.gt(maxCur)) maxCur = cur; }
             continue;
           }
@@ -546,7 +610,37 @@
           // ---- 음높이 ----
           const pEl = el.querySelector(":scope > pitch");
           if (!pEl) {
-            countWarn("unpitched", "무율(타악) 음표는 무시");
+            const uEl = el.querySelector(":scope > unpitched");
+            if (uEl && !isRest) {
+              const displayStep = textOf(uEl, "display-step").toUpperCase() || "C";
+              const displayOctave = parseInt(textOf(uEl, "display-octave") || "5", 10) || 5;
+              const notehead = textOf(el, ":scope > notehead") || "normal";
+              const drumId = drumIdFromUnpitched(displayStep, displayOctave, notehead);
+              const spec = C.drumSpec(drumId);
+              hasPercussion = true;
+              const pitch = C.spellMidi(spec.midi, keySig ?? 0);
+              const item = {
+                mIdx, tick: cur, dur: dF, voice,
+                pitches: [{ ...pitch, tie: false }],
+                drumId, midi: spec.midi, staffLine: spec.staffLine, notehead: notehead === "normal" ? spec.notehead : notehead,
+                displayStep, displayOctave,
+                graceBefore: pendingGrace,
+                lyric: null, lyrics: [], artics: [], dynamic: pendingDynamic, chordSymbol: pendingChordSymbol, fretboard: pendingFretboard,
+                tempo: pendingTempo, rehearsal: pendingRehearsal, staffText: pendingStaffText, soundFlag: pendingSoundFlag,
+                slurStarts: [], slurStops: [],
+              };
+              pendingDynamic = null;
+              pendingChordSymbol = null;
+              pendingFretboard = null;
+              pendingGrace = [];
+              pendingTempo = null; pendingRehearsal = null; pendingStaffText = null; pendingSoundFlag = null;
+              items.push(item);
+              lastNoteItem = item;
+              cur = cur.add(dF);
+              if (cur.gt(maxCur)) maxCur = cur;
+              continue;
+            }
+            countWarn("unpitched", "매핑할 수 없는 무율(타악) 음표는 무시");
             if (!isChord) { cur = cur.add(dF); if (cur.gt(maxCur)) maxCur = cur; }
             continue;
           }
@@ -582,21 +676,22 @@
           const tieStart = !!el.querySelector(':scope > tie[type="start"]') ||
             !!el.querySelector('notations tied[type="start"]');
 
-          if (isChord && lastNoteItem && lastNoteItem.mIdx === mIdx) {
+          if (isChord && lastNoteItem && lastNoteItem.mIdx === mIdx && lastNoteItem.voice === voice) {
             lastNoteItem.pitches.push({ ...pitch, tie: tieStart });
           } else {
             const item = {
-              mIdx, tick: cur, dur: dF,
+              mIdx, tick: cur, dur: dF, voice,
               pitches: [{ ...pitch, tie: tieStart }],
               graceBefore: pendingGrace,
-              lyric: null, lyrics: [], artics: [], dynamic: pendingDynamic, chordSymbol: pendingChordSymbol,
-              tempo: pendingTempo, rehearsal: pendingRehearsal, staffText: pendingStaffText,
-              slurStarts: [], slurStops: [],
+              lyric: null, lyrics: [], artics: [], dynamic: pendingDynamic, chordSymbol: pendingChordSymbol, fretboard: pendingFretboard,
+              tempo: pendingTempo, rehearsal: pendingRehearsal, staffText: pendingStaffText, soundFlag: pendingSoundFlag,
+              slurStarts: [], slurStops: [], tab: null,
             };
             pendingDynamic = null;
             pendingChordSymbol = null;
+            pendingFretboard = null;
             pendingGrace = [];
-            pendingTempo = null; pendingRehearsal = null; pendingStaffText = null;
+            pendingTempo = null; pendingRehearsal = null; pendingStaffText = null; pendingSoundFlag = null;
             // 가사 (1절만)
             for (const lyrEl of el.querySelectorAll(":scope > lyric")) {
               const text = [...lyrEl.querySelectorAll("text")].map(t => t.textContent).join("") || "";
@@ -631,6 +726,12 @@
                 if (sl.getAttribute("type") === "start") item.slurStarts.push(num);
                 else if (sl.getAttribute("type") === "stop") item.slurStops.push(num);
               }
+              const stringNo = parseInt(textOf(not, "technical > string"), 10);
+              const fretNo = parseInt(textOf(not, "technical > fret"), 10);
+              if (stringNo > 0 && fretNo >= 0) {
+                item.tab = { string: Math.max(1, Math.min(6, stringNo)), fret: Math.max(0, Math.min(24, fretNo)) };
+                hasTab = true;
+              }
               if (not.querySelector("ornaments, glissando, slide, arpeggiate, tremolo"))
                 countWarn("orn", "장식음·글리산도·트레몰로 등은 무시");
             }
@@ -650,7 +751,10 @@
     const score = C.createScore({
       title, composer,
       keySig: keySig ?? 0, timeSig, tempo: tempo || 100,
-      clef: clef || "treble", measureCount: Math.max(1, measEls.length),
+      clef: hasPercussion ? "percussion" : (clef || "treble"),
+      instrument: hasPercussion ? "drums" : hasTab ? "guitar" : "piano",
+      parts: hasPercussion ? ["drumkit"] : hasTab ? ["guitar-tab"] : undefined,
+      measureCount: Math.max(1, measEls.length),
     });
     measureMeta.forEach((meta, mIdx) => {
       const mm = C.ensureMeasureMeta(score.measures[mIdx] || {});
@@ -677,7 +781,7 @@
       if (qTick.add(qDur).gt(L)) qDur = L.sub(qTick);
       const pieces = C.decompose(qTick, qDur);
       const evs = pieces.map((d, i) => ({
-        id: C.newId(), type: "note", dur: d,
+        id: C.newId(), type: "note", voice: item.voice || 1, dur: d,
         notes: item.pitches.map(p => ({ step: p.step, alter: p.alter, oct: p.oct, tie: i < pieces.length - 1 ? true : !!p.tie })),
       }));
       if (item.graceBefore && item.graceBefore.length) evs[0].graceBefore = C.cloneGraceList(item.graceBefore);
@@ -689,10 +793,27 @@
       if (item.artics.length) evs[0].artics = [...new Set(item.artics)];
       if (item.dynamic) evs[0].dynamic = item.dynamic;
       if (item.chordSymbol) evs[0].chordSymbol = C.cloneChordSymbol(item.chordSymbol);
+      if (item.fretboard) evs[0].fretboard = JSON.parse(JSON.stringify(item.fretboard));
       if (item.tempo) evs[0].tempo = item.tempo;
       if (item.rehearsal) evs[0].rehearsal = item.rehearsal;
       if (item.staffText) evs[0].staffText = item.staffText;
-      C.replaceRange(score, item.mIdx, qTick, qDur, () => evs);
+      if (item.soundFlag) evs[0].soundFlag = item.soundFlag;
+      if (item.drumId) {
+        for (const ev of evs) {
+          ev.drumId = item.drumId;
+          ev.midi = item.midi;
+          ev.staffLine = item.staffLine;
+          ev.notehead = item.notehead;
+          ev.displayStep = item.displayStep;
+          ev.displayOctave = item.displayOctave;
+        }
+      }
+      if (item.tab) evs[0].tab = { ...item.tab };
+      C.replaceRange(score, item.mIdx, qTick, qDur, () => evs, { voice: item.voice || 1 });
+      if (item.tab && hasTab) {
+        const tabEvs = evs.map(ev => ({ ...JSON.parse(JSON.stringify(ev)), id: C.newId(), tab: { ...item.tab } }));
+        C.replaceRange(score, item.mIdx, qTick, qDur, () => tabEvs, { partIdx: 0, staffIdx: 1, voice: item.voice || 1 });
+      }
       item.firstId = evs[0].id;
       item.lastId = evs[evs.length - 1].id;
       placed++;

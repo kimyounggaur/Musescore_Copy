@@ -23,11 +23,17 @@
     fitScale: 1,
     pianoVisible: true,
     lyricVerse: 1,
+    currentVoice: 1,
     viewMode: { type: "full", partIdx: null },
     hideEmptyStaves: false,
+    midiEnabled: false,
     dragging: null,
   };
   let clip = null; // 내부 악보 클립보드
+  let midiAccess = null;
+  let midiInput = null;
+  let midiBuffer = [];
+  let midiTimer = null;
 
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -36,7 +42,7 @@
   let layoutCache = null;
   function update(opts = {}) {
     const score = C.state.score;
-    const res = E.render(score, { selection: selectedIds(), viewMode: ui.viewMode, hideEmptyStaves: ui.hideEmptyStaves });
+    const res = E.render(score, { selection: selectedIds(), viewMode: ui.viewMode, hideEmptyStaves: ui.hideEmptyStaves, activeVoice: ui.currentVoice });
     layoutCache = res.layout;
     $("#svg-host").innerHTML = res.svg;
     $("#t-title").textContent = score.meta.title || "제목 없음";
@@ -85,18 +91,35 @@
 
   /* ---------------- 입력 도우미 ---------------- */
   function activeRef() { return C.activeRef(C.state.score); }
+  function activeCtx() { return { ...activeRef(), voice: ui.currentVoice }; }
+  function firstEventIdForVoice(ref, voice = ui.currentVoice) {
+    const evs = C.getVoiceEvents(ref.measures[0], voice, C.state.score);
+    return evs[0]?.id || ref.measures[0]?.events?.[0]?.id || null;
+  }
+  function setCurrentVoice(voice, opts = {}) {
+    ui.currentVoice = C.normalizeVoice(voice);
+    C.state.currentVoice = ui.currentVoice;
+    if (!opts.keepCursor) {
+      const found = ui.cursorId && C.findEvent(C.state.score, ui.cursorId);
+      const ref = found || activeRef();
+      const measure = ref.measures?.[found?.m || 0] || activeRef().measures[0];
+      ui.cursorId = C.getVoiceEvents(measure, ui.currentVoice, C.state.score)[0]?.id || firstEventIdForVoice(activeRef(), ui.currentVoice);
+      ui.selection = null; ui.selAnchor = null;
+    }
+    update();
+  }
   function setActiveStaff(partIdx, staffIdx, opts = {}) {
     C.setActiveStaff(C.state.score, partIdx, staffIdx);
     if (!opts.keepCursor) {
       const ref = C.activeRef(C.state.score);
-      ui.cursorId = ref.measures[0]?.events[0]?.id || null;
+      ui.cursorId = firstEventIdForVoice(ref, ui.currentVoice);
     }
     refreshToolbar();
     updateStatus();
   }
   function effectiveAlter(score, mIdx, beforeId, step, oct, ctx) {
     let alter = C.keyAlterFor(step, score.keySig);
-    const evs = C.staffMeasures(score, ctx)[mIdx].events;
+    const evs = C.getVoiceEvents(C.staffMeasures(score, ctx)[mIdx], ctx?.voice || ui.currentVoice, score);
     for (const ev of evs) {
       if (ev.id === beforeId) break;
       if (ev.type !== "note") continue;
@@ -131,7 +154,7 @@
       tick = tick.sub(L); mIdx++;
       if (mIdx >= C.staffMeasures(score, ctx).length) return null;
     }
-    const evs = C.staffMeasures(score, ctx)[mIdx].events;
+    const evs = C.getVoiceEvents(C.staffMeasures(score, ctx)[mIdx], ctx?.voice || ui.currentVoice, score);
     let t = Fraction.ZERO;
     for (const ev of evs) {
       const end = t.add(C.durValue(ev.dur));
@@ -181,7 +204,7 @@
     if (!found.length) return null;
     const first = found[0];
     if (found.some(f => f.partIdx !== first.partIdx || f.staffIdx !== first.staffIdx)) return { mixed: true };
-    found.sort((a, b) => a.m - b.m || a.e - b.e);
+    found.sort((a, b) => a.m - b.m || a.voice - b.voice || a.e - b.e);
     return {
       partIdx: first.partIdx,
       staffIdx: first.staffIdx,
@@ -222,7 +245,9 @@
     if (src.tempo) f.ev.tempo = src.tempo; else delete f.ev.tempo;
     if (src.rehearsal) f.ev.rehearsal = src.rehearsal; else delete f.ev.rehearsal;
     if (src.staffText) f.ev.staffText = src.staffText; else delete f.ev.staffText;
+    if (src.soundFlag) f.ev.soundFlag = src.soundFlag; else delete f.ev.soundFlag;
     if (src.chordSymbol) f.ev.chordSymbol = C.cloneChordSymbol(src.chordSymbol); else delete f.ev.chordSymbol;
+    if (src.fretboard) f.ev.fretboard = clonePlain(src.fretboard); else delete f.ev.fretboard;
     if (src.type === "note" && f.ev.type === "note") {
       for (let i = 0; i < f.ev.notes.length; i++) {
         f.ev.notes[i].tie = !!(f.ev.notes[i].tie || src.notes?.[i]?.tie);
@@ -238,10 +263,11 @@
     else target = selectedEvent() || targetEvent();
     if (!target) {
       const ref = activeRef();
-      target = { ...ref, m: 0, e: 0, ev: ref.measures[0].events[0] };
+      const ev = C.getVoiceEvents(ref.measures[0], ui.currentVoice, score)[0] || ref.measures[0].events[0];
+      target = { ...ref, voice: ui.currentVoice, m: 0, e: 0, ev };
     }
-    const startTick = C.eventStartTick(target.measures[target.m], target.e);
-    const ctx = { partIdx: target.partIdx, staffIdx: target.staffIdx };
+    const startTick = C.eventStartTick(target.measures[target.m], target.e, target);
+    const ctx = { partIdx: target.partIdx, staffIdx: target.staffIdx, voice: target.voice || ui.currentVoice };
     const endPos = advancePos(score, target.m, startTick, clip.total);
     const needed = measureCountForEnd(score, endPos);
     const pastedIds = [];
@@ -255,7 +281,7 @@
       for (const src of clip.items) {
         const dur = cloneDurForPaste(src.dur, tupletIds);
         const pitches = src.type === "note" ? src.notes.map(n => ({ step: n.step, alter: n.alter, oct: n.oct })) : null;
-        const firstId = C.inputAt(s2, pos.mIdx, pos.tick, dur, pitches, ctx);
+        const firstId = C.inputAt(s2, pos.mIdx, pos.tick, dur, pitches, { ...ctx, voice: src.voice || ctx.voice });
         if (firstId) {
           pastedIds.push(firstId);
           decoratePastedEvent(s2, firstId, src);
@@ -278,12 +304,13 @@
   }
 
   /* 입력 실행 (커서/세그먼트 위치에) */
-  function doInput(mIdx, tick, pitches, ctx = activeRef()) {
+  function doInput(mIdx, tick, pitches, ctx = activeCtx()) {
     const dur = { ...ui.curDur };
     let inserted = null;
     C.mutate(pitches ? "음표 입력" : "쉼표 입력", (score) => {
       C.setActiveStaff(score, ctx.partIdx, ctx.staffIdx);
-      inserted = C.inputAt(score, mIdx, tick, dur, pitches, ctx);
+      inserted = C.inputAt(score, mIdx, tick, dur, pitches, { ...ctx, voice: ui.currentVoice });
+      if (inserted && pitches && pitches.length) mirrorLinkedTab(score, ctx, mIdx, tick, dur, pitches, inserted);
     });
     ui.lastInsertedId = inserted;
     if (pitches && pitches.length) {
@@ -299,16 +326,102 @@
     flashHint(pitches ? null : "쉼표를 입력했어요");
   }
 
+  function mirrorLinkedTab(score, ctx, mIdx, tick, dur, pitches, insertedId) {
+    const ref = C.staffRef(score, ctx);
+    if (ref.part.instrument !== "guitar" || !ref.staff.linkedStaffId) return;
+    const allRefs = C.staffRefs(score);
+    const linked = allRefs.find(r => r.staff.id === ref.staff.linkedStaffId);
+    const primary = insertedId && C.findEvent(score, insertedId);
+    if (primary) C.applyTabToEvent(primary.ev, ref.part);
+    if (!linked) return;
+    const linkedId = C.inputAt(score, mIdx, tick, dur, pitches, { partIdx: linked.partIdx, staffIdx: linked.staffIdx, voice: ui.currentVoice });
+    const linkedFound = linkedId && C.findEvent(score, linkedId);
+    if (linkedFound) C.applyTabToEvent(linkedFound.ev, linked.part);
+  }
+
+  function inputDrum(drumId) {
+    const ref = activeRef();
+    if (!C.isPercussionRef(ref)) {
+      flashHint("드럼 키트 보표를 선택하면 드럼 패드를 사용할 수 있어요");
+      return false;
+    }
+    if (!ui.inputMode) setInputMode(true);
+    const pos = cursorPos();
+    let inserted = null;
+    C.mutate("드럼 입력", (score) => {
+      C.setActiveStaff(score, ref.partIdx, ref.staffIdx);
+      inserted = C.addDrumNote(score, pos.mIdx, pos.tick, drumId, { ...ui.curDur }, { ...ref, voice: ui.currentVoice });
+    });
+    const spec = C.drumSpec(drumId);
+    ui.lastInsertedId = inserted;
+    ui.cursorId = findEventAtTick(C.state.score, pos.mIdx, pos.tick.add(C.durValue(ui.curDur)), { ...ref, voice: ui.currentVoice }) || inserted;
+    ui.selection = null;
+    P.previewNote([spec.midi], 0.22);
+    update();
+    return true;
+  }
+
+  function inputMidiPitches(midis) {
+    if (!ui.inputMode) setInputMode(true);
+    const pitches = [...new Set(midis)].sort((a, b) => a - b).map(m => C.spellMidi(m, C.state.score.keySig));
+    if (!pitches.length) return;
+    const pos = cursorPos();
+    doInput(pos.mIdx, pos.tick, pitches, activeCtx());
+  }
+
+  async function initMidi() {
+    const btn = $("#btn-midi"), sel = $("#midi-select");
+    if (!navigator.requestMIDIAccess) {
+      btn.disabled = true;
+      sel.innerHTML = `<option>Web MIDI 없음</option>`;
+      return;
+    }
+    try {
+      midiAccess = await navigator.requestMIDIAccess();
+      refreshMidiDevices();
+      midiAccess.onstatechange = refreshMidiDevices;
+    } catch (err) {
+      btn.disabled = true;
+      sel.innerHTML = `<option>MIDI 권한 필요</option>`;
+    }
+  }
+  function refreshMidiDevices() {
+    const sel = $("#midi-select");
+    if (!sel || !midiAccess) return;
+    const inputs = [...midiAccess.inputs.values()];
+    sel.innerHTML = inputs.length ? inputs.map(input => `<option value="${input.id}">${input.name || "MIDI Input"}</option>`).join("") : `<option value="">장치 없음</option>`;
+    if (inputs.length && !midiInput) connectMidiInput(inputs[0].id);
+  }
+  function connectMidiInput(id) {
+    if (midiInput) midiInput.onmidimessage = null;
+    midiInput = midiAccess ? midiAccess.inputs.get(id) : null;
+    if (midiInput) midiInput.onmidimessage = onMidiMessage;
+  }
+  function onMidiMessage(e) {
+    if (!ui.midiEnabled) return;
+    const [status, note, velocity] = e.data;
+    const cmd = status & 0xf0;
+    if (cmd === 0x90 && velocity > 0) {
+      midiBuffer.push(note);
+      clearTimeout(midiTimer);
+      midiTimer = setTimeout(() => {
+        const notes = midiBuffer.slice();
+        midiBuffer = [];
+        inputMidiPitches(notes);
+      }, 80);
+    }
+  }
+
   function cursorPos() {
     const score = C.state.score;
     let found = ui.cursorId && C.findEvent(score, ui.cursorId);
     const active = activeRef();
-    if (found && (found.partIdx !== active.partIdx || found.staffIdx !== active.staffIdx)) found = null;
+    if (found && (found.partIdx !== active.partIdx || found.staffIdx !== active.staffIdx || found.voice !== ui.currentVoice)) found = null;
     if (!found) {
-      ui.cursorId = active.measures[0].events[0].id;
+      ui.cursorId = firstEventIdForVoice(active, ui.currentVoice);
       found = C.findEvent(score, ui.cursorId);
     }
-    const tick = C.eventStartTick(found.measures[found.m], found.e);
+    const tick = C.eventStartTick(found.measures[found.m], found.e, found);
     return { mIdx: found.m, tick, found };
   }
 
@@ -367,11 +480,13 @@
     ui.curDur = { ...dur, dots: ui.curDur.dots && canDot(dur) ? ui.curDur.dots : 0 };
     const found = selectedEvent();
     if (found && !ui.inputMode) {
-      const tick = C.eventStartTick(found.measures[found.m], found.e);
+      const tick = C.eventStartTick(found.measures[found.m], found.e, found);
       const pitches = found.ev.type === "note" ? found.ev.notes.map(n => ({ step: n.step, alter: n.alter, oct: n.oct })) : null;
       const lyric = found.ev.lyric;
       const lyrics = C.cloneLyrics(found.ev);
       const chordSymbol = C.cloneChordSymbol(found.ev.chordSymbol);
+      const fretboard = found.ev.fretboard ? clonePlain(found.ev.fretboard) : null;
+      const soundFlag = found.ev.soundFlag || null;
       const graceBefore = C.cloneGraceList(found.ev.graceBefore);
       let inserted = null;
       C.mutate("음길이 변경", (score) => {
@@ -387,6 +502,14 @@
         if (chordSymbol && inserted) {
           const f2 = C.findEvent(score, inserted);
           if (f2) f2.ev.chordSymbol = C.cloneChordSymbol(chordSymbol);
+        }
+        if (fretboard && inserted) {
+          const f2 = C.findEvent(score, inserted);
+          if (f2) f2.ev.fretboard = clonePlain(fretboard);
+        }
+        if (soundFlag && inserted) {
+          const f2 = C.findEvent(score, inserted);
+          if (f2) f2.ev.soundFlag = soundFlag;
         }
         if (graceBefore.length && inserted) {
           const f2 = C.findEvent(score, inserted);
@@ -406,11 +529,13 @@
       if (ev.full) return;
       const newDur = { n: ev.dur.n, d: ev.dur.d, dots: ev.dur.dots ? 0 : 1 };
       if (!canDot(newDur) && newDur.dots) return;
-      const tick = C.eventStartTick(found.measures[found.m], found.e);
+      const tick = C.eventStartTick(found.measures[found.m], found.e, found);
       const pitches = ev.type === "note" ? ev.notes.map(n => ({ step: n.step, alter: n.alter, oct: n.oct })) : null;
       const lyric = ev.lyric;
       const lyrics = C.cloneLyrics(ev);
       const chordSymbol = C.cloneChordSymbol(ev.chordSymbol);
+      const fretboard = ev.fretboard ? clonePlain(ev.fretboard) : null;
+      const soundFlag = ev.soundFlag || null;
       const graceBefore = C.cloneGraceList(ev.graceBefore);
       let inserted = null;
       C.mutate("점음표", (score) => {
@@ -420,6 +545,8 @@
           if (lyric) f2.ev.lyric = lyric;
           if (lyrics.length) { f2.ev.lyrics = C.cloneLyrics(lyrics); C.normalizeEventLyrics(f2.ev); }
           if (chordSymbol) f2.ev.chordSymbol = C.cloneChordSymbol(chordSymbol);
+          if (fretboard) f2.ev.fretboard = clonePlain(fretboard);
+          if (soundFlag) f2.ev.soundFlag = soundFlag;
           if (graceBefore.length) f2.ev.graceBefore = C.cloneGraceList(graceBefore);
         }
       });
@@ -522,7 +649,7 @@
       });
     } else if (nx.ev.type === "rest") {
       // 다음이 쉼표면 같은 음을 만들어 연결 (MuseScore 동작)
-      const tick = C.eventStartTick(nx.measures[nx.m], nx.e);
+      const tick = C.eventStartTick(nx.measures[nx.m], nx.e, nx);
       const pitches = f.ev.notes.map(n => ({ step: n.step, alter: n.alter, oct: n.oct }));
       C.mutate("타이", (s2) => {
         C.inputAt(s2, nx.m, tick, { ...f.ev.dur }, pitches, nx);
@@ -666,11 +793,27 @@
     toast("꾸밈음을 추가했어요");
   }
 
+  function toggleNotation(kind) {
+    const found = selectedEvent() || targetEvent();
+    if (!found || found.ev.type !== "note") { flashHint("기보를 붙일 음표를 먼저 선택하세요"); return; }
+    C.mutate("고급 기보", (score) => {
+      const f = C.findEvent(score, found.ev.id);
+      if (!f) return;
+      if (kind === "glissando") f.ev.glissando = f.ev.glissando ? null : { type: "start", lineType: "solid" };
+      if (kind === "arpeggiate") f.ev.arpeggiate = !f.ev.arpeggiate;
+      if (kind === "tremolo") f.ev.tremolo = f.ev.tremolo ? null : { strokes: 2, type: "single" };
+      if (!f.ev.glissando) delete f.ev.glissando;
+      if (!f.ev.tremolo) delete f.ev.tremolo;
+    });
+    update();
+  }
+
   function markerTarget() {
     const found = selectedEvent() || targetEvent();
     if (found) return found;
     const ref = activeRef();
-    return ref.measures[0]?.events[0] ? { ...ref, m: 0, e: 0, ev: ref.measures[0].events[0] } : null;
+    const ev = C.getVoiceEvents(ref.measures[0], ui.currentVoice, C.state.score)[0] || ref.measures[0]?.events[0];
+    return ev ? { ...ref, voice: ui.currentVoice, m: 0, e: 0, ev } : null;
   }
 
   function selectedMeasureRange() {
@@ -735,7 +878,7 @@
       const f = C.findEvent(score, found.ev.id);
       if (!f) return;
       f.ev.tempo = v;
-      if (f.m === 0 && C.eventStartTick(f.measures[f.m], f.e).isZero()) score.tempo = v;
+      if (f.m === 0 && C.eventStartTick(f.measures[f.m], f.e, f).isZero()) score.tempo = v;
     });
     stopPlayback(); update(); toast(`템포 ♩=${v}`);
   }
@@ -743,7 +886,7 @@
   function nextRehearsalMark() {
     const used = [];
     for (const ref of C.staffRefs(C.state.score)) {
-      for (const mm of ref.measures) for (const ev of mm.events) if (ev.rehearsal) used.push(String(ev.rehearsal));
+      for (const mm of ref.measures) for (const { ev } of C.measureEntries(mm, { score: C.state.score })) if (ev.rehearsal) used.push(String(ev.rehearsal));
     }
     const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     for (const ch of letters) if (!used.includes(ch)) return ch;
@@ -773,7 +916,14 @@
     C.mutate("스태프 텍스트", (score) => {
       const f = C.findEvent(score, found.ev.id);
       if (!f) return;
-      if (text) f.ev.staffText = text; else delete f.ev.staffText;
+      if (text) {
+        f.ev.staffText = text;
+        const flag = C.detectSoundFlag(text);
+        if (flag) f.ev.soundFlag = flag; else delete f.ev.soundFlag;
+      } else {
+        delete f.ev.staffText;
+        delete f.ev.soundFlag;
+      }
     });
     update(); toast(text ? "스태프 텍스트를 붙였어요" : "스태프 텍스트를 지웠어요");
   }
@@ -1050,8 +1200,16 @@
         C.mutate("코드 기호", (score) => {
           const f = C.findEvent(score, id);
           if (!f) return;
-          if (parsed) f.ev.chordSymbol = C.cloneChordSymbol(parsed);
-          else delete f.ev.chordSymbol;
+          if (parsed) {
+            f.ev.chordSymbol = C.cloneChordSymbol(parsed);
+            if (!f.ev.fretboard || !f.ev.fretboard.manual) {
+              const fb = C.getDefaultFretboard(parsed);
+              if (fb) f.ev.fretboard = fb; else delete f.ev.fretboard;
+            }
+          } else {
+            delete f.ev.chordSymbol;
+            delete f.ev.fretboard;
+          }
         });
       }
       close();
@@ -1300,7 +1458,7 @@
       const active = C.activeRef(C.state.score);
       if (!visible.some(r => r.partIdx === active.partIdx && r.staffIdx === active.staffIdx) && visible[0]) {
         C.setActiveStaff(C.state.score, visible[0].partIdx, visible[0].staffIdx);
-        ui.cursorId = visible[0].measures[0]?.events[0]?.id || null;
+        ui.cursorId = firstEventIdForVoice(visible[0], ui.currentVoice);
         ui.selection = null; ui.selAnchor = null;
       }
       stopPlayback(); update();
@@ -1332,6 +1490,7 @@
     $("#btn-rest").classList.toggle("on", ui.restMode);
     $("#btn-metronome").classList.toggle("on", P.player.metronome);
     $("#btn-piano").classList.toggle("on", ui.pianoVisible);
+    $("#btn-midi").classList.toggle("on", ui.midiEnabled);
 
     // 선택/커서 기준 활성 음길이
     let activeDur = ui.curDur;
@@ -1342,6 +1501,7 @@
       b.classList.toggle("on", d.n === activeDur.n && d.d === activeDur.d);
     });
     $("#btn-dot").classList.toggle("on", !!(found && !ui.inputMode ? found.ev.dur.dots : ui.curDur.dots));
+    $$("#voice-buttons .voice-btn").forEach(b => b.classList.toggle("on", +b.dataset.voice === ui.currentVoice));
 
     // 임시표 상태
     let alter = null;
@@ -1355,6 +1515,9 @@
     const ar = tgt && tgt.ev.type === "note" ? (tgt.ev.artics || []) : [];
     $$(".artic-btn").forEach(b => b.classList.toggle("on", ar.includes(b.dataset.artic)));
     $("#btn-grace").classList.toggle("on", !!(tgt && tgt.ev.graceBefore && tgt.ev.graceBefore.length));
+    $("#btn-gliss").classList.toggle("on", !!(tgt && tgt.ev.glissando));
+    $("#btn-arpeggio").classList.toggle("on", !!(tgt && tgt.ev.arpeggiate));
+    $("#btn-tremolo").classList.toggle("on", !!(tgt && tgt.ev.tremolo));
     const dyn = tgt ? tgt.ev.dynamic : null;
     $$(".dynbtn").forEach(b => b.classList.toggle("on", dyn === b.dataset.dyn));
     const mr = selectedMeasureRange();
@@ -1388,6 +1551,7 @@
     $("#instrument-select").value = active.instrument;
     $("#lyric-verse").value = String(ui.lyricVerse || 1);
     $("#piano-bar").style.display = ui.pianoVisible ? "" : "none";
+    $("#drum-pad").classList.toggle("show", C.isPercussionRef(active));
   }
 
   /* ---------------- 상태바 ---------------- */
@@ -1397,24 +1561,24 @@
     const active = C.activeRef(score);
     const activeName = active ? `${active.name}${active.part.staves.length > 1 ? " " + (active.staffIdx + 1) : ""}` : "";
     let text = "";
-    const found = selectedEvent();
-    const ids = selectedIds();
+      const found = selectedEvent();
+      const ids = selectedIds();
     if (ids && ids.size > 1) {
       text = `${ids.size}개 선택 — Ctrl+C/V=복사/붙여넣기 · S=이음줄 · < >=쐐기`;
     } else if (found) {
       const ev = found.ev;
       if (ev.type === "note") {
         const names = ev.notes.map(n => `${C.pitchName(n, "ko")}(${C.pitchName(n)})`).join("·");
-        const marks = [ev.chordSymbol ? `코드 ${C.displayChordSymbol(ev.chordSymbol)}` : "", ev.dynamic, ev.tempo ? `♩=${ev.tempo}` : "", ev.rehearsal ? `리허설 ${ev.rehearsal}` : "", ev.staffText || ""].filter(Boolean);
+        const marks = [ev.chordSymbol ? `코드 ${C.displayChordSymbol(ev.chordSymbol)}` : "", ev.dynamic, ev.tempo ? `♩=${ev.tempo}` : "", ev.rehearsal ? `리허설 ${ev.rehearsal}` : "", ev.staffText || "", ev.soundFlag ? `sound:${ev.soundFlag}` : ""].filter(Boolean);
         const extra = (ev.artics && ev.artics.length ? " · " + ev.artics.join(",") : "") + (marks.length ? " · " + marks.join(" · ") : "");
-        text = `${found.name}${found.part.staves.length > 1 ? " " + (found.staffIdx + 1) : ""} · 마디 ${found.m + 1} · ${durName2(ev)} · ${names}${extra}`;
+        text = `${found.name}${found.part.staves.length > 1 ? " " + (found.staffIdx + 1) : ""} · V${found.voice || 1} · 마디 ${found.m + 1} · ${durName2(ev)} · ${names}${extra}`;
       } else {
-        const marks = [ev.chordSymbol ? `코드 ${C.displayChordSymbol(ev.chordSymbol)}` : "", ev.tempo ? `♩=${ev.tempo}` : "", ev.rehearsal ? `리허설 ${ev.rehearsal}` : "", ev.staffText || ""].filter(Boolean);
-        text = `${found.name}${found.part.staves.length > 1 ? " " + (found.staffIdx + 1) : ""} · 마디 ${found.m + 1} · ${ev.full ? "온마디 쉼표" : durName2(ev) + " 쉼표"}${marks.length ? " · " + marks.join(" · ") : ""}`;
+        const marks = [ev.chordSymbol ? `코드 ${C.displayChordSymbol(ev.chordSymbol)}` : "", ev.tempo ? `♩=${ev.tempo}` : "", ev.rehearsal ? `리허설 ${ev.rehearsal}` : "", ev.staffText || "", ev.soundFlag ? `sound:${ev.soundFlag}` : ""].filter(Boolean);
+        text = `${found.name}${found.part.staves.length > 1 ? " " + (found.staffIdx + 1) : ""} · V${found.voice || 1} · 마디 ${found.m + 1} · ${ev.full ? "온마디 쉼표" : durName2(ev) + " 쉼표"}${marks.length ? " · " + marks.join(" · ") : ""}`;
       }
     } else if (ui.inputMode && ui.cursorId) {
       const f = C.findEvent(score, ui.cursorId);
-      if (f) text = `입력 위치: ${activeName} · 마디 ${f.m + 1} · ${C.durName(ui.curDur)}로 입력`;
+      if (f) text = `입력 위치: ${activeName} · V${ui.currentVoice} · 마디 ${f.m + 1} · ${C.durName(ui.curDur)}로 입력`;
     } else {
       text = `${score.measures.length}마디 · ${C.staffRefs(score).length}보표 · ${C.KEY_NAMES[String(score.keySig)] || ""} · ${score.timeSig.num}/${score.timeSig.den}`;
     }
@@ -1583,6 +1747,56 @@
     });
   }
 
+  function commandItems() {
+    return [
+      { id: "input", label: "입력 모드 전환", run: () => setInputMode(!ui.inputMode) },
+      { id: "chord", label: "코드 기호 입력", run: applyChordSymbol },
+      { id: "lyric", label: "가사 입력", run: () => $("#btn-lyric").click() },
+      { id: "rehearsal", label: "리허설 마크", run: applyRehearsalMark },
+      { id: "staff-text", label: "스태프 텍스트", run: applyStaffText },
+      { id: "repeat-start", label: "시작 반복", run: applyStartRepeat },
+      { id: "repeat-end", label: "끝 반복", run: applyEndRepeat },
+      { id: "musicxml", label: "MusicXML 내보내기", run: () => IO.download(IO.safeName(C.state.score.meta.title) + ".musicxml", IO.exportMusicXML(C.state.score), "application/vnd.recordare.musicxml+xml") },
+      { id: "midi", label: "MIDI 내보내기", run: () => IO.download(IO.safeName(C.state.score.meta.title) + ".mid", P.exportMidi(C.state.score), "audio/midi") },
+      { id: "settings", label: "악보 설정", run: openSettings },
+      { id: "mixer", label: "믹서 열기", run: () => $("#btn-mixer").click() },
+    ];
+  }
+  function openCommandPalette() {
+    const dlg = $("#dlg-command");
+    const input = $("#cmd-input");
+    dlg.showModal();
+    input.value = "";
+    renderCommands("");
+    setTimeout(() => input.focus(), 0);
+  }
+  function renderCommands(q) {
+    const clean = String(q || "").trim().toLowerCase();
+    const items = commandItems().filter(c => !clean || c.label.toLowerCase().includes(clean) || c.id.includes(clean)).slice(0, 12);
+    $("#cmd-list").innerHTML = items.map((c, i) => `<button class="cmd-item ${i === 0 ? "active" : ""}" data-cmd="${c.id}">${c.label}</button>`).join("");
+  }
+  function runCommand(id) {
+    const cmd = commandItems().find(c => c.id === id);
+    if (!cmd) return;
+    $("#dlg-command").close();
+    cmd.run();
+  }
+  function bindCommandPalette() {
+    $("#cmd-input").addEventListener("input", (e) => renderCommands(e.target.value));
+    $("#cmd-input").addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") {
+        const first = $("#cmd-list .cmd-item.active") || $("#cmd-list .cmd-item");
+        if (first) runCommand(first.dataset.cmd);
+      }
+      if (e.key === "Escape") $("#dlg-command").close();
+    });
+    $("#cmd-list").addEventListener("click", (e) => {
+      const item = e.target.closest(".cmd-item");
+      if (item) runCommand(item.dataset.cmd);
+    });
+  }
+
   function openSettings() {
     const score = C.state.score;
     const active = C.activeRef(score);
@@ -1596,6 +1810,7 @@
     $("#set-key").value = String(score.keySig);
     $("#set-time").value = score.timeSig.num + "/" + score.timeSig.den;
     $("#set-tempo").value = score.tempo;
+    $("#set-measures-system").value = C.ensureLayout(score).measuresPerSystem || "";
     $("#dlg-settings").showModal();
   }
 
@@ -1609,6 +1824,7 @@
       const newClef = $("#set-clef").value;
       const newEnsemble = $("#set-ensemble").value;
       const newTempo = Math.max(30, Math.min(280, +$("#set-tempo").value || 100));
+      const measuresPerSystem = Math.max(0, Math.min(16, +$("#set-measures-system").value || 0));
       C.mutate("악보 설정", (s2) => {
         s2.meta.title = $("#set-title").value.trim() || "제목 없음";
         s2.meta.composer = $("#set-composer").value.trim();
@@ -1621,6 +1837,7 @@
         }
         s2.keySig = newKey;
         s2.tempo = newTempo;
+        C.ensureLayout(s2).measuresPerSystem = measuresPerSystem;
         if (s2.timeSig.num !== num || s2.timeSig.den !== den) C.rebar(s2, { num, den });
       });
       stopPlayback();
@@ -1697,6 +1914,12 @@
       const k = e.key;
       const K = k.toUpperCase();
 
+      if (e.altKey && /^[1-4]$/.test(k)) {
+        e.preventDefault();
+        setCurrentVoice(+k);
+        return;
+      }
+
       if ((e.ctrlKey || e.metaKey) && !e.altKey) {
         if (K === "Z") { e.preventDefault(); e.shiftKey ? C.redo() : C.undo(); afterHistory(); return; }
         if (K === "Y") { e.preventDefault(); C.redo(); afterHistory(); return; }
@@ -1704,7 +1927,7 @@
         if (K === "C") { e.preventDefault(); copySelection(); return; }
         if (K === "V") { e.preventDefault(); pasteClipboard(); return; }
         if (K === "X") { e.preventDefault(); if (copySelection({ quiet: true })) { deleteSelection(); toast("잘라냈어요"); } return; }
-        if (K === "K") { e.preventDefault(); applyChordSymbol(); return; }
+        if (K === "K") { e.preventDefault(); openCommandPalette(); return; }
         if (/^[2-9]$/.test(k)) { e.preventDefault(); applyTuplet(+k); return; }
         if (K === "ARROWUP" || k === "ArrowUp") { e.preventDefault(); transposeSelection(12); return; }
         if (k === "ArrowDown") { e.preventDefault(); transposeSelection(-12); return; }
@@ -1739,6 +1962,10 @@
         if (ui.inputMode) { const pos = cursorPos(); doInput(pos.mIdx, pos.tick, null); }
         else deleteSelection();
         return;
+      }
+      if (ui.inputMode && C.isPercussionRef(activeRef())) {
+        const drumKey = { K: "kick", S: "snare", H: "closed-hihat", O: "open-hihat", C: "crash" }[K];
+        if (drumKey) { e.preventDefault(); inputDrum(drumKey); return; }
       }
       if (K >= "A" && K <= "G" && K.length === 1) {
         inputLetter(K, e.shiftKey);
@@ -1778,7 +2005,7 @@
     let found = selectedEvent();
     if (!found) {
       const ref = C.activeRef(score);
-      select(ref.measures[0].events[0].id);
+      select(firstEventIdForVoice(ref, ui.currentVoice));
       return;
     }
     const nx = dir > 0 ? C.nextEvent(score, found.m, found.e, found) : C.prevEvent(score, found.m, found.e, found);
@@ -1814,6 +2041,8 @@
     $("#btn-sharp").addEventListener("click", () => applyAccidental(1));
     $("#btn-flat").addEventListener("click", () => applyAccidental(-1));
     $("#btn-natural").addEventListener("click", () => applyAccidental(0));
+    $$("#voice-buttons .voice-btn").forEach(btn => btn.addEventListener("click", () => setCurrentVoice(+btn.dataset.voice)));
+    $$("#drum-pad .drum-btn").forEach(btn => btn.addEventListener("click", () => inputDrum(btn.dataset.drum)));
     $("#btn-tie").addEventListener("click", toggleTie);
     $("#btn-grace").addEventListener("click", applyGraceBefore);
     $("#btn-slur").addEventListener("click", toggleSlur);
@@ -1830,6 +2059,9 @@
     $("#btn-tempo-mark").addEventListener("click", applyTempoMark);
     $("#btn-rehearsal").addEventListener("click", applyRehearsalMark);
     $("#btn-staff-text").addEventListener("click", applyStaffText);
+    $("#btn-gliss").addEventListener("click", () => toggleNotation("glissando"));
+    $("#btn-arpeggio").addEventListener("click", () => toggleNotation("arpeggiate"));
+    $("#btn-tremolo").addEventListener("click", () => toggleNotation("tremolo"));
     $("#btn-repeat-start").addEventListener("click", applyStartRepeat);
     $("#btn-repeat-end").addEventListener("click", applyEndRepeat);
     $("#btn-repeat-count").addEventListener("click", applyRepeatCount);
@@ -1840,6 +2072,12 @@
       ui.pianoVisible = !ui.pianoVisible;
       refreshToolbar(); applyZoom();
     });
+    $("#btn-midi").addEventListener("click", () => {
+      ui.midiEnabled = !ui.midiEnabled;
+      refreshToolbar();
+      toast(ui.midiEnabled ? "MIDI 입력 켜짐" : "MIDI 입력 꺼짐");
+    });
+    $("#midi-select").addEventListener("change", () => connectMidiInput($("#midi-select").value));
     $("#btn-help").addEventListener("click", () => $("#dlg-help").showModal());
     $("#btn-zoom-in").addEventListener("click", () => { ui.zoom = Math.min(2.4, ui.zoom + 0.15); applyZoom(); });
     $("#btn-zoom-out").addEventListener("click", () => { ui.zoom = Math.max(0.5, ui.zoom - 0.15); applyZoom(); });
@@ -1942,6 +2180,8 @@
     bindKeys();
     bindDragDrop();
     bindMixer();
+    bindCommandPalette();
+    initMidi();
 
     const saved = IO.loadAutosave();
     if (saved) {

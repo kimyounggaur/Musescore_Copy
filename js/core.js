@@ -287,11 +287,10 @@ window.SF = window.SF || {};
   function findGrace(score, id) {
     for (const ref of staffRefs(score)) {
       for (let m = 0; m < ref.measures.length; m++) {
-        const evs = ref.measures[m].events;
-        for (let e = 0; e < evs.length; e++) {
-          const ev = evs[e];
+        for (const entry of measureEntries(ref.measures[m], { score, includeSilent: true })) {
+          const ev = entry.ev;
           for (let g = 0; g < (ev.graceBefore || []).length; g++) {
-            if (ev.graceBefore[g].id === id) return { ...ref, m, e, g, ev, grace: ev.graceBefore[g] };
+            if (ev.graceBefore[g].id === id) return { ...ref, m, e: entry.e, voice: entry.voice, g, ev, grace: ev.graceBefore[g] };
           }
         }
       }
@@ -339,7 +338,82 @@ window.SF = window.SF || {};
   const CLEFS = {
     treble: { bottomStep: absStep({ step: 2, oct: 4 }), middle: { step: 6, alter: 0, oct: 4 } }, // 아래줄 E4, 중앙 B4
     bass: { bottomStep: absStep({ step: 4, oct: 2 }), middle: { step: 1, alter: 0, oct: 3 } },   // 아래줄 G2, 중앙 D3
+    percussion: { bottomStep: absStep({ step: 2, oct: 4 }), middle: { step: 6, alter: 0, oct: 4 } },
   };
+
+  const DRUM_MAP = {
+    kick: { label: "Kick", midi: 36, staffLine: 1, notehead: "normal", displayStep: "F", displayOctave: 4 },
+    snare: { label: "Snare", midi: 38, staffLine: 4, notehead: "normal", displayStep: "C", displayOctave: 5 },
+    "closed-hihat": { label: "Closed HH", midi: 42, staffLine: 8, notehead: "x", displayStep: "G", displayOctave: 5 },
+    "open-hihat": { label: "Open HH", midi: 46, staffLine: 8, notehead: "circle-x", displayStep: "G", displayOctave: 5 },
+    crash: { label: "Crash", midi: 49, staffLine: 9, notehead: "x", displayStep: "A", displayOctave: 5 },
+    ride: { label: "Ride", midi: 51, staffLine: 7, notehead: "x", displayStep: "F", displayOctave: 5 },
+    "low-tom": { label: "Low Tom", midi: 45, staffLine: 2, notehead: "normal", displayStep: "A", displayOctave: 4 },
+    "mid-tom": { label: "Mid Tom", midi: 47, staffLine: 5, notehead: "normal", displayStep: "D", displayOctave: 5 },
+    "high-tom": { label: "High Tom", midi: 50, staffLine: 6, notehead: "normal", displayStep: "E", displayOctave: 5 },
+  };
+  function drumSpec(drumId) { return DRUM_MAP[drumId] || DRUM_MAP.snare; }
+  const GUITAR_STANDARD_TUNING = [64, 59, 55, 50, 45, 40]; // string 1 high E → string 6 low E
+  function midiToStringFret(midi, tuning = GUITAR_STANDARD_TUNING, preferredPosition = 0) {
+    const candidates = [];
+    tuning.forEach((openMidi, idx) => {
+      const fret = midi - openMidi;
+      if (fret >= 0 && fret <= 24) candidates.push({ string: idx + 1, fret });
+    });
+    if (!candidates.length) return null;
+    candidates.sort((a, b) => Math.abs(a.fret - preferredPosition) - Math.abs(b.fret - preferredPosition) || a.string - b.string);
+    return candidates[0];
+  }
+  function stringFretToMidi(string, fret, tuning = GUITAR_STANDARD_TUNING) {
+    const openMidi = tuning[Math.max(1, Math.min(6, string | 0 || 1)) - 1];
+    return openMidi + Math.max(0, Math.min(24, fret | 0 || 0));
+  }
+  function applyTabToEvent(ev, part) {
+    if (!ev || ev.type !== "note" || !ev.notes?.length) return;
+    const tuning = part?.tuning || GUITAR_STANDARD_TUNING;
+    const first = ev.notes[0];
+    const sf = midiToStringFret(midiOf(first), tuning, part?.preferredPosition || 0);
+    if (sf) ev.tab = sf;
+  }
+  const FRETBOARD_LIBRARY = {
+    C: ["x", 3, 2, 0, 1, 0],
+    Cm: ["x", 3, 5, 5, 4, 3],
+    C7: ["x", 3, 2, 3, 1, 0],
+    D: ["x", "x", 0, 2, 3, 2],
+    Dm: ["x", "x", 0, 2, 3, 1],
+    E: [0, 2, 2, 1, 0, 0],
+    Em: [0, 2, 2, 0, 0, 0],
+    F: [1, 3, 3, 2, 1, 1],
+    G: [3, 2, 0, 0, 0, 3],
+    G7: [3, 2, 0, 0, 0, 1],
+    A: ["x", 0, 2, 2, 2, 0],
+    Am: ["x", 0, 2, 2, 1, 0],
+    B7: ["x", 2, 1, 2, 0, 2],
+  };
+  function getDefaultFretboard(chord) {
+    const parsed = typeof chord === "string" ? parseChordSymbol(chord) : chord;
+    if (!parsed || !parsed.root) return null;
+    const key = parsed.root + chordAlterText(parsed.rootAlter, false) + (parsed.quality || "");
+    const positions = FRETBOARD_LIBRARY[key] || FRETBOARD_LIBRARY[parsed.root + (parsed.quality || "")] || null;
+    if (!positions) return null;
+    return { strings: 6, frets: 4, firstFret: 1, positions: [...positions], fingers: [] };
+  }
+  const SOUND_FLAGS = {
+    pizzicato: { label: "pizz.", aliases: ["pizz.", "pizzicato"] },
+    arco: { label: "arco", aliases: ["arco"] },
+    mute: { label: "mute", aliases: ["mute", "con sord.", "con sord"] },
+    open: { label: "open", aliases: ["open", "senza sord.", "senza sord"] },
+    tremolo: { label: "trem.", aliases: ["trem.", "tremolo"] },
+    palmMute: { label: "P.M.", aliases: ["p.m.", "pm", "palm mute"] },
+  };
+  function detectSoundFlag(text) {
+    const clean = String(text || "").trim().toLowerCase();
+    if (!clean) return null;
+    for (const [key, spec] of Object.entries(SOUND_FLAGS)) {
+      if (spec.aliases.some(a => clean === a || clean.includes(a))) return key;
+    }
+    return null;
+  }
 
   /* 조표 임시표의 보표 스텝 위치(absStep) 배열 */
   function keySigSteps(key, clef) {
@@ -370,6 +444,25 @@ window.SF = window.SF || {};
   const newId = () => "e" + (_idCounter++);
 
   function measureLen(score) { return F(score.timeSig.num, score.timeSig.den); }
+  const DEFAULT_LAYOUT = {
+    pageSize: "A4",
+    orientation: "portrait",
+    width: 1000,
+    height: 1414,
+    marginTop: 52,
+    marginRight: 52,
+    marginBottom: 52,
+    marginLeft: 52,
+    staffScale: 1,
+    systemGap: 1,
+    staffGap: 1,
+    measuresPerSystem: 0,
+  };
+  function ensureLayout(score) {
+    score.layout = { ...DEFAULT_LAYOUT, ...(score.layout || {}) };
+    score.layout.measuresPerSystem = Math.max(0, Math.min(16, score.layout.measuresPerSystem | 0 || 0));
+    return score.layout;
+  }
 
   function fullRest(score) {
     const L = measureLen(score);
@@ -383,6 +476,9 @@ window.SF = window.SF || {};
     viola: { name: "비올라", shortName: "Vla.", group: "strings", instrument: "strings", staves: [{ clef: "treble" }] },
     cello: { name: "첼로", shortName: "Vc.", group: "strings", instrument: "strings", staves: [{ clef: "bass" }] },
     organ: { name: "오르간", shortName: "Org.", group: "keyboard", instrument: "organ", brace: "brace", staves: [{ clef: "treble" }, { clef: "bass" }] },
+    drumkit: { name: "드럼 키트", shortName: "Dr.", group: "percussion", instrument: "drums", staves: [{ clef: "percussion", instrumentType: "percussion", staffType: "percussion" }] },
+    guitar: { name: "기타", shortName: "Gtr.", group: "strings", instrument: "guitar", tuning: GUITAR_STANDARD_TUNING, staves: [{ clef: "treble" }] },
+    "guitar-tab": { name: "기타 + TAB", shortName: "Gtr.", group: "strings", instrument: "guitar", tuning: GUITAR_STANDARD_TUNING, brace: "brace", staves: [{ clef: "treble", staffType: "standard", name: "Staff" }, { clef: "treble", staffType: "tab", name: "TAB" }] },
     epiano: { name: "일렉피아노", shortName: "E.Pno.", group: "keyboard", instrument: "epiano", staves: [{ clef: "treble" }] },
     musicbox: { name: "뮤직박스", shortName: "M.B.", group: "keyboard", instrument: "musicbox", staves: [{ clef: "treble" }] },
     chiptune: { name: "8비트", shortName: "8bit", group: "synth", instrument: "chiptune", staves: [{ clef: "treble" }] },
@@ -393,10 +489,93 @@ window.SF = window.SF || {};
     piano: { label: "피아노 2단", parts: ["piano"] },
     "flute-piano": { label: "플루트 + 피아노 3단", parts: ["flute", "piano"] },
     "string-quartet": { label: "현악4중주", parts: ["violin", "violin", "viola", "cello"] },
+    drumkit: { label: "드럼 키트", parts: ["drumkit"] },
+    "guitar-tab": { label: "기타 + TAB", parts: ["guitar-tab"] },
   };
 
   function cloneMeasure(mm) {
     return JSON.parse(JSON.stringify(mm));
+  }
+  const VOICE_COUNT = 4;
+  function normalizeVoice(voice) {
+    return Math.max(1, Math.min(VOICE_COUNT, voice | 0 || 1));
+  }
+  function voiceFromCtx(ctx) {
+    return normalizeVoice(ctx?.voice || state?.currentVoice || 1);
+  }
+  function markEventVoice(ev, voice) {
+    if (!ev) return ev;
+    ev.voice = normalizeVoice(voice);
+    if (!ev.notes) ev.notes = [];
+    return ev;
+  }
+  function hasVisibleContent(ev) {
+    return !!(ev && (
+      ev.type === "note" ||
+      ev.chordSymbol || ev.tempo || ev.rehearsal || ev.staffText ||
+      ev.dynamic || (ev.artics && ev.artics.length) ||
+      (ev.lyric || (ev.lyrics && ev.lyrics.length)) ||
+      (ev.graceBefore && ev.graceBefore.length)
+    ));
+  }
+  function voiceIsEmpty(evs) {
+    return !evs || !evs.length || evs.every(ev => ev.type === "rest" && !hasVisibleContent(ev));
+  }
+  function ensureMeasureVoices(mm, score) {
+    if (!mm) return [];
+    ensureMeasureMeta(mm);
+    const fallbackScore = score || { timeSig: { num: 4, den: 4 } };
+    const base = Array.isArray(mm.events) && mm.events.length ? mm.events : [fullRest(fallbackScore)];
+    if (!Array.isArray(mm.voices)) {
+      mm.voices = Array.from({ length: VOICE_COUNT }, (_, i) => i === 0 ? base : []);
+    }
+    while (mm.voices.length < VOICE_COUNT) mm.voices.push([]);
+    for (let v = 0; v < VOICE_COUNT; v++) {
+      if (!Array.isArray(mm.voices[v])) mm.voices[v] = [];
+      if (!mm.voices[v].length) mm.voices[v] = [fullRest(fallbackScore)];
+      mm.voices[v].forEach(ev => markEventVoice(ev, v + 1));
+    }
+    mm.events = mm.voices[0];
+    return mm.voices;
+  }
+  function getVoiceEvents(measure, voice = 1, score) {
+    return ensureMeasureVoices(measure, score)[normalizeVoice(voice) - 1];
+  }
+  function syncMeasureEvents(measure) {
+    if (measure && Array.isArray(measure.voices)) measure.events = measure.voices[0] || measure.events || [];
+    return measure;
+  }
+  function measureEntries(measure, opt = {}) {
+    const voices = ensureMeasureVoices(measure, opt.score);
+    const activeVoice = opt.activeVoice ? normalizeVoice(opt.activeVoice) : null;
+    const includeSilent = !!opt.includeSilent;
+    const out = [];
+    for (let v = 0; v < VOICE_COUNT; v++) {
+      const evs = voices[v];
+      const empty = voiceIsEmpty(evs);
+      if (empty && !includeSilent && v > 0 && activeVoice !== v + 1) continue;
+      if (empty && !includeSilent && v === 0 && activeVoice && activeVoice !== 1) {
+        const anyOther = voices.some((list, i) => i > 0 && (!voiceIsEmpty(list) || activeVoice === i + 1));
+        if (anyOther) continue;
+      }
+      let tick = Fraction.ZERO;
+      for (let e = 0; e < evs.length; e++) {
+        const ev = markEventVoice(evs[e], v + 1);
+        out.push({ ev, e, voice: v + 1, tick });
+        tick = tick.add(durValue(ev.dur));
+      }
+    }
+    out.sort((a, b) => a.tick.cmp(b.tick) || a.voice - b.voice || a.e - b.e);
+    return out;
+  }
+  function forEachEvent(score, fn, opt = {}) {
+    for (const ref of staffRefs(score)) {
+      for (let m = 0; m < ref.measures.length; m++) {
+        for (const entry of measureEntries(ref.measures[m], { score, includeSilent: opt.includeSilent, activeVoice: opt.activeVoice })) {
+          fn(entry.ev, { ...ref, m, e: entry.e, ev: entry.ev, voice: entry.voice, tick: entry.tick });
+        }
+      }
+    }
   }
   function emptyMeasures(score, count) {
     const out = [];
@@ -410,6 +589,7 @@ window.SF = window.SF || {};
     if (mm.repeatCount === undefined) mm.repeatCount = 2;
     if (mm.endingStart === undefined) mm.endingStart = null;
     if (mm.endingStop === undefined) mm.endingStop = false;
+    syncMeasureEvents(mm);
     return mm;
   }
   function partTemplate(kind, opt = {}) {
@@ -420,22 +600,30 @@ window.SF = window.SF || {};
       instrument: opt.instrument || "piano",
       staves: [{ clef: opt.clef || "treble" }],
     } : (PART_LIBRARY[kind] || PART_LIBRARY.piano);
-    return {
+    const part = {
       id: newId(),
       kind,
       name: lib.name,
       shortName: lib.shortName,
       group: lib.group,
       instrument: lib.instrument,
+      tuning: lib.tuning ? [...lib.tuning] : undefined,
       brace: lib.brace || null,
       staves: lib.staves.map((st, i) => ({
         id: newId(),
         name: st.name || "",
         clef: st.clef || "treble",
+        staffType: st.staffType || "standard",
+        instrumentType: st.instrumentType || lib.instrumentType || (lib.group === "percussion" ? "percussion" : "pitched"),
         staffIdx: i,
         measures: [],
       })),
     };
+    if (part.staves.length === 2 && part.staves.some(st => st.staffType === "tab")) {
+      part.staves[0].linkedStaffId = part.staves[1].id;
+      part.staves[1].linkedStaffId = part.staves[0].id;
+    }
+    return part;
   }
   function createPartsFor(score, partsSpec, measureCount, seedMeasures) {
     return partsSpec.map((spec, pIdx) => {
@@ -483,11 +671,14 @@ window.SF = window.SF || {};
           const staff = part.staves[i];
           if (!staff.id) staff.id = newId();
           if (!staff.clef) staff.clef = i === 1 ? "bass" : (score.clef || "treble");
+          if (!staff.staffType) staff.staffType = "standard";
+          if (!staff.instrumentType) staff.instrumentType = part.group === "percussion" || part.instrument === "drums" ? "percussion" : "pitched";
           if (!staff.measures || !staff.measures.length) staff.measures = emptyMeasures(score, count);
           while (staff.measures.length < count) staff.measures.push({ events: [fullRest(score)] });
           for (const mm of staff.measures) {
             ensureMeasureMeta(mm);
             if (!mm.events || !mm.events.length) mm.events = [fullRest(score)];
+            ensureMeasureVoices(mm, score);
           }
         }
       }
@@ -501,6 +692,7 @@ window.SF = window.SF || {};
         score.playbackSettings.mixer[part.id] = { mute: false, solo: false, volume: 1, pan: 0 };
       }
     }
+    ensureLayout(score);
     return syncLegacyFields(score);
   }
   function forEachMeasureAt(score, mIdx, fn) {
@@ -547,6 +739,8 @@ window.SF = window.SF || {};
         partIdx, staffIdx, globalIdx: refs.length,
         part, staff, measures: staff.measures,
         clef: staff.clef || "treble",
+        staffType: staff.staffType || "standard",
+        instrumentType: staff.instrumentType || part.instrumentType || (part.group === "percussion" ? "percussion" : "pitched"),
         instrument: part.instrument || score.instrument || "piano",
         name: part.name || "악기",
         shortName: part.shortName || part.name || "Inst.",
@@ -556,7 +750,7 @@ window.SF = window.SF || {};
     return refs;
   }
   function isStaffEmpty(ref) {
-    return ref.measures.every(mm => (mm.events || []).every(ev => ev.type === "rest" && !ev.chordSymbol && !ev.tempo && !ev.rehearsal && !ev.staffText));
+    return ref.measures.every(mm => measureEntries(mm).every(({ ev }) => ev.type === "rest" && !ev.chordSymbol && !ev.tempo && !ev.rehearsal && !ev.staffText));
   }
   function visibleStaffRefs(score, viewMode, opt = {}) {
     const refs = staffRefs(score);
@@ -590,11 +784,14 @@ window.SF = window.SF || {};
     return activeRef(score);
   }
   function activeClef(score) { return activeRef(score).clef || "treble"; }
+  function isPercussionRef(ref) { return ref?.instrumentType === "percussion" || ref?.staff?.instrumentType === "percussion" || ref?.instrument === "drums"; }
   function ensembleKey(score) {
     ensureParts(score);
     if (score.parts.length === 1 && score.parts[0].staves.length === 2 && score.parts[0].instrument === "piano") return "piano";
     if (score.parts.length === 2 && score.parts[0].instrument === "flute" && score.parts[1].instrument === "piano" && score.parts[1].staves.length === 2) return "flute-piano";
     if (score.parts.length === 4 && score.parts.every(p => p.group === "strings")) return "string-quartet";
+    if (score.parts.length === 1 && score.parts[0].instrument === "drums") return "drumkit";
+    if (score.parts.length === 1 && score.parts[0].instrument === "guitar" && score.parts[0].staves.some(st => st.staffType === "tab")) return "guitar-tab";
     if (score.parts.length === 1 && score.parts[0].staves.length === 1) return "solo";
     return "custom";
   }
@@ -627,6 +824,7 @@ window.SF = window.SF || {};
       tempo: opt.tempo || 100,
       instrument: opt.instrument || "piano",
       playbackSettings: { swing: "off", mixer: {} },
+      layout: { ...DEFAULT_LAYOUT },
       measures: [],
       parts: [],
       activePartIdx: 0,
@@ -645,17 +843,21 @@ window.SF = window.SF || {};
   }
 
   /* ---------------- 순회/조회 ---------------- */
-  function eventStartTick(measure, eIdx) {
+  function eventStartTick(measure, eIdx, ctx) {
+    const evs = getVoiceEvents(measure, ctx?.voice || 1);
     let t = Fraction.ZERO;
-    for (let i = 0; i < eIdx; i++) t = t.add(durValue(measure.events[i].dur));
+    for (let i = 0; i < eIdx; i++) t = t.add(durValue(evs[i].dur));
     return t;
   }
   function findEvent(score, id) {
     for (const ref of staffRefs(score)) {
       for (let m = 0; m < ref.measures.length; m++) {
-        const evs = ref.measures[m].events;
-        for (let e = 0; e < evs.length; e++) {
-          if (evs[e].id === id) return { ...ref, m, e, ev: evs[e] };
+        const voices = ensureMeasureVoices(ref.measures[m], score);
+        for (let v = 0; v < voices.length; v++) {
+          const evs = voices[v];
+          for (let e = 0; e < evs.length; e++) {
+            if (evs[e].id === id) return { ...ref, m, e, voice: v + 1, ev: evs[e] };
+          }
         }
       }
     }
@@ -664,19 +866,22 @@ window.SF = window.SF || {};
   function nextEvent(score, m, e, ctx) {
     const ref = staffRef(score, ctx);
     const measures = staffMeasures(score, ctx);
-    const evs = measures[m]?.events || [];
-    if (e + 1 < evs.length) return { ...ref, m, e: e + 1, ev: evs[e + 1] };
+    const voice = voiceFromCtx(ctx);
+    const evs = measures[m] ? getVoiceEvents(measures[m], voice, score) : [];
+    if (e + 1 < evs.length) return { ...ref, m, e: e + 1, voice, ev: evs[e + 1] };
     for (let mm = m + 1; mm < measures.length; mm++)
-      if (measures[mm].events.length) return { ...ref, m: mm, e: 0, ev: measures[mm].events[0] };
+      if (getVoiceEvents(measures[mm], voice, score).length) return { ...ref, m: mm, e: 0, voice, ev: getVoiceEvents(measures[mm], voice, score)[0] };
     return null;
   }
   function prevEvent(score, m, e, ctx) {
     const ref = staffRef(score, ctx);
     const measures = staffMeasures(score, ctx);
-    if (e - 1 >= 0) return { ...ref, m, e: e - 1, ev: measures[m].events[e - 1] };
+    const voice = voiceFromCtx(ctx);
+    const curEvs = measures[m] ? getVoiceEvents(measures[m], voice, score) : [];
+    if (e - 1 >= 0) return { ...ref, m, e: e - 1, voice, ev: curEvs[e - 1] };
     for (let mm = m - 1; mm >= 0; mm--) {
-      const evs = measures[mm].events;
-      if (evs.length) return { ...ref, m: mm, e: evs.length - 1, ev: evs[evs.length - 1] };
+      const evs = getVoiceEvents(measures[mm], voice, score);
+      if (evs.length) return { ...ref, m: mm, e: evs.length - 1, voice, ev: evs[evs.length - 1] };
     }
     return null;
   }
@@ -689,11 +894,13 @@ window.SF = window.SF || {};
    * start는 항상 기존 이벤트 경계여야 한다(입력 커서가 보장). */
   function replaceRange(score, mIdx, start, len, makeEvents, ctx) {
     const measure = staffMeasures(score, ctx)[mIdx];
+    const voice = voiceFromCtx(ctx);
+    const evs = getVoiceEvents(measure, voice, score);
     const out = [];
     let pos = Fraction.ZERO;
     const end = start.add(len);
     let inserted = false;
-    for (const ev of measure.events) {
+    for (const ev of evs) {
       const evLen = durValue(ev.dur);
       const evEnd = pos.add(evLen);
       if (evEnd.lte(start) || pos.gte(end)) {
@@ -702,23 +909,25 @@ window.SF = window.SF || {};
         // 범위와 겹침 → 제거. 머리/꼬리가 남으면 쉼표로 채움
         if (pos.lt(start)) {
           for (const d of decompose(pos, start.sub(pos)))
-            out.push({ id: newId(), type: "rest", dur: d, notes: [] });
+            out.push(markEventVoice({ id: newId(), type: "rest", dur: d, notes: [] }, voice));
         }
-        if (!inserted) { out.push(...makeEvents()); inserted = true; }
+        if (!inserted) { out.push(...makeEvents().map(ev2 => markEventVoice(ev2, voice))); inserted = true; }
         if (evEnd.gt(end)) {
           for (const d of decompose(end, evEnd.sub(end)))
-            out.push({ id: newId(), type: "rest", dur: d, notes: [] });
+            out.push(markEventVoice({ id: newId(), type: "rest", dur: d, notes: [] }, voice));
         }
       }
       pos = evEnd;
     }
-    if (!inserted) out.push(...makeEvents()); // 빈 마디 안전망
-    measure.events = out;
+    if (!inserted) out.push(...makeEvents().map(ev2 => markEventVoice(ev2, voice))); // 빈 마디 안전망
+    measure.voices[voice - 1] = out;
+    syncMeasureEvents(measure);
   }
 
   /* 음표/쉼표 입력. 마디를 넘으면 다음 마디로 타이 분할. 입력된 첫 이벤트 ref 반환 */
   function inputAt(score, mIdx, tick, dur, pitches /* null=쉼표 */, ctx) {
     const ref = staffRef(score, ctx);
+    const voice = voiceFromCtx(ctx);
     const L = measureLen(score);
     let want = durValue(dur);
     const room = L.sub(tick);
@@ -729,6 +938,7 @@ window.SF = window.SF || {};
         const ev = {
           id: newId(),
           type: pitches ? "note" : "rest",
+          voice,
           dur: d,
           notes: pitches ? pitches.map(p => ({ step: p.step, alter: p.alter, oct: p.oct, tie: false })) : [],
         };
@@ -736,7 +946,7 @@ window.SF = window.SF || {};
         if (!firstId) firstId = ev.id;
         return ev;
       });
-      replaceRange(score, m, t, pieces.reduce((a, d) => a.add(durValue(d)), Fraction.ZERO), () => evs, ref);
+      replaceRange(score, m, t, pieces.reduce((a, d) => a.add(durValue(d)), Fraction.ZERO), () => evs, { ...ref, voice });
     };
 
     if (want.lte(room)) {
@@ -758,15 +968,47 @@ window.SF = window.SF || {};
     return firstId;
   }
 
+  function addDrumNote(score, mIdx, tick, drumId, dur, ctx) {
+    const spec = drumSpec(drumId);
+    const pitch = spellMidi(spec.midi, 0);
+    const firstId = inputAt(score, mIdx, tick, dur, [pitch], ctx);
+    const found = firstId ? findEvent(score, firstId) : findEventAtVoiceTick(score, mIdx, tick, ctx);
+    if (found && found.ev.type === "note") {
+      found.ev.drumId = drumId;
+      found.ev.midi = spec.midi;
+      found.ev.staffLine = spec.staffLine;
+      found.ev.notehead = spec.notehead;
+      found.ev.displayStep = spec.displayStep;
+      found.ev.displayOctave = spec.displayOctave;
+      found.ev.notes = [{ ...pitch, tie: false }];
+    }
+    return firstId;
+  }
+  function findEventAtVoiceTick(score, mIdx, tick, ctx) {
+    const ref = staffRef(score, ctx);
+    const voice = voiceFromCtx(ctx);
+    const evs = getVoiceEvents(ref.measures[mIdx], voice, score);
+    let t = Fraction.ZERO;
+    for (let e = 0; e < evs.length; e++) {
+      const ev = evs[e];
+      const end = t.add(durValue(ev.dur));
+      if (tick.gte(t) && tick.lt(end)) return { ...ref, m: mIdx, e, voice, ev };
+      t = end;
+    }
+    return null;
+  }
+
   /* 이벤트 삭제 → 같은 길이의 쉼표 */
   function deleteEvent(score, mIdx, eIdx, ctx) {
     const measure = staffMeasures(score, ctx)[mIdx];
-    const ev = measure.events[eIdx];
+    const voice = voiceFromCtx(ctx);
+    const evs = getVoiceEvents(measure, voice, score);
+    const ev = evs[eIdx];
     if (!ev) return;
-    const start = eventStartTick(measure, eIdx);
+    const start = eventStartTick(measure, eIdx, { voice });
     const len = durValue(ev.dur);
     replaceRange(score, mIdx, start, len, () =>
-      decompose(start, len).map(d => ({ id: newId(), type: "rest", dur: d, notes: [] })), ctx);
+      decompose(start, len).map(d => ({ id: newId(), type: "rest", dur: d, notes: [] })), { ...ctx, voice });
     consolidateRests(score, mIdx, ctx);
     normalizeTies(score);
   }
@@ -774,9 +1016,11 @@ window.SF = window.SF || {};
   function makeTupletAt(score, mIdx, eIdx, actual, ctx) {
     actual = Math.max(2, Math.min(9, actual | 0));
     const measure = staffMeasures(score, ctx)[mIdx];
-    const ev = measure.events[eIdx];
+    const voice = voiceFromCtx(ctx);
+    const evs = getVoiceEvents(measure, voice, score);
+    const ev = evs[eIdx];
     if (!ev || ev.full || ev.dur.tuplet) return null;
-    const start = eventStartTick(measure, eIdx);
+    const start = eventStartTick(measure, eIdx, { voice });
     const totalLen = durValue(ev.dur);
     const written = tupletWrittenDur(ev.dur, actual);
     const tuplet = tupletMeta(actual);
@@ -785,6 +1029,7 @@ window.SF = window.SF || {};
       const next = {
         id: newId(),
         type: ev.type,
+        voice,
         dur: { ...written, tuplet: { ...tuplet } },
         notes: ev.type === "note" ? ev.notes.map(n => ({ step: n.step, alter: n.alter, oct: n.oct, tie: false })) : [],
       };
@@ -797,12 +1042,14 @@ window.SF = window.SF || {};
         if (ev.tempo) next.tempo = ev.tempo;
         if (ev.rehearsal) next.rehearsal = ev.rehearsal;
         if (ev.staffText) next.staffText = ev.staffText;
+        if (ev.soundFlag) next.soundFlag = ev.soundFlag;
         if (ev.chordSymbol) next.chordSymbol = cloneChordSymbol(ev.chordSymbol);
+        if (ev.fretboard) next.fretboard = JSON.parse(JSON.stringify(ev.fretboard));
       }
       ids.push(next.id);
       return next;
     });
-    replaceRange(score, mIdx, start, totalLen, make, ctx);
+    replaceRange(score, mIdx, start, totalLen, make, { ...ctx, voice });
     normalizeTies(score);
     return ids;
   }
@@ -810,8 +1057,11 @@ window.SF = window.SF || {};
   /* 연속 쉼표 정리: 쉼표 구간을 다시 분해해 깔끔하게, 마디 전체가 쉼표면 온쉼표 1개 */
   function consolidateRests(score, mIdx, ctx) {
     const measure = staffMeasures(score, ctx)[mIdx];
-    if (measure.events.every(e => e.type === "rest")) {
-      measure.events = [fullRest(score)];
+    const voice = voiceFromCtx(ctx);
+    const evs = getVoiceEvents(measure, voice, score);
+    if (evs.every(e => e.type === "rest" && !hasVisibleContent(e))) {
+      measure.voices[voice - 1] = [markEventVoice(fullRest(score), voice)];
+      syncMeasureEvents(measure);
       return;
     }
     const out = [];
@@ -819,11 +1069,11 @@ window.SF = window.SF || {};
     const flush = () => {
       if (runStart !== null) {
         for (const d of decompose(runStart, runLen))
-          out.push({ id: newId(), type: "rest", dur: d, notes: [] });
+          out.push(markEventVoice({ id: newId(), type: "rest", dur: d, notes: [] }, voice));
         runStart = null; runLen = Fraction.ZERO;
       }
     };
-    for (const ev of measure.events) {
+    for (const ev of evs) {
       const len = durValue(ev.dur);
       if (ev.type === "rest") {
         if (runStart === null) runStart = pos;
@@ -832,22 +1082,25 @@ window.SF = window.SF || {};
       pos = pos.add(len);
     }
     flush();
-    measure.events = out;
+    measure.voices[voice - 1] = out.map(ev => markEventVoice(ev, voice));
+    syncMeasureEvents(measure);
   }
 
   /* 타이 정합성: 다음 이벤트에 같은 음높이가 없으면 tie 해제 */
   function normalizeTies(score) {
     for (const ref of staffRefs(score)) {
       for (let m = 0; m < ref.measures.length; m++) {
-        const evs = ref.measures[m].events;
-        for (let e = 0; e < evs.length; e++) {
-          const ev = evs[e];
-          if (ev.type !== "note") continue;
-          const nx = nextEvent(score, m, e, ref);
-          for (const note of ev.notes) {
-            if (note.tie) {
-              const ok = nx && nx.ev.type === "note" && nx.ev.notes.some(n2 => pitchEq(n2, note));
-              if (!ok) note.tie = false;
+        for (let voice = 1; voice <= VOICE_COUNT; voice++) {
+          const evs = getVoiceEvents(ref.measures[m], voice, score);
+          for (let e = 0; e < evs.length; e++) {
+            const ev = evs[e];
+            if (ev.type !== "note") continue;
+            const nx = nextEvent(score, m, e, { ...ref, voice });
+            for (const note of ev.notes) {
+              if (note.tie) {
+                const ok = nx && nx.ev.type === "note" && nx.ev.notes.some(n2 => pitchEq(n2, note));
+                if (!ok) note.tie = false;
+              }
             }
           }
         }
@@ -868,7 +1121,7 @@ window.SF = window.SF || {};
     let i = 0;
     for (const ref of staffRefs(score))
       for (const measure of ref.measures)
-        for (const ev of measure.events) map.set(ev.id, i++);
+        for (const { ev } of measureEntries(measure, { score, includeSilent: true })) map.set(ev.id, i++);
     return map;
   }
 
@@ -904,44 +1157,49 @@ window.SF = window.SF || {};
   /* ---------------- 박자표 변경: 모든 내용을 새 마디 길이로 다시 붓기 ---------------- */
   function rebar(score, newTs) {
     ensureParts(score);
-    const lanes = staffRefs(score).map(ref => {
-      const items = [];
-      const consumed = new Set();
-      for (let m = 0; m < ref.measures.length; m++) {
-        const evs = ref.measures[m].events;
-        for (let e = 0; e < evs.length; e++) {
-          const ev = evs[e];
-          if (consumed.has(ev.id)) continue;
-          let len = durValue(ev.dur);
-          if (ev.type === "note") {
-            let cur = { ...ref, m, e, ev };
-            while (cur.ev.notes.length && cur.ev.notes.every(n => n.tie)) {
-              const nx = nextEvent(score, cur.m, cur.e, ref);
-              if (!nx || nx.ev.type !== "note") break;
-              consumed.add(nx.ev.id);
-              len = len.add(durValue(nx.ev.dur));
-              cur = nx;
+    const lanes = [];
+    for (const ref of staffRefs(score)) {
+      for (let voice = 1; voice <= VOICE_COUNT; voice++) {
+        const items = [];
+        const consumed = new Set();
+        let anyContent = voice === 1;
+        for (let m = 0; m < ref.measures.length; m++) {
+          const evs = getVoiceEvents(ref.measures[m], voice, score);
+          if (!voiceIsEmpty(evs)) anyContent = true;
+          for (let e = 0; e < evs.length; e++) {
+            const ev = evs[e];
+            if (consumed.has(ev.id)) continue;
+            let len = durValue(ev.dur);
+            if (ev.type === "note") {
+              let cur = { ...ref, m, e, voice, ev };
+              while (cur.ev.notes.length && cur.ev.notes.every(n => n.tie)) {
+                const nx = nextEvent(score, cur.m, cur.e, { ...ref, voice });
+                if (!nx || nx.ev.type !== "note") break;
+                consumed.add(nx.ev.id);
+                len = len.add(durValue(nx.ev.dur));
+                cur = nx;
+              }
+              items.push({
+                type: "note", len, voice,
+                pitches: ev.notes.map(n => ({ step: n.step, alter: n.alter, oct: n.oct })),
+                graceBefore: cloneGraceList(ev.graceBefore),
+                lyric: ev.lyric,
+                lyrics: cloneLyrics(ev),
+                dynamic: ev.dynamic,
+                artics: ev.artics ? [...ev.artics] : null,
+                tempo: ev.tempo,
+                rehearsal: ev.rehearsal,
+                staffText: ev.staffText,
+                chordSymbol: cloneChordSymbol(ev.chordSymbol),
+              });
+            } else {
+              items.push({ type: "rest", len, voice, fromFull: !!ev.full, chordSymbol: cloneChordSymbol(ev.chordSymbol) });
             }
-            items.push({
-              type: "note", len,
-              pitches: ev.notes.map(n => ({ step: n.step, alter: n.alter, oct: n.oct })),
-              graceBefore: cloneGraceList(ev.graceBefore),
-              lyric: ev.lyric,
-              lyrics: cloneLyrics(ev),
-              dynamic: ev.dynamic,
-              artics: ev.artics ? [...ev.artics] : null,
-              tempo: ev.tempo,
-              rehearsal: ev.rehearsal,
-              staffText: ev.staffText,
-              chordSymbol: cloneChordSymbol(ev.chordSymbol),
-            });
-          } else {
-            items.push({ type: "rest", len, fromFull: !!ev.full, chordSymbol: cloneChordSymbol(ev.chordSymbol) });
           }
         }
+        if (anyContent) lanes.push({ ref, voice, items, total: items.reduce((a, it) => a.add(it.len), Fraction.ZERO) });
       }
-      return { ref, items, total: items.reduce((a, it) => a.add(it.len), Fraction.ZERO) };
-    });
+    }
 
     score.timeSig = { num: newTs.num, den: newTs.den };
     const L = measureLen(score);
@@ -958,7 +1216,7 @@ window.SF = window.SF || {};
     syncLegacyFields(score);
 
     for (const lane of lanes) {
-      const ctx = { partIdx: lane.ref.partIdx, staffIdx: lane.ref.staffIdx };
+      const ctx = { partIdx: lane.ref.partIdx, staffIdx: lane.ref.staffIdx, voice: lane.voice };
       let m = 0, t = Fraction.ZERO;
       for (const it of lane.items) {
         let remain = it.len;
@@ -971,7 +1229,7 @@ window.SF = window.SF || {};
             const isLastPiece = remain.eq(take) && i === pieces.length - 1;
             if (it.type === "note") {
               const ev = {
-                id: newId(), type: "note", dur: d,
+                id: newId(), type: "note", voice: lane.voice, dur: d,
                 notes: it.pitches.map(p => ({ ...p, tie: !isLastPiece })),
               };
               if (first && it.graceBefore && it.graceBefore.length) ev.graceBefore = cloneGraceList(it.graceBefore);
@@ -988,7 +1246,7 @@ window.SF = window.SF || {};
               if (first && it.chordSymbol) ev.chordSymbol = cloneChordSymbol(it.chordSymbol);
               replaceRange(score, m, t, durValue(d), () => [ev], ctx);
             } else {
-              const ev = { id: newId(), type: "rest", dur: d, notes: [] };
+              const ev = { id: newId(), type: "rest", voice: lane.voice, dur: d, notes: [] };
               if (first && it.chordSymbol) ev.chordSymbol = cloneChordSymbol(it.chordSymbol);
               replaceRange(score, m, t, durValue(d), () => [ev], ctx);
             }
@@ -1017,7 +1275,7 @@ window.SF = window.SF || {};
     score.keySig = f;
     for (const ref of staffRefs(score))
       for (const measure of ref.measures)
-      for (const ev of measure.events)
+      for (const { ev } of measureEntries(measure, { score, includeSilent: true }))
         if (ev.type === "note")
           ev.notes = ev.notes.map(n => {
             const p = spellMidi(midiOf(n) + semitones, f, semitones > 0 ? "sharp" : "flat");
@@ -1028,6 +1286,11 @@ window.SF = window.SF || {};
   /* ---------------- 직렬화 ---------------- */
   function toJSON(score) {
     ensureParts(score);
+    for (const ref of staffRefs(score))
+      for (const mm of ref.measures) {
+        ensureMeasureVoices(mm, score);
+        syncMeasureEvents(mm);
+      }
     return JSON.parse(JSON.stringify(score));
   }
   function fromJSON(obj) {
@@ -1036,8 +1299,9 @@ window.SF = window.SF || {};
     // id 카운터 복구 + 구버전 파일 마이그레이션
     let maxId = 0;
     for (const ref of staffRefs(score))
-      for (const m of ref.measures)
-        for (const ev of m.events) {
+      for (const m of ref.measures) {
+        ensureMeasureVoices(m, score);
+        for (const { ev } of measureEntries(m, { score, includeSilent: true })) {
           const n = parseInt(String(ev.id).replace(/\D/g, ""), 10);
           if (!isNaN(n)) maxId = Math.max(maxId, n);
           if (!ev.notes) ev.notes = [];
@@ -1049,6 +1313,8 @@ window.SF = window.SF || {};
             if (!isNaN(gn)) maxId = Math.max(maxId, gn);
           }
         }
+        syncMeasureEvents(m);
+      }
     _idCounter = maxId + 1;
     if (!score.spanners) score.spanners = [];
     syncLegacyFields(score);
@@ -1059,6 +1325,7 @@ window.SF = window.SF || {};
   /* ---------------- 상태 + Undo/Redo ---------------- */
   const state = {
     score: createScore(),
+    currentVoice: 1,
     dirty: false,
     listeners: new Set(),
   };
@@ -1109,13 +1376,14 @@ window.SF = window.SF || {};
     midiOf, absStep, pitchEq, keyAlterFor, spellMidi, transposePitch, pitchName,
     parseChordSymbol, normalizeChordSymbol, displayChordSymbol, cloneChordSymbol,
     lyricsOf, cloneLyrics, setLyric, normalizeEventLyrics,
-    STEP_EN, STEP_KO, STEP_SEMIS, KEY_NAMES, CLEFS, keySigSteps, beamGroups, beatLen,
+    STEP_EN, STEP_KO, STEP_SEMIS, KEY_NAMES, CLEFS, DRUM_MAP, drumSpec, GUITAR_STANDARD_TUNING, midiToStringFret, stringFretToMidi, applyTabToEvent, FRETBOARD_LIBRARY, getDefaultFretboard, SOUND_FLAGS, detectSoundFlag, keySigSteps, beamGroups, beatLen,
     PART_LIBRARY, ENSEMBLES,
-    createScore, measureLen, fullRest, newId,
-    ensureParts, ensureMeasureMeta, staffRefs, visibleStaffRefs, isStaffEmpty, staffRef, staffMeasures, activeRef, activeClef, setActiveStaff, ensembleKey, applyEnsemble,
+    createScore, measureLen, fullRest, newId, DEFAULT_LAYOUT, ensureLayout,
+    VOICE_COUNT, normalizeVoice, ensureMeasureVoices, getVoiceEvents, measureEntries, forEachEvent, voiceIsEmpty, hasVisibleContent,
+    ensureParts, ensureMeasureMeta, staffRefs, visibleStaffRefs, isStaffEmpty, staffRef, staffMeasures, activeRef, activeClef, isPercussionRef, setActiveStaff, ensembleKey, applyEnsemble,
     toggleStartRepeat, toggleEndRepeat, setRepeatCount, setEnding, clearEndings,
     eventStartTick, findEvent, nextEvent, prevEvent,
-    replaceRange, inputAt, deleteEvent, makeTupletAt, consolidateRests, normalizeTies, isTiedFrom,
+    replaceRange, inputAt, addDrumNote, deleteEvent, makeTupletAt, consolidateRests, normalizeTies, isTiedFrom,
     addGraceBefore, findGrace, cloneGraceList,
     eventOrderMap, normalizeSpanners, slurCoverMap,
     rebar, transposeScore, toJSON, fromJSON,
