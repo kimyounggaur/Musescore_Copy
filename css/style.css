@@ -25,6 +25,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 body {
   margin: 0;
@@ -74,6 +75,37 @@ body {
   padding: 0 5px;
   font-size: 12px;
   border-radius: 5px;
+}
+.authbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px;
+  flex-wrap: wrap;
+}
+.auth-status {
+  height: 30px;
+  max-width: 180px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, .025);
+  font-size: 12px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.auth-status.signed-in { color: #cfe1ff; border-color: rgba(79, 141, 249, .5); background: rgba(79, 141, 249, .14); }
+.auth-status.admin { color: #ffe6bf; border-color: rgba(255, 122, 26, .55); background: rgba(255, 122, 26, .15); }
+.auth-btn {
+  min-width: auto;
+  height: 30px;
+  padding: 0 8px;
+  font-size: 12.5px;
 }
 
 .tsep { width: 1px; height: 24px; background: var(--line); margin: 0 4px; flex: none; }
@@ -463,6 +495,178 @@ dialog::backdrop { background: rgba(10, 12, 16, .6); backdrop-filter: blur(2px);
 }
 .chip:hover { border-color: var(--select); color: #cfe1ff; }
 
+.auth-dialog {
+  display: grid;
+  gap: 12px;
+  min-width: min(520px, 82vw);
+}
+.auth-message {
+  border: 1px solid rgba(79, 141, 249, .35);
+  border-radius: 8px;
+  background: rgba(79, 141, 249, .12);
+  color: var(--text);
+  padding: 10px 12px;
+  line-height: 1.5;
+  font-size: 13px;
+}
+.auth-message:empty { display: none; }
+.auth-message.error {
+  border-color: rgba(255, 122, 26, .5);
+  background: rgba(255, 122, 26, .13);
+}
+.auth-message.ok {
+  border-color: rgba(46, 163, 77, .48);
+  background: rgba(46, 163, 77, .13);
+}
+.auth-config,
+.auth-form,
+.admin-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #20242b;
+  padding: 12px;
+}
+.auth-section-title,
+.admin-card h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--text);
+}
+.auth-config-grid,
+.auth-form label {
+  display: grid;
+  grid-template-columns: 118px 1fr;
+  gap: 8px 10px;
+  align-items: center;
+}
+.auth-config-grid label,
+.auth-form span {
+  color: var(--text-dim);
+  font-size: 12.5px;
+  text-align: right;
+}
+.auth-config-grid input,
+.auth-form input {
+  width: 100%;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #1d2025;
+  color: var(--text);
+  font: inherit;
+  padding: 0 9px;
+}
+.auth-config-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+.auth-help {
+  margin: 9px 0 0;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.auth-form {
+  display: grid;
+  gap: 9px;
+}
+.admin-dialog {
+  display: grid;
+  gap: 12px;
+  min-width: min(760px, 88vw);
+}
+.admin-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.admin-card-head h3 { margin: 0; }
+.admin-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.admin-stat {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px;
+  background: rgba(255, 255, 255, .025);
+}
+.admin-stat span {
+  display: block;
+  color: var(--text-dim);
+  font-size: 11.5px;
+  margin-bottom: 4px;
+}
+.admin-stat b {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.admin-users {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.admin-users table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.admin-users th,
+.admin-users td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+.admin-users th {
+  position: sticky;
+  top: 0;
+  background: #262a31;
+  color: var(--text-dim);
+  z-index: 1;
+}
+.admin-users tr:last-child td { border-bottom: 0; }
+.admin-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(79, 141, 249, .14);
+  color: #cfe1ff;
+  font-weight: 800;
+}
+.admin-badge.role-admin {
+  background: rgba(255, 122, 26, .16);
+  color: #ffe6bf;
+}
+.admin-empty {
+  color: var(--text-dim);
+  padding: 14px;
+  line-height: 1.5;
+}
+.admin-sql {
+  margin: 10px 0 0;
+  white-space: pre-wrap;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #171a1f;
+  color: #d7e6ff;
+  padding: 12px;
+  font: 12.5px/1.5 Consolas, "SFMono-Regular", Menlo, monospace;
+  user-select: text;
+}
+
 .mixer-rows { display: grid; gap: 8px; min-width: min(520px, 82vw); }
 .mixer-row {
   display: grid; grid-template-columns: minmax(90px, 1fr) auto auto 120px 120px;
@@ -616,6 +820,8 @@ body[data-theme="light"] select.tsel,
 body[data-theme="light"] .tempo-box input,
 body[data-theme="light"] .form-grid input,
 body[data-theme="light"] .form-grid select,
+body[data-theme="light"] .auth-config-grid input,
+body[data-theme="light"] .auth-form input,
 body[data-theme="light"] .prop-grid input,
 body[data-theme="light"] .prop-grid select {
   background: #ffffff;
@@ -655,6 +861,9 @@ body[data-theme="light"] dialog {
   color: var(--text);
 }
 body[data-theme="light"] .prop-sec,
+body[data-theme="light"] .auth-config,
+body[data-theme="light"] .auth-form,
+body[data-theme="light"] .admin-card,
 body[data-theme="light"] .mixer-row,
 body[data-theme="light"] #dlg-welcome .step,
 body[data-theme="light"] #dlg-welcome .demo,
@@ -665,6 +874,8 @@ body[data-theme="light"] .menu {
   color: var(--text);
 }
 body[data-theme="light"] .prop-sec h3,
+body[data-theme="light"] .auth-section-title,
+body[data-theme="light"] .admin-card h3,
 body[data-theme="light"] #status-sel,
 body[data-theme="light"] .help-sec {
   color: #1f2937;
@@ -714,6 +925,8 @@ body[data-theme="pretty"] .chip,
 body[data-theme="pretty"] .drum-btn,
 body[data-theme="pretty"] .form-grid input,
 body[data-theme="pretty"] .form-grid select,
+body[data-theme="pretty"] .auth-config-grid input,
+body[data-theme="pretty"] .auth-form input,
 body[data-theme="pretty"] .prop-grid input,
 body[data-theme="pretty"] .prop-grid select {
   border-color: var(--line);
@@ -770,6 +983,9 @@ body[data-theme="pretty"] dialog {
   color: var(--text);
 }
 body[data-theme="pretty"] .prop-sec,
+body[data-theme="pretty"] .auth-config,
+body[data-theme="pretty"] .auth-form,
+body[data-theme="pretty"] .admin-card,
 body[data-theme="pretty"] .mixer-row,
 body[data-theme="pretty"] #dlg-welcome .step,
 body[data-theme="pretty"] #dlg-welcome .demo,
@@ -787,6 +1003,8 @@ body[data-theme="pretty"] .menu {
 body[data-theme="pretty"] .menu .mtitle,
 body[data-theme="pretty"] .menu .mi small,
 body[data-theme="pretty"] .prop-grid label,
+body[data-theme="pretty"] .auth-config-grid label,
+body[data-theme="pretty"] .auth-form span,
 body[data-theme="pretty"] .prop-empty,
 body[data-theme="pretty"] .mixer-row label,
 body[data-theme="pretty"] #dlg-welcome .demo small,
@@ -797,6 +1015,8 @@ body[data-theme="pretty"] .brand small {
   color: var(--text-dim);
 }
 body[data-theme="pretty"] .prop-sec h3,
+body[data-theme="pretty"] .auth-section-title,
+body[data-theme="pretty"] .admin-card h3,
 body[data-theme="pretty"] #status-sel,
 body[data-theme="pretty"] .help-sec {
   color: #fa520f;
@@ -893,6 +1113,8 @@ body[data-theme="cute"] .chip,
 body[data-theme="cute"] .drum-btn,
 body[data-theme="cute"] .form-grid input,
 body[data-theme="cute"] .form-grid select,
+body[data-theme="cute"] .auth-config-grid input,
+body[data-theme="cute"] .auth-form input,
 body[data-theme="cute"] .prop-grid input,
 body[data-theme="cute"] .prop-grid select {
   background: #ffffff;
@@ -980,6 +1202,9 @@ body[data-theme="cute"] #properties-panel {
   border-left-style: dashed;
 }
 body[data-theme="cute"] .prop-sec,
+body[data-theme="cute"] .auth-config,
+body[data-theme="cute"] .auth-form,
+body[data-theme="cute"] .admin-card,
 body[data-theme="cute"] .mixer-row,
 body[data-theme="cute"] #dlg-welcome .step,
 body[data-theme="cute"] #dlg-welcome .demo,
@@ -1002,6 +1227,8 @@ body[data-theme="cute"] .menu .mi {
 body[data-theme="cute"] .menu .mtitle,
 body[data-theme="cute"] .menu .mi small,
 body[data-theme="cute"] .prop-grid label,
+body[data-theme="cute"] .auth-config-grid label,
+body[data-theme="cute"] .auth-form span,
 body[data-theme="cute"] .prop-empty,
 body[data-theme="cute"] .mixer-row label,
 body[data-theme="cute"] #dlg-welcome .demo small,
@@ -1013,6 +1240,8 @@ body[data-theme="cute"] .brand small {
 }
 body[data-theme="cute"] .menu .mtitle,
 body[data-theme="cute"] .help-sec,
+body[data-theme="cute"] .auth-section-title,
+body[data-theme="cute"] .admin-card h3,
 body[data-theme="cute"] .prop-sec h3 {
   font-family: "Space Mono", "Cascadia Mono", Consolas, monospace;
   color: #078a52;

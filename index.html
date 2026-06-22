@@ -24,6 +24,15 @@
     </select>
   </label>
 
+  <div class="authbar" aria-label="회원 메뉴">
+    <span id="auth-status" class="auth-status" title="Supabase 로그인 상태">Supabase 미설정</span>
+    <button id="btn-signup" class="tbtn auth-btn" title="Supabase 회원가입">회원가입</button>
+    <button id="btn-member-login" class="tbtn auth-btn" title="회원 로그인">회원 로그인</button>
+    <button id="btn-admin-login" class="tbtn auth-btn" title="관리자 로그인">관리자 로그인</button>
+    <button id="btn-admin-page" class="tbtn auth-btn" title="관리자 페이지">관리자 페이지</button>
+    <button id="btn-logout" class="tbtn auth-btn" title="로그아웃" hidden>로그아웃</button>
+  </div>
+
   <div class="menu-wrap">
     <button id="btn-file" class="tbtn" title="파일 메뉴">
       <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
@@ -271,6 +280,80 @@
 <div id="toast" role="status"></div>
 <div id="aria-live" class="visually-hidden" aria-live="polite"></div>
 
+<!-- ═══════════ Supabase 인증 다이얼로그 ═══════════ -->
+<dialog id="dlg-auth">
+  <div class="dlg-head">
+    <h2 id="auth-title">회원 로그인</h2>
+    <form method="dialog"><button class="dlg-close" title="닫기">✕</button></form>
+  </div>
+  <div class="dlg-body auth-dialog">
+    <div id="auth-message" class="auth-message" role="status"></div>
+
+    <section class="auth-config">
+      <div class="auth-section-title">Supabase 연결</div>
+      <div class="auth-config-grid">
+        <label for="supabase-url">Project URL</label>
+        <input id="supabase-url" type="url" placeholder="https://프로젝트.supabase.co" autocomplete="off">
+        <label for="supabase-key">Publishable key</label>
+        <input id="supabase-key" type="password" placeholder="sb_publishable_..." autocomplete="off">
+      </div>
+      <div class="auth-config-actions">
+        <button id="btn-save-supabase-config" type="button" class="tbtn">연결 저장</button>
+        <button id="btn-clear-supabase-config" type="button" class="tbtn">초기화</button>
+      </div>
+      <p class="auth-help">Supabase Dashboard의 Project URL과 publishable key만 입력하세요. service_role key는 브라우저에 넣지 않습니다.</p>
+    </section>
+
+    <section class="auth-form">
+      <label id="auth-display-name-row">
+        <span>이름</span>
+        <input id="auth-display-name" type="text" placeholder="표시 이름" autocomplete="name">
+      </label>
+      <label>
+        <span>이메일</span>
+        <input id="auth-email" type="email" placeholder="you@example.com" autocomplete="email">
+      </label>
+      <label>
+        <span>비밀번호</span>
+        <input id="auth-password" type="password" minlength="6" placeholder="6자 이상" autocomplete="current-password">
+      </label>
+    </section>
+
+    <div class="dlg-actions">
+      <form method="dialog"><button class="tbtn">취소</button></form>
+      <button id="auth-submit" type="button" class="tbtn primary">로그인</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- ═══════════ 관리자 페이지 ═══════════ -->
+<dialog id="dlg-admin">
+  <div class="dlg-head">
+    <h2>관리자 페이지</h2>
+    <form method="dialog"><button class="dlg-close" title="닫기">✕</button></form>
+  </div>
+  <div class="dlg-body admin-dialog">
+    <section class="admin-card">
+      <h3>관리자 인증</h3>
+      <div id="admin-summary" class="admin-summary"></div>
+    </section>
+    <section class="admin-card">
+      <div class="admin-card-head">
+        <h3>회원 목록</h3>
+        <button id="btn-admin-refresh" type="button" class="tbtn">새로고침</button>
+      </div>
+      <div id="admin-users" class="admin-users"></div>
+    </section>
+    <section class="admin-card">
+      <h3>관리자 승격 SQL</h3>
+      <p class="auth-help">첫 관리자 계정은 Supabase SQL Editor에서 직접 승격하세요.</p>
+      <pre class="admin-sql">update public.profiles
+set role = 'admin'
+where email = 'admin@example.com';</pre>
+    </section>
+  </div>
+</dialog>
+
 <!-- ═══════════ 악보 설정 다이얼로그 ═══════════ -->
 <dialog id="dlg-settings">
   <div class="dlg-head">
@@ -512,6 +595,13 @@
 <script src="js/engrave.js"></script>
 <script src="js/playback.js"></script>
 <script src="js/io.js"></script>
+<script>
+window.SF_SUPABASE_CONFIG = window.SF_SUPABASE_CONFIG || {
+  url: "",
+  publishableKey: ""
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
