@@ -464,6 +464,113 @@ select.tsel {
 }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+/* ---------------- 단축키 확인 팝업 ---------------- */
+.shortcut-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(6, 8, 12, .68);
+  backdrop-filter: blur(6px);
+}
+.shortcut-pop {
+  width: min(94vw, 1040px);
+  color: var(--text);
+  animation: shortcutPopIn .16s ease-out;
+}
+.shortcut-stage {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 14px;
+  background: #11151d;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .56);
+}
+.shortcut-stage img {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+}
+.shortcut-hotspots {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.shortcut-hotspot {
+  position: absolute;
+  border-radius: 9px;
+  opacity: 0;
+  border: 2px solid rgba(255, 220, 92, .96);
+  background:
+    linear-gradient(90deg, rgba(255, 220, 92, .08), rgba(255, 122, 26, .26), rgba(255, 220, 92, .08));
+  box-shadow: 0 0 0 rgba(255, 220, 92, 0);
+  transform: scale(.98);
+}
+.shortcut-hotspot.active {
+  opacity: 1;
+  animation: shortcutPulse 1.05s ease-out;
+}
+.shortcut-hotspot.active::after {
+  content: attr(data-label);
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  max-width: min(280px, 80%);
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(17, 21, 29, .94);
+  color: #ffe680;
+  border: 1px solid rgba(255, 220, 92, .65);
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.shortcut-caption {
+  margin: 10px auto 0;
+  width: fit-content;
+  max-width: 92vw;
+  padding: 8px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(18, 20, 24, .88);
+  color: #fff;
+  font-size: 12.5px;
+  box-shadow: var(--shadow);
+}
+@keyframes shortcutPopIn {
+  from { opacity: 0; transform: translateY(10px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes shortcutPulse {
+  0% {
+    opacity: 0;
+    transform: scale(.98);
+    box-shadow: 0 0 0 rgba(255, 220, 92, 0);
+  }
+  16% {
+    opacity: 1;
+    transform: scale(1.02);
+    box-shadow: 0 0 0 5px rgba(255, 220, 92, .28), 0 0 24px rgba(255, 122, 26, .58);
+  }
+  64% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 0 2px rgba(255, 220, 92, .18), 0 0 18px rgba(255, 122, 26, .36);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+    box-shadow: 0 0 0 rgba(255, 220, 92, 0);
+  }
+}
+
 /* ---------------- 다이얼로그 ---------------- */
 dialog {
   border: 1px solid var(--line); border-radius: 14px; background: var(--panel);
@@ -892,6 +999,10 @@ body[data-theme="light"] #toast {
   background: rgba(255,255,255,.96);
   color: var(--text);
 }
+body[data-theme="light"] .shortcut-caption {
+  background: rgba(255, 255, 255, .96);
+  color: #111827;
+}
 body[data-theme="light"] .lyric,
 body[data-theme="light"] .lyric-hyphen { fill: #14171c; }
 body[data-theme="light"] .lyric-extend { stroke: #14171c; }
@@ -1062,6 +1173,16 @@ body[data-theme="pretty"] .timeline-density { background: linear-gradient(90deg,
 body[data-theme="pretty"] #canvas.droppable::after {
   color: #1f1f1f;
   text-shadow: none;
+}
+body[data-theme="pretty"] .shortcut-stage,
+body[data-theme="pretty"] .shortcut-caption,
+body[data-theme="pretty"] .shortcut-hotspot {
+  border-radius: 0;
+}
+body[data-theme="pretty"] .shortcut-caption {
+  background: #1f1f1f;
+  color: #fff;
+  border-color: #fa520f;
 }
 
 body[data-theme="cute"] {
@@ -1285,6 +1406,16 @@ body[data-theme="cute"] #toast {
   border-radius: 1584px;
   box-shadow: rgb(0,0,0) -5px 5px 0;
 }
+body[data-theme="cute"] .shortcut-stage {
+  border: 2px solid #000;
+  box-shadow: rgb(0,0,0) -6px 6px 0, var(--shadow);
+}
+body[data-theme="cute"] .shortcut-caption {
+  background: #fff;
+  color: #000;
+  border: 2px solid #000;
+  box-shadow: rgb(0,0,0) -3px 3px 0;
+}
 body[data-theme="cute"] dialog {
   border-radius: 24px;
   box-shadow:
@@ -1365,6 +1496,8 @@ body[data-theme="cute"] .tbtn:disabled:hover { background: #ffffff; }
   .brand small { display: none; }
   .tbtn span.lbl { display: none; }
   .topbar, .palette-bar { padding: 5px 6px; gap: 4px; }
+  .shortcut-pop { width: min(98vw, 1040px); }
+  .shortcut-caption { border-radius: 8px; text-align: center; }
 }
 @media (max-width: 640px) {
   .brand { font-size: 0; gap: 0; }
@@ -1375,7 +1508,7 @@ body[data-theme="cute"] .tbtn:disabled:hover { background: #ffffff; }
 /* ---------------- 인쇄 ---------------- */
 @media print {
   body { display: block; background: #fff; overflow: visible; }
-  .topbar, .palette-bar, #piano-bar, .statusbar, #toast, dialog, #lyric-editor, #properties-panel { display: none !important; }
+  .topbar, .palette-bar, #piano-bar, .statusbar, #toast, .shortcut-overlay, dialog, #lyric-editor, #properties-panel { display: none !important; }
   #workspace { display: block; }
   #canvas { overflow: visible; padding: 0; background: #fff; }
   .paper-sizer { height: auto !important; width: auto !important; margin: 0; }

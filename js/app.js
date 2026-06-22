@@ -2754,6 +2754,151 @@
   }
 
   /* ---------------- 단축키 ---------------- */
+  const SHORTCUT_SPOTS = [
+    { id: "input-mode", label: "N · 입력 모드 켜기/끄기", rect: [29.6, 16.4, 19.4, 3.9], combos: ["N"] },
+    { id: "pitch-input", label: "A-G · 음 입력", rect: [50.4, 16.4, 20.0, 3.9], combos: ["A", "B", "C", "D", "E", "F", "G"] },
+    { id: "duration", label: "3-7 · 음길이 선택", rect: [29.6, 21.0, 19.4, 4.2], combos: ["3", "4", "5", "6", "7"] },
+    { id: "dot", label: ". · 점음표", rect: [50.4, 21.0, 20.0, 4.2], combos: ["."] },
+    { id: "rest", label: "0 · 쉼표", rect: [29.6, 25.7, 19.4, 4.0], combos: ["0"] },
+    { id: "chord", label: "Shift+A-G · 화음 쌓기", rect: [50.4, 25.7, 20.0, 4.0], combos: ["shift+A", "shift+B", "shift+C", "shift+D", "shift+E", "shift+F", "shift+G"] },
+    { id: "semitone", label: "↑/↓ · 반음 이동", rect: [29.6, 30.2, 19.4, 4.0], combos: ["arrowup", "arrowdown"] },
+    { id: "octave", label: "Ctrl+↑/↓ · 옥타브 이동", rect: [50.4, 30.2, 20.0, 4.0], combos: ["ctrl+arrowup", "ctrl+arrowdown"] },
+    { id: "tie", label: "T · 붙임줄", rect: [29.6, 34.9, 19.4, 4.0], combos: ["T"] },
+    { id: "grace", label: "/ · 꾸밈음 추가", rect: [50.4, 34.9, 20.0, 4.0], combos: ["/"] },
+    { id: "tuplet", label: "Ctrl+3-9 · 잇단음표", rect: [29.6, 39.5, 19.4, 4.2], combos: ["ctrl+3", "ctrl+4", "ctrl+5", "ctrl+6", "ctrl+7", "ctrl+8", "ctrl+9"] },
+    { id: "tempo", label: "Shift+T · 템포 표시", rect: [50.4, 39.5, 20.0, 4.2], combos: ["shift+T"] },
+    { id: "finish", label: "Esc · 입력 종료/정지", rect: [29.6, 44.2, 19.4, 4.0], combos: ["esc"] },
+    { id: "prev-next", label: "←/→ · 이전/다음 음표 선택", rect: [29.6, 53.3, 19.4, 4.7], combos: ["arrowleft", "arrowright"] },
+    { id: "range", label: "Shift+←/→ · 범위 선택", rect: [50.4, 53.3, 20.0, 4.7], combos: ["shift+arrowleft", "shift+arrowright"] },
+    { id: "pitch-change", label: "↑/↓ · 선택 음표 음높이 변경", rect: [29.6, 59.0, 19.4, 5.0], combos: ["arrowup", "arrowdown"] },
+    { id: "repitch", label: "A-G · 음이름 재지정", rect: [50.4, 59.0, 20.0, 5.0], combos: ["A", "B", "C", "D", "E", "F", "G"] },
+    { id: "copy-cut-paste", label: "Ctrl+C/V/X · 복사/붙여넣기/잘라내기", rect: [29.6, 65.7, 19.4, 7.0], combos: ["ctrl+C", "ctrl+V", "ctrl+X"] },
+    { id: "command", label: "Ctrl+K · 명령 팔레트", rect: [50.4, 66.6, 20.0, 7.0], combos: ["ctrl+K", "ctrl+shift+P"] },
+    { id: "chord-symbol", label: "Ctrl+K · 코드 기호 입력", rect: [29.6, 74.2, 19.4, 4.0], combos: ["ctrl+K"] },
+    { id: "text-marks", label: "R / Shift+L · 리허설/스태프 텍스트", rect: [50.4, 74.2, 20.0, 4.0], combos: ["R", "shift+L"] },
+    { id: "slur-artic", label: "S / Shift+S,N,V,O · 이음줄/아티큘레이션", rect: [50.4, 86.2, 20.0, 8.6], combos: ["S", "shift+S", "shift+N", "shift+V", "shift+O"] },
+    { id: "hairpin", label: "< / > · 크레셴도/디미누엔도", rect: [29.6, 86.2, 19.4, 8.6], combos: ["<", ">"] },
+    { id: "delete", label: "Delete/Backspace · 삭제", rect: [29.6, 79.0, 19.4, 4.0], combos: ["delete", "backspace"] },
+    { id: "lyrics", label: "L · 가사 입력", rect: [50.4, 79.0, 20.0, 4.0], combos: ["L"] },
+    { id: "playback", label: "Space · 재생/일시정지", rect: [70.4, 79.0, 1.0, 4.0], combos: ["space"] },
+    { id: "save", label: "Ctrl+S · 저장", rect: [50.4, 90.4, 20.0, 5.8], combos: ["ctrl+S"] },
+    { id: "undo-redo", label: "Ctrl+Z / Ctrl+Shift+Z · 실행 취소/다시 실행", rect: [50.4, 88.5, 20.0, 7.2], combos: ["ctrl+Z", "ctrl+Y", "ctrl+shift+Z"] },
+    { id: "timeline-nav", label: "F11/F12 · 타임라인/내비게이터", rect: [62.0, 52.5, 8.4, 5.6], combos: ["f11", "f12"] },
+  ];
+  const shortcutLookup = new Map();
+  let shortcutPulseTimer = null;
+
+  function shortcutComboKey(combo) {
+    return String(combo || "").toLowerCase();
+  }
+
+  function ensureShortcutLookup() {
+    if (shortcutLookup.size) return;
+    for (const spot of SHORTCUT_SPOTS) {
+      for (const combo of spot.combos) {
+        const key = shortcutComboKey(combo);
+        if (!shortcutLookup.has(key)) shortcutLookup.set(key, []);
+        shortcutLookup.get(key).push(spot);
+      }
+    }
+  }
+
+  function renderShortcutHotspots() {
+    const host = $("#shortcut-hotspots");
+    if (!host || host.dataset.ready) return;
+    host.innerHTML = SHORTCUT_SPOTS.map((spot) => {
+      const [left, top, width, height] = spot.rect;
+      return `<span class="shortcut-hotspot" data-shortcut="${htmlEsc(spot.id)}" data-label="${htmlEsc(spot.label)}" style="left:${left}%;top:${top}%;width:${width}%;height:${height}%"></span>`;
+    }).join("");
+    host.dataset.ready = "1";
+  }
+
+  function normalizeShortcutEvent(e) {
+    if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) return "modifier";
+    let base = e.key;
+    if (base === " ") base = "space";
+    else if (base === "Escape") base = "esc";
+    else if (base === "Delete") base = "delete";
+    else if (base === "Backspace") base = "backspace";
+    else if (/^Arrow/.test(base)) base = base.toLowerCase();
+    else if (/^F\d+$/i.test(base)) base = base.toLowerCase();
+    else if (base.length === 1) base = base.toUpperCase();
+    else base = base.toLowerCase();
+
+    const shiftedSymbol = base === "<" || base === ">";
+    const parts = [];
+    if (e.ctrlKey || e.metaKey) parts.push("ctrl");
+    if (e.altKey) parts.push("alt");
+    if (e.shiftKey && !shiftedSymbol) parts.push("shift");
+    parts.push(base);
+    return shortcutComboKey(parts.join("+"));
+  }
+
+  function isShortcutOverlayOpen() {
+    const overlay = $("#shortcut-overlay");
+    return Boolean(overlay && !overlay.hidden);
+  }
+
+  function openShortcutOverlay() {
+    renderShortcutHotspots();
+    ensureShortcutLookup();
+    const overlay = $("#shortcut-overlay");
+    if (!overlay) return;
+    $("#shortcut-caption").textContent = "단축키를 누르면 해당 항목이 반짝입니다. 클릭하거나 등록되지 않은 키를 누르면 닫힙니다.";
+    overlay.hidden = false;
+  }
+
+  function closeShortcutOverlay() {
+    const overlay = $("#shortcut-overlay");
+    if (!overlay || overlay.hidden) return;
+    overlay.hidden = true;
+    $$(".shortcut-hotspot.active").forEach((el) => el.classList.remove("active"));
+    clearTimeout(shortcutPulseTimer);
+  }
+
+  function pulseShortcutHotspots(spots) {
+    if (!spots || !spots.length) return;
+    $$(".shortcut-hotspot.active").forEach((node) => node.classList.remove("active"));
+    const labels = [];
+    for (const spot of spots) {
+      const el = $(`.shortcut-hotspot[data-shortcut="${spot.id}"]`);
+      if (!el) continue;
+      void el.offsetWidth;
+      el.classList.add("active");
+      labels.push(spot.label);
+    }
+    $("#shortcut-caption").textContent = `감지된 단축키: ${labels.join(" / ")}`;
+    clearTimeout(shortcutPulseTimer);
+    shortcutPulseTimer = setTimeout(() => {
+      $$(".shortcut-hotspot.active").forEach((node) => node.classList.remove("active"));
+    }, 1100);
+  }
+
+  function bindShortcutOverlay() {
+    const btn = $("#btn-shortcuts");
+    const overlay = $("#shortcut-overlay");
+    if (!btn || !overlay) return;
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openShortcutOverlay();
+    });
+    overlay.addEventListener("click", closeShortcutOverlay);
+    document.addEventListener("keydown", (e) => {
+      if (!isShortcutOverlayOpen()) return;
+      const combo = normalizeShortcutEvent(e);
+      if (combo === "modifier") return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      ensureShortcutLookup();
+      const spots = shortcutLookup.get(combo);
+      if (!spots || !spots.length) {
+        closeShortcutOverlay();
+        return;
+      }
+      pulseShortcutHotspots(spots);
+    }, true);
+  }
+
   const DUR_KEYS = { "7": 0, "6": 1, "5": 2, "4": 3, "3": 4 };
   function bindKeys() {
     document.addEventListener("keydown", (e) => {
@@ -3042,6 +3187,7 @@
     bindThemePicker();
     bindButtons();
     bindAuth();
+    bindShortcutOverlay();
     bindMenu();
     bindSettings();
     bindWelcome();
