@@ -36,7 +36,7 @@
   let midiBuffer = [];
   let midiTimer = null;
   const THEME_KEY = "scoreforge-ui-theme";
-  const THEMES = new Set(["dark", "light", "pretty"]);
+  const THEMES = new Set(["dark", "light", "pretty", "cute"]);
 
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -56,7 +56,10 @@
   }
 
   function themeLabel(theme) {
-    return theme === "light" ? "Light UI" : theme === "pretty" ? "Pretty UI" : "Dark UI";
+    if (theme === "light") return "Light UI";
+    if (theme === "pretty") return "Pretty UI";
+    if (theme === "cute") return "Cute UI";
+    return "Dark UI";
   }
 
   function applyTheme(theme, opts = {}) {
