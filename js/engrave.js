@@ -423,6 +423,7 @@
         `<g id="score-main">${svg}</g>` +
         `<g id="overlay-ghost" pointer-events="none"></g>` +
         `<g id="overlay-cursor" pointer-events="none"></g>` +
+        `<g id="overlay-speedy" pointer-events="none"></g>` +
         `<line id="play-cursor" x1="0" x2="0" y1="0" y2="0" stroke="var(--accent,#e8590c)" stroke-width="2" opacity="0" pointer-events="none"/>` +
         `</svg>`,
       layout: L,
@@ -1364,8 +1365,44 @@
       `<path class="input-caret-arrow" d="M ${r2(x - 4.5)} ${ST.yTop - 16} h 9 l -4.5 6 Z" />`;
   }
 
+  function drawSpeedy(info) {
+    const g = document.getElementById("overlay-speedy");
+    if (!g) return;
+    if (!info || !info.cursorId || !lastLayout) { g.innerHTML = ""; return; }
+    const le = lastLayout.eventsById.get(info.cursorId);
+    if (!le) { g.innerHTML = ""; return; }
+    const S = le.sys;
+    const ST = le.staff;
+    const M = S.measures.find(m => m.idx === le.mIdx);
+    if (!M) { g.innerHTML = ""; return; }
+    const score = lastLayout.score;
+    const bottom = C.CLEFS[ST.clef || score.clef].bottomStep;
+    const as = info.step ?? C.absStep(C.CLEFS[ST.clef || score.clef].middle);
+    const y = yForStep(ST, score, as);
+    const frameX = M.x0 + 1;
+    const frameY = ST.yTop - 30;
+    const frameW = Math.max(8, M.x1 - M.x0 - 2);
+    let s =
+      `<rect class="speedy-frame" x="${r2(frameX)}" y="${r2(frameY)}" width="${r2(frameW)}" height="${STAFF_H + 60}" rx="6"/>` +
+      `<line class="speedy-crosshair" x1="${r2(M.x0 + 4)}" y1="${r2(y)}" x2="${r2(M.x1 - 4)}" y2="${r2(y)}"/>` +
+      `<ellipse class="speedy-aim" cx="${r2(le.x)}" cy="${r2(y)}" rx="6.5" ry="4.6"/>`;
+
+    const off = as - bottom;
+    const lines = [];
+    for (let k = -2; k >= (off % 2 === 0 ? off : off + 1); k -= 2) lines.push(k);
+    for (let k = 10; k <= (off % 2 === 0 ? off : off - 1); k += 2) lines.push(k);
+    for (const k of lines) {
+      const ly = yForStep(ST, score, bottom + k);
+      s += `<line class="speedy-ledger" x1="${r2(le.x - 10)}" y1="${r2(ly)}" x2="${r2(le.x + 10)}" y2="${r2(ly)}"/>`;
+    }
+
+    const x = le.x - 13;
+    s += `<line class="speedy-caret" x1="${r2(x)}" y1="${r2(ST.yTop - 24)}" x2="${r2(x)}" y2="${r2(ST.yTop + STAFF_H + 24)}"/>`;
+    g.innerHTML = s;
+  }
+
   function clearOverlays() {
-    drawGhost(null); drawInputCursor(null);
+    drawGhost(null); drawInputCursor(null); drawSpeedy(null);
   }
 
   /* ---------------- 툴바 아이콘 (미니 음표 SVG) ---------------- */
@@ -1403,7 +1440,7 @@
     pageMetrics, pageWidth,
     loadFont, isFontReady: () => fontReady,
     layout, render, hitTest, yForStep, stepForY,
-    drawGhost, drawInputCursor, clearOverlays,
+    drawGhost, drawInputCursor, drawSpeedy, clearOverlays,
     iconNote, iconRest, iconAcc,
     getLayout: () => lastLayout,
   };

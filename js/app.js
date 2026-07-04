@@ -19,6 +19,9 @@
     cursorId: null,       // 입력 커서가 가리키는 이벤트 id
     lastInsertedId: null,
     lastPitch: null,      // 옥타브 추론 기준
+    speedy: false,
+    speedyStep: null,     // 스피디 크로스헤어 absStep
+    speedyHeld: new Set(),
     zoom: 1,
     fitScale: 1,
     pianoVisible: true,
@@ -35,6 +38,8 @@
   let midiInput = null;
   let midiBuffer = [];
   let midiTimer = null;
+  let speedyMidiStarted = false;
+  let speedyMidiToastShown = false;
   const THEME_KEY = "scoreforge-ui-theme";
   const THEMES = new Set(["dark", "light", "pretty", "cute"]);
   const SUPABASE_URL_KEY = "scoreforge.supabase.url";
@@ -122,6 +127,17 @@
   }
 
   function refreshCursor() {
+    if (ui.speedy) {
+      const pos = cursorPos();
+      if (ui.speedyStep === null) {
+        const seed = ui.lastPitch || C.CLEFS[C.activeClef(C.state.score)].middle;
+        ui.speedyStep = clampStep(C.absStep(seed), pos.found);
+      }
+      E.drawInputCursor(null);
+      E.drawSpeedy({ cursorId: ui.cursorId, step: ui.speedyStep });
+      return;
+    }
+    E.drawSpeedy(null);
     if (ui.inputMode && ui.cursorId) E.drawInputCursor(ui.cursorId);
     else E.drawInputCursor(null);
   }
@@ -479,6 +495,136 @@
     }
   }
 
+  function pitchForStepLabel(as) {
+    if (as === null || as === undefined) return "";
+    const step = ((as % 7) + 7) % 7;
+    const oct = Math.floor(as / 7);
+    const pitch = { step, oct, alter: C.keyAlterFor(step, C.state.score.keySig) };
+    return `${C.pitchName(pitch, "ko")}(${C.pitchName(pitch)})`;
+  }
+
+  function previewSpeedyStep(sec = 0.15) {
+    if (ui.speedyStep === null) return;
+    const score = C.state.score;
+    const pos = cursorPos();
+    const pitch = pitchFromStep(score, pos.mIdx, pos.found.ev.id, clampStep(ui.speedyStep, pos.found), pos.found);
+    P.previewNote([C.midiOf(pitch)], sec);
+  }
+
+  function doSpeedyInput(d, opts = {}) {
+    const score = C.state.score;
+    const pos = cursorPos();
+    const ctx = { partIdx: pos.found.partIdx, staffIdx: pos.found.staffIdx, voice: pos.found.voice || ui.currentVoice };
+    const dur = { n: 1, d, dots: 0 };
+    let pitches = null;
+    if (!opts.rest) {
+      if (opts.pitches && opts.pitches.length) {
+        pitches = opts.pitches.map(p => ({ step: p.step, alter: p.alter, oct: p.oct }));
+      } else {
+        pitches = [pitchFromStep(score, pos.mIdx, pos.found.ev.id, clampStep(ui.speedyStep, pos.found), pos.found)];
+      }
+    }
+    const endPos = advancePos(score, pos.mIdx, pos.tick, C.durValue(dur));
+    const needed = measureCountForEnd(score, endPos);
+    let inserted = null;
+    C.mutate(pitches ? "스피디 입력" : "스피디 쉼표", (s2) => {
+      ensureMeasureCount(s2, needed);
+      C.setActiveStaff(s2, ctx.partIdx, ctx.staffIdx);
+      inserted = C.inputAt(s2, pos.mIdx, pos.tick, dur, pitches, ctx);
+      if (inserted && pitches && pitches.length) mirrorLinkedTab(s2, ctx, pos.mIdx, pos.tick, dur, pitches, inserted);
+    });
+    ui.lastInsertedId = inserted;
+    ui.curDur = { ...dur };
+    if (pitches && pitches.length) {
+      ui.lastPitch = pitches[pitches.length - 1];
+      P.previewNote(pitches.map(C.midiOf), 0.35);
+    } else {
+      flashHint("쉼표를 입력했어요");
+    }
+    const nextTick = pos.tick.add(C.durValue(dur));
+    ui.cursorId = findEventAtTick(C.state.score, pos.mIdx, nextTick, ctx) || inserted;
+    ui.selection = null;
+    ui.selAnchor = null;
+    update();
+  }
+
+  function toggleSpeedyDot() {
+    const found = ui.lastInsertedId && C.findEvent(C.state.score, ui.lastInsertedId);
+    if (!found || found.ev.full) return;
+    const ev = found.ev;
+    const newDur = { n: ev.dur.n, d: ev.dur.d, dots: ev.dur.dots ? 0 : 1 };
+    if (newDur.dots && !canDot(newDur)) { flashHint("16분음표에는 점을 붙일 수 없어요"); return; }
+    const tick = C.eventStartTick(found.measures[found.m], found.e);
+    const pitches = ev.type === "note" ? ev.notes.map(n => ({ step: n.step, alter: n.alter, oct: n.oct })) : null;
+    const ctx = { partIdx: found.partIdx, staffIdx: found.staffIdx, voice: found.voice || ui.currentVoice };
+    const endPos = advancePos(C.state.score, found.m, tick, C.durValue(newDur));
+    const needed = measureCountForEnd(C.state.score, endPos);
+    let inserted = null;
+    C.mutate("스피디 점음표", (score) => {
+      ensureMeasureCount(score, needed);
+      inserted = C.inputAt(score, found.m, tick, newDur, pitches, ctx);
+    });
+    ui.lastInsertedId = inserted;
+    ui.curDur = { ...newDur };
+    const nextTick = tick.add(C.durValue(newDur));
+    ui.cursorId = findEventAtTick(C.state.score, found.m, nextTick, ctx) || inserted;
+    update();
+  }
+
+  function addSpeedyChordTone() {
+    const found = ui.lastInsertedId && C.findEvent(C.state.score, ui.lastInsertedId);
+    if (!found || found.ev.type !== "note") return;
+    const pitch = pitchFromStep(C.state.score, found.m, found.ev.id, clampStep(ui.speedyStep, found), found);
+    C.mutate("스피디 화음 추가", (score) => {
+      const f = C.findEvent(score, found.ev.id);
+      if (!f || f.ev.type !== "note") return;
+      if (!f.ev.notes.some(n => C.pitchEq(n, pitch))) {
+        f.ev.notes.push({ ...pitch, tie: false });
+        f.ev.notes.sort((a, b) => C.absStep(a) - C.absStep(b));
+      }
+      C.normalizeTies(score);
+    });
+    const f2 = C.findEvent(C.state.score, found.ev.id);
+    if (f2) P.previewNote(f2.ev.notes.map(C.midiOf), 0.35);
+    ui.lastPitch = pitch;
+    update();
+  }
+
+  function speedyDeleteAt(found, tick) {
+    if (!found) return;
+    const ctx = { partIdx: found.partIdx, staffIdx: found.staffIdx, voice: found.voice || ui.currentVoice };
+    C.mutate("스피디 지우기", (score) => {
+      const f = C.findEvent(score, found.ev.id);
+      if (f) C.deleteEvent(score, f.m, f.e, f);
+    });
+    ui.cursorId = findEventAtTick(C.state.score, found.m, tick, ctx);
+    ui.lastInsertedId = null;
+    ui.selection = null;
+    ui.selAnchor = null;
+    update();
+  }
+
+  function clearSpeedyHeld() {
+    ui.speedyHeld.clear();
+    $$("#piano-keys .key.held").forEach(k => k.classList.remove("held"));
+  }
+
+  function setSpeedyHeld(midi, held, keyEl, sec = 0.3) {
+    if (held) {
+      ui.speedyHeld.add(midi);
+      if (keyEl) keyEl.classList.add("held");
+      const pitch = C.spellMidi(midi, C.state.score.keySig);
+      ui.speedyStep = clampStep(C.absStep(pitch), activeRef());
+      ui.lastPitch = pitch;
+      P.previewNote([midi], sec);
+      refreshCursor();
+    } else {
+      ui.speedyHeld.delete(midi);
+      if (keyEl) keyEl.classList.remove("held");
+    }
+    updateStatus();
+  }
+
   function cursorPos() {
     const score = C.state.score;
     let found = ui.cursorId && C.findEvent(score, ui.cursorId);
@@ -538,7 +684,7 @@
   /* 대상 이벤트: 선택 우선, 입력 모드면 마지막 입력 */
   function targetEvent() {
     if (ui.selection) return C.findEvent(C.state.score, ui.selection);
-    if (ui.inputMode && ui.lastInsertedId) return C.findEvent(C.state.score, ui.lastInsertedId);
+    if ((ui.inputMode || ui.speedy) && ui.lastInsertedId) return C.findEvent(C.state.score, ui.lastInsertedId);
     return null;
   }
 
@@ -996,7 +1142,68 @@
   }
 
   /* ---------------- 입력 모드 ---------------- */
+  function initSpeedyMidi() {
+    if (speedyMidiStarted || !navigator.requestMIDIAccess) return;
+    speedyMidiStarted = true;
+
+    function wireInputs(access) {
+      let count = 0;
+      for (const input of access.inputs.values()) {
+        count++;
+        input.onmidimessage = (msg) => {
+          const [status, note, vel] = msg.data;
+          const cmd = status & 0xF0;
+          if (ui.speedy) {
+            if (cmd === 0x90 && vel > 0) setSpeedyHeld(note, true, null, 0.3);
+            else if (cmd === 0x80 || (cmd === 0x90 && vel === 0)) setSpeedyHeld(note, false);
+          } else if (ui.midiEnabled && input === midiInput) {
+            onMidiMessage(msg);
+          }
+        };
+      }
+      if (count && !speedyMidiToastShown) {
+        speedyMidiToastShown = true;
+        toast("MIDI 건반 연결됨 — 건반 누른 채 숫자 키");
+      }
+    }
+
+    Promise.resolve(midiAccess || navigator.requestMIDIAccess({ sysex: false })).then((access) => {
+      midiAccess = access;
+      wireInputs(access);
+      access.onstatechange = () => wireInputs(access);
+    }).catch(() => { /* 미지원/권한 거부 환경에서는 조용히 지나간다. */ });
+  }
+
+  function toggleSpeedy(on) {
+    ui.speedy = !!on;
+    if (ui.speedy) {
+      ui.inputMode = false;
+      ui.restMode = false;
+      E.drawGhost(null);
+      $("#canvas").classList.remove("input-mode");
+      if (ui.selection) {
+        const found = C.findEvent(C.state.score, ui.selection);
+        if (found) C.setActiveStaff(C.state.score, found.partIdx, found.staffIdx);
+        ui.cursorId = ui.selection;
+        ui.selection = null;
+        ui.selAnchor = null;
+      }
+      const pos = cursorPos();
+      const seed = ui.lastPitch || C.CLEFS[C.activeClef(C.state.score)].middle;
+      ui.speedyStep = clampStep(C.absStep(seed), pos.found);
+      $("#canvas").classList.add("speedy-mode");
+      initSpeedyMidi();
+    } else {
+      ui.speedyStep = null;
+      clearSpeedyHeld();
+      $("#canvas").classList.remove("speedy-mode");
+      if (E.drawSpeedy) E.drawSpeedy(null);
+    }
+    update();
+  }
+
   function setInputMode(on) {
+    if (on && ui.speedy) toggleSpeedy(false);
     ui.inputMode = on;
     if (on) {
       if (ui.selection) {
@@ -1060,6 +1267,18 @@
     const pt = svgPoint(evt);
     if (!pt) return;
     const refEl = evt.target.closest && evt.target.closest("[data-ref]");
+    if (ui.speedy) {
+      const hit = E.hitTest(pt.x, pt.y);
+      if (!hit || !hit.le) return;
+      C.setActiveStaff(C.state.score, hit.le.partIdx, hit.le.staffIdx);
+      ui.cursorId = hit.le.id;
+      ui.speedyStep = clampStep(hit.step, hit.le);
+      ui.selection = null;
+      ui.selAnchor = null;
+      refreshCursor();
+      updateStatus();
+      return;
+    }
     if (ui.inputMode) {
       const hit = E.hitTest(pt.x, pt.y);
       if (!hit || !hit.le) return;
@@ -1105,7 +1324,7 @@
 
   /* 드래그로 음높이 변경 */
   function onPointerDown(evt) {
-    if (ui.inputMode) return;
+    if (ui.inputMode || ui.speedy) return;
     const refEl = evt.target.closest && evt.target.closest("[data-ref]");
     if (!refEl) return;
     const id = refEl.getAttribute("data-ref");
@@ -1466,6 +1685,23 @@
       if (!key) return;
       e.preventDefault();
       const midi = +key.dataset.midi;
+      if (ui.speedy) {
+        setSpeedyHeld(midi, true, key, 0.4);
+        key.setPointerCapture?.(e.pointerId);
+        let released = false;
+        const release = () => {
+          if (released) return;
+          released = true;
+          setSpeedyHeld(midi, false, key);
+          key.removeEventListener("pointerup", release);
+          key.removeEventListener("pointercancel", release);
+          key.removeEventListener("pointerleave", release);
+        };
+        key.addEventListener("pointerup", release);
+        key.addEventListener("pointercancel", release);
+        key.addEventListener("pointerleave", release);
+        return;
+      }
       key.classList.add("pressed");
       setTimeout(() => key.classList.remove("pressed"), 220);
       if (ui.inputMode) {
@@ -1554,6 +1790,7 @@
     const refs = C.staffRefs(score);
     const active = C.activeRef(score);
     $("#btn-input").classList.toggle("on", ui.inputMode);
+    $("#btn-speedy").classList.toggle("on", ui.speedy);
     $("#btn-rest").classList.toggle("on", ui.restMode);
     $("#btn-metronome").classList.toggle("on", P.player.metronome);
     $("#btn-piano").classList.toggle("on", ui.pianoVisible);
@@ -1572,7 +1809,7 @@
 
     // 임시표 상태
     let alter = null;
-    const tgt = found || (ui.inputMode && ui.lastInsertedId ? C.findEvent(score, ui.lastInsertedId) : null);
+    const tgt = found || ((ui.inputMode || ui.speedy) && ui.lastInsertedId ? C.findEvent(score, ui.lastInsertedId) : null);
     if (tgt && tgt.ev.type === "note" && tgt.ev.notes.length) alter = tgt.ev.notes[0].alter;
     $("#btn-sharp").classList.toggle("on", alter === 1);
     $("#btn-flat").classList.toggle("on", alter === -1);
@@ -1631,9 +1868,12 @@
     const active = C.activeRef(score);
     const activeName = active ? `${active.name}${active.part.staves.length > 1 ? " " + (active.staffIdx + 1) : ""}` : "";
     let text = "";
-      const found = selectedEvent();
-      const ids = selectedIds();
-    if (ids && ids.size > 1) {
+    const found = selectedEvent();
+    const ids = selectedIds();
+    if (ui.speedy && ui.cursorId) {
+      const f = C.findEvent(score, ui.cursorId);
+      if (f) text = `스피디: ${f.name}${f.part.staves.length > 1 ? " " + (f.staffIdx + 1) : ""} · 마디 ${f.m + 1} · 크로스헤어 ${pitchForStepLabel(ui.speedyStep)}`;
+    } else if (ids && ids.size > 1) {
       text = `${ids.size}개 선택 — Ctrl+C/V=복사/붙여넣기 · S=이음줄 · < >=쐐기`;
     } else if (found) {
       const ev = found.ev;
@@ -1655,9 +1895,13 @@
     el.textContent = text;
     $("#aria-live").textContent = text;
 
-    $("#status-hint").textContent = ui.inputMode
-      ? (ui.restMode ? "보표를 클릭하면 쉼표가 들어가요 · 쉼표 버튼으로 해제" : "보표 클릭 또는 A~G·피아노 건반으로 입력 · 0=쉼표 · ↑↓=반음 · Esc=종료")
-      : "N 또는 ✏️=입력 모드 · 음표 클릭=선택 · 드래그=음높이 · 스페이스=재생";
+    $("#status-hint").textContent = ui.speedy
+      ? (ui.speedyHeld.size
+        ? `건반 ${ui.speedyHeld.size}개 누름 — 숫자로 입력 · 3~7=입력 · 0=쉼표 · Esc=종료`
+        : "↑↓=음높이 조준 · ←→=이동 · 3~7=입력 · 0=쉼표 · Esc=종료")
+      : (ui.inputMode
+        ? (ui.restMode ? "보표를 클릭하면 쉼표가 들어가요 · 쉼표 버튼으로 해제" : "보표 클릭 또는 A~G·피아노 건반으로 입력 · 0=쉼표 · ↑↓=반음 · Esc=종료")
+        : "N 또는 ✏️=입력 모드 · 음표 클릭=선택 · 드래그=음높이 · 스페이스=재생");
   }
   function durName2(ev) { return C.durName(ev.dur); }
 
@@ -2426,6 +2670,7 @@
     }
     C.setScore(loaded);
     ui.selection = null; ui.selAnchor = null; ui.cursorId = null; ui.lastPitch = null;
+    ui.speedy = false; ui.speedyStep = null; clearSpeedyHeld();
     stopPlayback();
     update();
     if (report && report.length) {
@@ -2483,6 +2728,7 @@
         if (!confirm("새 악보를 만들까요? (현재 악보는 자동 저장에서 사라져요. 필요하면 먼저 저장하세요)")) return;
         C.setScore(C.createScore({}));
         ui.selection = null; ui.cursorId = null; ui.lastPitch = null;
+        ui.speedy = false; ui.speedyStep = null; clearSpeedyHeld();
         stopPlayback(); update();
         openSettings();
       } else if (act === "open") {
@@ -2508,6 +2754,7 @@
         if (IO.DEMOS[key]) {
           C.setScore(IO.DEMOS[key]());
           ui.selection = null; ui.cursorId = null;
+          ui.speedy = false; ui.speedyStep = null; clearSpeedyHeld();
           stopPlayback(); update();
           toast("데모 악보를 불러왔어요 — 스페이스로 재생해 보세요");
         }
@@ -2900,6 +3147,107 @@
   }
 
   const DUR_KEYS = { "7": 0, "6": 1, "5": 2, "4": 3, "3": 4 };
+  const SPEEDY_DURS = {
+    Digit3: 16, Digit4: 8, Digit5: 4, Digit6: 2, Digit7: 1,
+    Numpad3: 16, Numpad4: 8, Numpad5: 4, Numpad6: 2, Numpad7: 1,
+  };
+  const SPEEDY_UNSUPPORTED = new Set(["Digit1", "Digit2", "Digit8", "Numpad1", "Numpad2", "Numpad8"]);
+
+  function handleSpeedyKey(e) {
+    const k = e.key;
+    const K = k.toUpperCase();
+    if (k === " " || k === "Escape" || k === "Tab" || e.altKey) return false;
+    if (K === "Q" || (K === "N" && !e.shiftKey)) return false;
+
+    if (k === "ArrowUp" || k === "ArrowDown") {
+      e.preventDefault();
+      const delta = (k === "ArrowUp" ? 1 : -1) * (e.ctrlKey ? 7 : 1);
+      ui.speedyStep = clampStep((ui.speedyStep ?? C.absStep(C.CLEFS[C.activeClef(C.state.score)].middle)) + delta, activeRef());
+      refreshCursor();
+      updateStatus();
+      previewSpeedyStep(0.15);
+      return true;
+    }
+    if (k === "ArrowLeft" || k === "ArrowRight") {
+      e.preventDefault();
+      const score = C.state.score;
+      const pos = cursorPos();
+      if (e.ctrlKey || e.metaKey) {
+        const m = pos.found.m + (k === "ArrowRight" ? 1 : -1);
+        const ev = C.staffMeasures(score, pos.found)[m]?.events?.[0];
+        if (ev) ui.cursorId = ev.id;
+      } else {
+        const nx = k === "ArrowRight"
+          ? C.nextEvent(score, pos.found.m, pos.found.e, pos.found)
+          : C.prevEvent(score, pos.found.m, pos.found.e, pos.found);
+        if (nx) ui.cursorId = nx.ev.id;
+      }
+      refreshCursor();
+      updateStatus();
+      return true;
+    }
+    if (e.ctrlKey || e.metaKey) return false;
+
+    if (SPEEDY_DURS[e.code]) {
+      e.preventDefault();
+      if (e.repeat) return true;
+      const d = SPEEDY_DURS[e.code];
+      if (e.shiftKey) doSpeedyInput(d, { rest: true });
+      else if (ui.speedyHeld.size) {
+        const pitches = [...ui.speedyHeld]
+          .sort((a, b) => a - b)
+          .map(m => C.spellMidi(m, C.state.score.keySig));
+        doSpeedyInput(d, { pitches });
+      } else {
+        doSpeedyInput(d);
+      }
+      return true;
+    }
+    if (e.code === "Digit0" || e.code === "Numpad0") {
+      e.preventDefault();
+      if (!e.repeat) doSpeedyInput(ui.curDur.d || 4, { rest: true });
+      return true;
+    }
+    if (SPEEDY_UNSUPPORTED.has(e.code)) {
+      e.preventDefault();
+      if (!e.repeat) flashHint("64분·32분·겹온음표는 아직 지원하지 않아요 (3~7을 쓰세요)");
+      return true;
+    }
+    if (k === "+" || k === "=") { e.preventDefault(); transposeSelection(1); return true; }
+    if (k === "-") { e.preventDefault(); transposeSelection(-1); return true; }
+    if (k === ".") { e.preventDefault(); toggleSpeedyDot(); return true; }
+    if (K === "T") { e.preventDefault(); toggleTie(); return true; }
+    if (k === "Enter") { e.preventDefault(); addSpeedyChordTone(); return true; }
+    if (k === "Backspace") {
+      e.preventDefault();
+      const pos = cursorPos();
+      const pv = C.prevEvent(C.state.score, pos.found.m, pos.found.e, pos.found);
+      if (pv) speedyDeleteAt(pv, C.eventStartTick(pv.measures[pv.m], pv.e));
+      return true;
+    }
+    if (k === "Delete") {
+      e.preventDefault();
+      const pos = cursorPos();
+      speedyDeleteAt(pos.found, pos.tick);
+      return true;
+    }
+    if (K >= "A" && K <= "G" && K.length === 1) {
+      e.preventDefault();
+      const step = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 }[K];
+      const cur = ui.speedyStep === null
+        ? ui.lastPitch
+        : { step: ((ui.speedyStep % 7) + 7) % 7, oct: Math.floor(ui.speedyStep / 7) };
+      const oct = nearestOctave(step, cur);
+      ui.speedyStep = clampStep(C.absStep({ step, oct }), activeRef());
+      refreshCursor();
+      updateStatus();
+      previewSpeedyStep(0.15);
+      return true;
+    }
+    if (k.length === 1) { e.preventDefault(); return true; }
+    return false;
+  }
+
   function bindKeys() {
     document.addEventListener("keydown", (e) => {
       const tag = (e.target.tagName || "").toLowerCase();
@@ -2913,6 +3261,7 @@
         setCurrentVoice(+k);
         return;
       }
+      if (ui.speedy && handleSpeedyKey(e)) return;
 
       if ((e.ctrlKey || e.metaKey) && !e.altKey) {
         if (K === "Z") { e.preventDefault(); e.shiftKey ? C.redo() : C.undo(); afterHistory(); return; }
@@ -2931,9 +3280,11 @@
 
       if (k === "F11") { e.preventDefault(); openTimelinePanel(); return; }
       if (k === "F12") { e.preventDefault(); openNavigator(); return; }
+      if (K === "Q" && !e.repeat && !e.ctrlKey) { toggleSpeedy(!ui.speedy); return; }
       if (k === " ") { e.preventDefault(); togglePlay(); return; }
       if (k === "Escape") {
         if (P.player.playing) { stopPlayback(); return; }
+        if (ui.speedy) { toggleSpeedy(false); return; }
         if (ui.inputMode) { setInputMode(false); return; }
         if (ui.selection) { ui.selection = null; ui.selAnchor = null; update(); return; }
         return;
@@ -3029,6 +3380,7 @@
 
   function bindButtons() {
     $("#btn-input").addEventListener("click", () => setInputMode(!ui.inputMode));
+    $("#btn-speedy").addEventListener("click", () => toggleSpeedy(!ui.speedy));
     $("#btn-undo").addEventListener("click", () => { C.undo(); afterHistory(); });
     $("#btn-redo").addEventListener("click", () => { C.redo(); afterHistory(); });
     $("#btn-play").addEventListener("click", togglePlay);

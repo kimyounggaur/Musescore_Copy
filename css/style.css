@@ -226,6 +226,7 @@ select.tsel {
   scrollbar-color: #4a505c var(--bg);
 }
 #canvas.input-mode { cursor: crosshair; }
+#canvas.speedy-mode { cursor: crosshair; }
 .paper-sizer { position: relative; margin: 0 auto; }
 #paper {
   position: absolute; top: 0; left: 0;
@@ -400,6 +401,11 @@ select.tsel {
 .ghost .stem, .ghost .ledger { stroke: #97a0ae; }
 .input-caret { stroke: var(--select); stroke-width: 2.2; animation: blink 1.1s ease-in-out infinite; }
 .input-caret-arrow { fill: var(--select); animation: blink 1.1s ease-in-out infinite; }
+.speedy-frame { fill: var(--accent); fill-opacity: .07; stroke: var(--accent); stroke-width: 1.6; stroke-dasharray: 7 4; }
+.speedy-crosshair { stroke: var(--accent); stroke-width: 1.2; stroke-dasharray: 3 3; opacity: .9; }
+.speedy-aim { fill: none; stroke: var(--accent); stroke-width: 2; }
+.speedy-ledger { stroke: var(--accent); stroke-width: 1.5; }
+.speedy-caret { stroke: var(--accent); stroke-width: 2.2; animation: blink 1.1s ease-in-out infinite; }
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
 
 /* 가사 인라인 입력 */
@@ -440,6 +446,8 @@ select.tsel {
 #piano-keys .key.pressed, #piano-keys .key.active { background: var(--select) !important; border-color: #1857b8; }
 #piano-keys .key.black.pressed, #piano-keys .key.black.active { background: #3d82f0 !important; }
 #piano-keys .key.active.white span { color: #fff; }
+#piano-keys .key.held { background: #ff9a3d !important; border-color: #d76000 !important; box-shadow: inset 0 -10px 18px rgba(255,122,26,.25); }
+#piano-keys .key.held.white span { color: #5a2a00; font-weight: 800; }
 
 /* ---------------- 상태바 ---------------- */
 .statusbar {
@@ -1516,5 +1524,5 @@ body[data-theme="cute"] .tbtn:disabled:hover { background: #ffffff; }
     position: static; transform: none !important; width: auto !important;
     box-shadow: none; border-radius: 0; padding-bottom: 0;
   }
-  .input-caret, .input-caret-arrow, #play-cursor { display: none; }
+  .input-caret, .input-caret-arrow, .speedy-frame, .speedy-crosshair, .speedy-aim, .speedy-ledger, .speedy-caret, #play-cursor { display: none; }
 }

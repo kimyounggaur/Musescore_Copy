@@ -960,8 +960,7 @@ window.SF = window.SF || {};
     const ref = staffRef(score, ctx);
     const voice = voiceFromCtx(ctx);
     const L = measureLen(score);
-    let want = durValue(dur);
-    const room = L.sub(tick);
+    let remaining = durValue(dur);
     let firstId = null;
 
     const place = (m, t, pieces, tieOut) => {
@@ -980,20 +979,22 @@ window.SF = window.SF || {};
       replaceRange(score, m, t, pieces.reduce((a, d) => a.add(durValue(d)), Fraction.ZERO), () => evs, { ...ref, voice });
     };
 
-    if (want.lte(room)) {
-      // 한 마디 안에 들어감 — 사용자가 고른 음길이 그대로
-      place(mIdx, tick, [Object.assign({}, dur)], false);
-    } else {
-      // 마디 경계를 넘음 → 분할 + (음표면) 타이
-      const over = want.sub(room);
-      const hasNext = mIdx + 1 < ref.measures.length;
-      place(mIdx, tick, decompose(tick, room), hasNext && !!pitches);
-      if (hasNext) {
-        const pieces2 = decompose(Fraction.ZERO, over.gt(L) ? L : over);
-        const keepFirst = firstId;
-        place(mIdx + 1, Fraction.ZERO, pieces2, false);
-        firstId = keepFirst;
-      }
+    let m = mIdx;
+    let t = tick;
+    let firstChunk = true;
+    while (remaining.gt(Fraction.ZERO) && m < ref.measures.length) {
+      const room = L.sub(t);
+      if (room.lte(Fraction.ZERO)) { m++; t = Fraction.ZERO; continue; }
+      const take = remaining.gt(room) ? room : remaining;
+      const pieces = firstChunk && take.eq(remaining) ? [Object.assign({}, dur)] : decompose(t, take);
+      const tieOut = !!pitches && remaining.gt(take) && m + 1 < ref.measures.length;
+      const keepFirst = firstId;
+      place(m, t, pieces, tieOut);
+      if (keepFirst) firstId = keepFirst;
+      remaining = remaining.sub(take);
+      m++;
+      t = Fraction.ZERO;
+      firstChunk = false;
     }
     normalizeTies(score);
     return firstId;
