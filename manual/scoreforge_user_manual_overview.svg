@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1400" height="860" viewBox="0 0 1400 860" role="img" aria-labelledby="title desc">
   <title id="title">ScoreForge 사용자 흐름 인포그래픽</title>
-  <desc id="desc">새 악보 만들기부터 입력, 편집, 재생, 내보내기까지의 주요 흐름을 보여주는 한국어 인포그래픽</desc>
+  <desc id="desc">새 악보 만들기부터 일반 입력과 스피디툴 입력, 편집, 재생, 내보내기까지의 주요 흐름을 보여주는 한국어 인포그래픽</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#1f2937"/>
@@ -63,11 +63,12 @@
       <ellipse class="note" cx="34" cy="21" rx="7" ry="5" transform="rotate(-18 34 21)"/>
       <path class="mini-staff" d="M40 20v-36"/>
     </g>
-    <text x="108" y="54" class="card-title">2. 입력</text>
-    <text x="108" y="84" class="body">N으로 입력 모드를 켜고</text>
-    <text x="108" y="108" class="body">보표 클릭, A-G, 건반, MIDI, 드럼 패드 사용</text>
-    <text x="108" y="142" class="tag">성부</text>
-    <text x="164" y="142" class="body">V1-V4, 쉼표, 화음, 타이, 잇단음표</text>
+    <text x="108" y="54" class="card-title">2. 입력과 스피디툴</text>
+    <text x="108" y="84" class="body">N 또는 Q로 입력 방식을 켜고</text>
+    <text x="108" y="108" class="body">보표 클릭, A-G, 건반, MIDI</text>
+    <text x="108" y="132" class="body">Q 스피디툴 숫자 입력</text>
+    <text x="108" y="164" class="tag">스피디</text>
+    <text x="172" y="164" class="body">3-7 입력, 0 쉼표</text>
   </g>
 
   <path class="arrow" d="M960 270 C1010 270 1020 270 1070 270"/>
@@ -126,11 +127,12 @@
     <rect x="0" y="0" width="1260" height="80" rx="20" fill="#0f172a" opacity=".72" stroke="#334155"/>
     <text x="32" y="34" class="subtitle">핵심 단축키</text>
     <text x="180" y="34" class="subtitle">N 입력</text>
-    <text x="310" y="34" class="subtitle">A-G 음 입력</text>
-    <text x="490" y="34" class="subtitle">0 쉼표</text>
-    <text x="625" y="34" class="subtitle">Ctrl+C/V 복사/붙여넣기</text>
-    <text x="900" y="34" class="subtitle">Space 재생</text>
-    <text x="1080" y="34" class="subtitle">Ctrl+S 저장</text>
+    <text x="300" y="34" class="subtitle">Q 스피디</text>
+    <text x="450" y="34" class="subtitle">A-G 음 입력</text>
+    <text x="650" y="34" class="subtitle">0 쉼표</text>
+    <text x="770" y="34" class="subtitle">Ctrl+C/V 복사/붙여넣기</text>
+    <text x="1040" y="34" class="subtitle">Space 재생</text>
+    <text x="1170" y="34" class="subtitle">Ctrl+S 저장</text>
     <rect x="32" y="50" width="1190" height="8" rx="4" fill="url(#accent)"/>
   </g>
 </svg>

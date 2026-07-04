@@ -279,7 +279,7 @@
       <div class="meta-grid">
         <div><b>대상</b><span>처음 쓰는 사용자부터 수업 제작자까지</span></div>
         <div><b>형식</b><span>HTML, SVG, PDF</span></div>
-        <div><b>버전</b><span>2026-06-22 기준 앱 기능</span></div>
+        <div><b>버전</b><span>2026-07-04 기준 앱 기능</span></div>
       </div>
     </div>
     <div class="cover-card">
@@ -290,7 +290,7 @@
   <div class="inner">
     <section id="overview">
       <h2>0. 한눈에 보는 작업 흐름</h2>
-      <p class="lead">ScoreForge는 설치 없이 브라우저에서 악보를 입력하고, 소리로 확인하고, 파일로 내보내는 정적 웹앱입니다. 기본 흐름은 새 악보 준비, 입력, 편집, 재생 확인, 내보내기입니다.</p>
+      <p class="lead">ScoreForge는 설치 없이 브라우저에서 악보를 입력하고, 소리로 확인하고, 파일로 내보내는 정적 웹앱입니다. 기본 흐름은 새 악보 준비, 일반 입력 또는 스피디툴 빠른 입력, 편집, 재생 확인, 내보내기입니다.</p>
       <figure>
         <img src="scoreforge_user_manual_overview.svg" alt="ScoreForge 전체 작업 흐름 인포그래픽">
         <figcaption>그림 0-1. 새 악보부터 MusicXML/MIDI/PDF 내보내기까지의 전체 흐름</figcaption>
@@ -299,6 +299,7 @@
         <a href="#screen">화면 구조 이해</a>
         <a href="#quickstart">10분 빠른 시작</a>
         <a href="#input">음표와 쉼표 입력</a>
+        <a href="#speedy">스피디툴 빠른 입력</a>
         <a href="#editing">선택과 편집</a>
         <a href="#symbols">기호와 텍스트</a>
         <a href="#playback">재생과 믹서</a>
@@ -352,6 +353,7 @@
         <div class="step"><div><b>입력 모드를 켭니다.</b><br><kbd>N</kbd> 또는 <b>입력 모드</b> 버튼을 누릅니다. 마우스 커서가 보표 입력 상태로 바뀝니다.</div></div>
         <div class="step"><div><b>음길이를 고릅니다.</b><br><kbd>5</kbd>는 4분음표, <kbd>4</kbd>는 8분음표, <kbd>3</kbd>은 16분음표입니다. 점음표는 <kbd>.</kbd>입니다.</div></div>
         <div class="step"><div><b>음표를 넣습니다.</b><br>보표를 클릭하거나 <kbd>A</kbd>-<kbd>G</kbd>를 눌러 음을 입력합니다. 쉼표는 <kbd>0</kbd>입니다.</div></div>
+        <div class="step"><div><b>더 빠르게 넣고 싶으면 스피디툴을 켭니다.</b><br><kbd>Q</kbd>를 누르면 크로스헤어가 보이고, <kbd>3</kbd>-<kbd>7</kbd> 숫자 한 번으로 현재 음높이에 바로 입력합니다.</div></div>
         <div class="step"><div><b>소리로 확인합니다.</b><br><kbd>Space</kbd>를 누르면 현재 선택 위치부터 재생됩니다. 처음부터 들으려면 되감기 버튼을 누릅니다.</div></div>
         <div class="step"><div><b>저장합니다.</b><br><kbd>Ctrl</kbd>+<kbd>S</kbd>로 JSON 파일을 저장하거나 파일 메뉴에서 MusicXML/MIDI를 내보냅니다.</div></div>
       </div>
@@ -361,13 +363,13 @@
       </figure>
       <div class="callout">
         <b>빠른 입력 습관</b><br>
-        입력 모드에서는 한 손은 숫자 음길이, 다른 손은 <kbd>A</kbd>-<kbd>G</kbd> 음이름을 맡기면 MuseScore식으로 빠르게 입력할 수 있습니다.
+        일반 입력은 <kbd>N</kbd>으로 켜고 한 손은 숫자 음길이, 다른 손은 <kbd>A</kbd>-<kbd>G</kbd> 음이름을 맡깁니다. 스피디툴은 <kbd>Q</kbd>로 켠 뒤 크로스헤어를 맞추고 숫자만 눌러 더 빠르게 입력합니다.
       </div>
     </section>
 
     <section id="input">
       <h2>3. 음표와 쉼표 입력</h2>
-      <p class="lead">ScoreForge는 보표 클릭, 키보드, 화면 피아노, MIDI, 드럼 패드 입력을 지원합니다. 사용자의 작업 습관에 맞춰 골라 쓰면 됩니다.</p>
+      <p class="lead">ScoreForge는 보표 클릭, 키보드, 화면 피아노, MIDI, 드럼 패드, 스피디툴 입력을 지원합니다. 사용자의 작업 습관에 맞춰 골라 쓰면 됩니다.</p>
       <div class="grid-2">
         <div>
           <h3>3-1. 마우스로 입력</h3>
@@ -404,14 +406,51 @@
         <tr><td>점음표</td><td><kbd>.</kbd></td><td>현재 음길이에 부점을 켜거나 끕니다.</td></tr>
         <tr><td>잇단음표</td><td><kbd>Ctrl</kbd>+<kbd>3</kbd>-<kbd>9</kbd></td><td>선택한 음표 또는 쉼표를 n잇단으로 나눕니다.</td></tr>
       </table>
-      <h3>3-3. 성부와 다중 보표</h3>
+      <h3 id="speedy">3-3. 스피디툴(speedy tool)로 숫자 한 번 입력</h3>
+      <p>스피디툴은 음높이를 크로스헤어로 먼저 정해두고, 숫자 키 한 번으로 해당 길이의 음표를 넣는 빠른 입력 방식입니다. 마우스를 덜 쓰고 리듬을 연속 입력할 때 특히 유용합니다.</p>
+      <div class="grid-2">
+        <div>
+          <ol>
+            <li><kbd>Q</kbd> 또는 툴바의 <b>스피디</b> 버튼을 눌러 켭니다.</li>
+            <li><kbd>↑</kbd>/<kbd>↓</kbd>로 크로스헤어 음높이를 옮깁니다. <kbd>Ctrl</kbd>을 함께 누르면 옥타브 단위로 이동합니다.</li>
+            <li><kbd>←</kbd>/<kbd>→</kbd>로 입력 위치를 옮깁니다. <kbd>Ctrl</kbd>을 함께 누르면 마디 단위로 이동합니다.</li>
+            <li><kbd>3</kbd>-<kbd>7</kbd>을 누르면 현재 크로스헤어 위치에 음표가 즉시 들어갑니다.</li>
+          </ol>
+        </div>
+        <div class="mini-illus">
+          <svg viewBox="0 0 520 260" role="img" aria-label="스피디툴 입력 도식">
+            <rect width="520" height="260" rx="18" fill="#f8fafc"/>
+            <g stroke="#111827" stroke-width="2">
+              <line x1="58" y1="72" x2="462" y2="72"/><line x1="58" y1="92" x2="462" y2="92"/><line x1="58" y1="112" x2="462" y2="112"/><line x1="58" y1="132" x2="462" y2="132"/><line x1="58" y1="152" x2="462" y2="152"/>
+            </g>
+            <rect x="224" y="48" width="70" height="128" rx="12" fill="#2563eb" opacity=".08" stroke="#2563eb" stroke-dasharray="6 5"/>
+            <line x1="58" y1="92" x2="462" y2="92" stroke="#2563eb" stroke-width="2" stroke-dasharray="4 4"/>
+            <ellipse cx="260" cy="92" rx="15" ry="10" fill="none" stroke="#2563eb" stroke-width="3" transform="rotate(-18 260 92)"/>
+            <line x1="260" y1="46" x2="260" y2="178" stroke="#2563eb" stroke-width="3"/>
+            <text x="40" y="35" font-family="Malgun Gothic" font-size="21" font-weight="900">Q로 켜고, 높이를 맞춘 뒤 숫자 입력</text>
+            <rect x="70" y="198" width="64" height="36" rx="9" fill="#eef2f7" stroke="#d9e2ee"/><text x="102" y="222" text-anchor="middle" font-family="Cascadia Mono, Consolas" font-size="18" font-weight="900">5</text>
+            <text x="150" y="222" font-family="Malgun Gothic" font-size="17" fill="#475569">= 현재 위치에 4분음표 입력</text>
+          </svg>
+        </div>
+      </div>
+      <table>
+        <tr><th>스피디툴 동작</th><th>단축키</th><th>설명</th></tr>
+        <tr><td>켜기/끄기</td><td><kbd>Q</kbd></td><td>일반 입력 모드를 끄고 스피디 크로스헤어를 표시합니다.</td></tr>
+        <tr><td>음표 입력</td><td><kbd>3</kbd>-<kbd>7</kbd></td><td>3=16분, 4=8분, 5=4분, 6=2분, 7=온음표를 바로 넣습니다.</td></tr>
+        <tr><td>쉼표 입력</td><td><kbd>Shift</kbd>+<kbd>3</kbd>-<kbd>7</kbd> 또는 <kbd>0</kbd></td><td>숫자에 해당하는 길이의 쉼표를 입력합니다. <kbd>0</kbd>은 현재 선택 길이를 사용합니다.</td></tr>
+        <tr><td>음높이 지정</td><td><kbd>A</kbd>-<kbd>G</kbd>, <kbd>↑</kbd>/<kbd>↓</kbd></td><td>음이름으로 근처 옥타브를 고르거나 한 단계씩 위아래로 움직입니다.</td></tr>
+        <tr><td>점음표/타이</td><td><kbd>.</kbd>, <kbd>T</kbd></td><td>현재 위치의 음표에 부점 또는 타이를 적용합니다.</td></tr>
+        <tr><td>화음 추가</td><td><kbd>Enter</kbd></td><td>크로스헤어 음높이를 현재 위치의 화음에 더합니다.</td></tr>
+        <tr><td>건반 홀드 입력</td><td>화면 건반 또는 MIDI 건반을 누른 채 <kbd>3</kbd>-<kbd>7</kbd></td><td>누르고 있는 음들을 한 번에 화음으로 입력합니다.</td></tr>
+      </table>
+      <h3>3-4. 성부와 다중 보표</h3>
       <p>피아노처럼 한 보표 안에 여러 리듬이 겹칠 때는 <b>V1-V4</b> 성부를 사용합니다. 관례상 V1/V3은 스템이 위로, V2/V4는 아래로 표시됩니다.</p>
       <div class="cards">
         <div class="card"><b>V1</b><small>기본 선율, 오른손 상성부</small></div>
         <div class="card"><b>V2</b><small>왼손 또는 하성부 리듬</small></div>
         <div class="card"><b>V3/V4</b><small>더 복잡한 다성부 정리</small></div>
       </div>
-      <h3>3-4. 드럼과 TAB 입력</h3>
+      <h3>3-5. 드럼과 TAB 입력</h3>
       <p>악보 설정에서 <b>드럼 키트</b> 또는 <b>기타 + TAB</b> 편성을 선택하면 입력 방식이 해당 악기에 맞게 바뀝니다. 드럼 보표에서는 하단 드럼 패드가 나타나고, 기타+TAB에서는 표준 보표와 TAB가 연결됩니다.</p>
     </section>
 
@@ -652,11 +691,14 @@
       <table class="shortcut">
         <tr><th>키</th><th>동작</th><th>사용 팁</th></tr>
         <tr><td><kbd>N</kbd></td><td>입력 모드 켜기/끄기</td><td>입력과 선택 모드를 빠르게 오갑니다.</td></tr>
-        <tr><td><kbd>3</kbd>-<kbd>7</kbd></td><td>음길이 선택</td><td>3=16분, 4=8분, 5=4분, 6=2분, 7=온음표</td></tr>
+        <tr><td><kbd>Q</kbd></td><td>스피디툴 켜기/끄기</td><td>크로스헤어 기준 빠른 숫자 입력으로 전환합니다.</td></tr>
+        <tr><td><kbd>3</kbd>-<kbd>7</kbd></td><td>음길이 선택 또는 스피디 즉시 입력</td><td>3=16분, 4=8분, 5=4분, 6=2분, 7=온음표</td></tr>
+        <tr><td><kbd>Shift</kbd>+<kbd>3</kbd>-<kbd>7</kbd></td><td>스피디 쉼표</td><td>스피디툴에서 같은 길이의 쉼표를 바로 넣습니다.</td></tr>
         <tr><td><kbd>A</kbd>-<kbd>G</kbd></td><td>음 입력 또는 선택 음 재지정</td><td>입력 모드 여부에 따라 동작이 다릅니다.</td></tr>
         <tr><td><kbd>0</kbd></td><td>쉼표</td><td>입력 모드에서는 쉼표 입력, 선택 모드에서는 삭제와 비슷하게 씁니다.</td></tr>
         <tr><td><kbd>.</kbd></td><td>점음표</td><td>현재 길이에 부점을 붙입니다.</td></tr>
         <tr><td><kbd>T</kbd></td><td>타이</td><td>같은 음높이의 다음 음과 붙입니다.</td></tr>
+        <tr><td><kbd>Enter</kbd></td><td>스피디 화음 추가</td><td>크로스헤어 음높이를 현재 위치의 화음에 더합니다.</td></tr>
         <tr><td><kbd>S</kbd></td><td>이음줄</td><td>범위 선택 후 사용하면 좋습니다.</td></tr>
         <tr><td><kbd>Ctrl</kbd>+<kbd>3</kbd>-<kbd>9</kbd></td><td>잇단음표</td><td>선택한 음표/쉼표를 n개로 나눕니다.</td></tr>
         <tr><td><kbd>Ctrl</kbd>+<kbd>C/V/X</kbd></td><td>복사/붙여넣기/잘라내기</td><td>범위 선택과 함께 쓰세요.</td></tr>
@@ -678,6 +720,7 @@
         <tr><th>문제</th><th>원인</th><th>해결</th></tr>
         <tr><td>음표가 입력되지 않음</td><td>입력 모드가 꺼져 있거나 다른 보표가 선택됨</td><td><kbd>N</kbd>을 눌러 입력 모드를 켜고 보표 선택 드롭다운을 확인합니다.</td></tr>
         <tr><td>원하는 옥타브가 아님</td><td>키보드 입력은 마지막 음 근처로 옥타브를 추론함</td><td>입력 후 <kbd>Ctrl</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd>로 옥타브를 조정합니다.</td></tr>
+        <tr><td>스피디툴에서 숫자를 눌렀는데 예상한 위치가 아님</td><td>크로스헤어 음높이나 캐럿 위치가 맞지 않음</td><td><kbd>↑</kbd>/<kbd>↓</kbd>로 높이를, <kbd>←</kbd>/<kbd>→</kbd>로 위치를 맞춘 뒤 <kbd>3</kbd>-<kbd>7</kbd>을 누릅니다.</td></tr>
         <tr><td>소리가 안 남</td><td>브라우저 오디오 권한 또는 샘플 로딩 지연</td><td>한 번 화면을 클릭한 뒤 다시 재생하고, 샘플 상태 배지를 확인합니다.</td></tr>
         <tr><td>MusicXML 가져오기 후 일부 기호가 없음</td><td>지원 범위를 벗어난 표기</td><td>가져오기 리포트를 확인하고 속성 패널/팔레트로 보정합니다.</td></tr>
         <tr><td>악보가 너무 빽빽함</td><td>마디/줄 또는 음표 간격이 좁음</td><td>악보 설정에서 마디/줄을 줄이거나 음표 간격을 키웁니다.</td></tr>
@@ -691,7 +734,7 @@
         <li>외부 프로그램으로 넘길 때는 MusicXML과 PDF를 함께 내보냈습니다.</li>
       </ul>
       <div class="footer-note">
-        이 설명서는 ScoreForge 정적 웹앱의 현재 구현 기능을 기준으로 작성되었습니다. 앱이 업데이트되면 메뉴명이나 일부 동작은 달라질 수 있습니다.
+        이 설명서는 2026-07-04 기준 ScoreForge 정적 웹앱의 현재 구현 기능을 기준으로 작성되었습니다. 앱이 업데이트되면 메뉴명이나 일부 동작은 달라질 수 있습니다.
       </div>
     </section>
   </div>
