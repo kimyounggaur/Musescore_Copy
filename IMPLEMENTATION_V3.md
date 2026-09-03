@@ -57,4 +57,15 @@
 
 기존 Vercel 프로젝트 `musescore-copy`에 연결된 master를 사용한다. `28e28c0` push로 자동 production 배포 READY를 확인했다.
 
-첫 운영 검사에서 Vercel cleanUrls의 index.html 리다이렉트 응답을 오프라인 탐색에 그대로 반환하면 실패하는 문제를 발견했다. 3.0.1에서 탐색 응답의 리다이렉트 이력을 제거하면서 CSP/Content-Type/본문을 보존하도록 수정했다. 로컬 검증 서버에도 cleanUrls를 재현하고 회귀 테스트를 추가했다. 최종 운영 재검증 결과는 후속 기록에 남긴다.
+첫 운영 검사에서 Vercel cleanUrls의 index.html 리다이렉트 응답을 오프라인 탐색에 그대로 반환하면 실패하는 문제를 발견했다. 3.0.1에서 탐색 응답의 리다이렉트 이력을 제거하면서 CSP/Content-Type/본문을 보존하도록 수정했다. 로컬 검증 서버에도 cleanUrls를 재현하고 회귀 테스트를 추가했다.
+
+`55c6217` push로 production 배포 `dpl_9gEgZtJVLBxAaBzwHffocLpiQQga` READY를 확인했다. [운영 사이트](https://musescore-copy.vercel.app)에서 실제 3.0.1 버전과 다음 결과를 확인했다.
+
+- HTTPS 신규 브라우저에서 앱 설치 캐시 41개 구성.
+- 네트워크를 끈 뒤 새로고침 성공, 자동 저장 악보 복원, 재생 시작 성공.
+- CSP 위반 0건, 브라우저 예외 0건.
+- HTML/JS: `max-age=0, must-revalidate`; 폰트: 1년 immutable; SW: no-cache.
+- `X-Content-Type-Options: nosniff` 및 배포 CSP 적용.
+- GitHub master push마다 기존 Vercel 프로젝트가 자동 배포되는 것까지 확인.
+
+새 버전 알림이 표시되면 현재 악보를 저장한 뒤 적용할 수 있다. 초기 3.0.0을 시험한 탭에서 새로고침이 실패하면 해당 사이트 탭을 모두 닫았다가 다시 열어 대기 중인 수정 서비스 워커가 활성화되도록 한다.
