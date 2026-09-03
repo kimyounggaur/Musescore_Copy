@@ -173,7 +173,7 @@
     const scale = opts.scale || 1;
     if (fontReady && GLYPHS[name]) {
       const anchor = opts.anchor ? ` text-anchor="${opts.anchor}"` : "";
-      return `<text${cls}${anchor} x="${r2(x)}" y="${r2(y)}" font-family="BravuraSF" font-size="${40 * scale}px">${GLYPHS[name]}</text>`;
+      return `<text${cls}${anchor} x="${r2(x)}" y="${r2(y)}" font-family="BravuraSF" font-size="${40 * scale}px" pointer-events="none">${GLYPHS[name]}</text>`;
     }
     const fb = FB[name];
     if (!fb) return "";
