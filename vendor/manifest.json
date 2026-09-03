@@ -1,0 +1,26 @@
+[
+  {
+    "file": "supabase.js",
+    "url": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.114.0/dist/umd/supabase.js",
+    "sha256": "c3754a5a4e8efcdc03c1c0028781eb7ec6043da0b952ebf85d530a21d5c91469",
+    "bytes": 212884
+  },
+  {
+    "file": "supabase-LICENSE",
+    "url": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.114.0/LICENSE",
+    "sha256": "334dd6820e2eaeab2064e7c59001b810566728a28a41a7c1dbf69bbee17d0936",
+    "bytes": 1065
+  },
+  {
+    "file": "smplr/index.mjs",
+    "url": "https://cdn.jsdelivr.net/npm/smplr@1.0.0/dist/index.mjs",
+    "sha256": "85d2a2ce3db20e04c3483e0f5be7430f9c275ab3524b73bfc6db2f340200a613",
+    "bytes": 145842
+  },
+  {
+    "file": "smplr/package.json",
+    "url": "https://cdn.jsdelivr.net/npm/smplr@1.0.0/package.json",
+    "sha256": "d83200e547675da199d0824ea951fe5ab89af9b3f0a55ee7f2c55bef9bda7449",
+    "bytes": 1698
+  }
+]

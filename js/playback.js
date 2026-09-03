@@ -7,7 +7,22 @@
 (function (SF) {
   const C = SF.core;
   const { Fraction } = SF;
-  const SMPLR_URL = "https://unpkg.com/smplr/dist/index.mjs";
+  const SMPLR_URL = "https://unpkg.com/smplr@1.0.0/dist/index.mjs";
+  const F = (n, d = 1) => new Fraction(n, d);
+  const timeAt = (score, m) => C.timeSigAt ? C.timeSigAt(score, m) : score.measures.slice(0, m + 1).reduce((ts, mm) => mm.timeSig || ts, score.timeSig);
+  const lengthAt = (score, m) => {
+    if (C.measureLenAt) return C.measureLenAt(score, m);
+    const value = score.measures[m]?.actualLen;
+    if (value) return Array.isArray(value) ? F(...value) : F(value.n, value.d);
+    const ts = timeAt(score, m); return F(ts.num, ts.den);
+  };
+  const startsFor = score => {
+    if (C.measureStarts) return C.measureStarts(score);
+    const out = [Fraction.ZERO];
+    for (let m = 0; m < score.measures.length; m++) out.push(out[m].add(lengthAt(score, m)));
+    return out;
+  };
+  const channelFor = (part, pIdx) => part.instrument === "drums" || part.group === "percussion" ? 9 : (pIdx % 15 >= 9 ? pIdx % 15 + 1 : pIdx % 15);
 
   /* ---------------- 악기 프리셋 ---------------- */
   const INSTRUMENTS = {
@@ -106,6 +121,7 @@
   let ctx = null, master = null, limiter = null;
   const live = new Set(); // 정지 시 끊을 노드들
   const sampleInstruments = new Map();
+  const partBuses = new Map();
   let smplrModule = null;
   let smplrPromise = null;
   let sampleStatus = { state: "idle", text: "샘플 대기", detail: "재생하면 smplr 실제 악기 샘플을 불러옵니다." };
@@ -118,6 +134,7 @@
     organ: { kind: "soundfont", instrument: "church_organ", label: "Church Organ", volume: 94 },
     strings: { kind: "soundfont", instrument: "string_ensemble_1", label: "String Ensemble", volume: 90 },
     flute: { kind: "soundfont", instrument: "flute", label: "Flute", volume: 96 },
+    guitar: { kind: "soundfont", instrument: "acoustic_guitar_nylon", label: "Classical Guitar", volume: 96 },
     chiptune: { kind: "soundfont", instrument: "lead_1_square", label: "Square Lead", volume: 92 },
   };
 
@@ -139,7 +156,7 @@
     if (smplrModule) return smplrModule;
     if (!smplrPromise) {
       setSampleStatus("loading", "샘플 로딩", "smplr 라이브러리를 불러오는 중입니다.");
-      smplrPromise = import(SMPLR_URL).then(mod => {
+      smplrPromise = import("../vendor/smplr/index.mjs").catch(() => import(SMPLR_URL)).then(mod => {
         smplrModule = mod;
         return mod;
       }).catch(err => {
@@ -155,10 +172,10 @@
     return SAMPLE_MAP[instrument] ? instrument : "piano";
   }
 
-  function createSampleInstrument(mod, key) {
+  function createSampleInstrument(mod, key, partId) {
     const spec = SAMPLE_MAP[sampleKey(key)];
     const opts = {
-      destination: master,
+      destination: partBus(partId).input,
       volume: spec.volume || 96,
       onLoadProgress: ({ loaded, total }) => {
         setSampleStatus("loading", `${loaded}/${total}`, `${spec.label} 샘플을 불러오는 중입니다.`);
@@ -169,18 +186,20 @@
     throw new Error("smplr Soundfont factory is unavailable");
   }
 
-  function ensureSampleInstrument(instrument) {
-    const key = sampleKey(instrument);
+  function ensureSampleInstrument(instrument, partId = "preview") {
+    audio();
+    if (instrument === "drums") return Promise.resolve({ ready: false });
+    const key = partId + ":" + sampleKey(instrument);
     const cached = sampleInstruments.get(key);
-    if (cached) return cached.promise;
+    if (cached && !cached.failed) return cached.promise;
     const rec = { instrument: null, ready: false, failed: false, promise: null };
     rec.promise = (async () => {
       const mod = await loadSmplrModule();
-      const inst = createSampleInstrument(mod, key);
+      const inst = createSampleInstrument(mod, instrument, partId);
       rec.instrument = inst;
       await (inst.ready || inst.load || Promise.resolve(inst));
       rec.ready = true;
-      setSampleStatus("ready", "샘플 준비", `${(SAMPLE_MAP[key] || SAMPLE_MAP.piano).label} 샘플 음원 준비 완료`);
+      setSampleStatus("ready", "샘플 준비", `${(SAMPLE_MAP[sampleKey(instrument)] || SAMPLE_MAP.piano).label} 샘플 음원 준비 완료`);
       return rec;
     })().catch(err => {
       rec.failed = true;
@@ -193,19 +212,19 @@
   }
 
   function warmSamplesForScore(score) {
-    const keys = new Set();
-    for (const ref of C.staffRefs(score)) keys.add(sampleKey(ref.instrument || score.instrument));
-    return Promise.all([...keys].map(key => ensureSampleInstrument(key)));
+    return Promise.all(score.parts.map(part => ensureSampleInstrument(part.instrument, part.id)));
   }
 
   function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  function scheduleSampleNote(instrument, midi, when, dur, vel) {
-    const rec = sampleInstruments.get(sampleKey(instrument));
+  function scheduleSampleNote(instrument, midi, when, dur, vel, partId = "preview", session = null) {
+    const key = partId + ":" + sampleKey(instrument);
+    if (instrument === "drums" || (session && !session.has(key))) return false;
+    const rec = sampleInstruments.get(key);
     if (!rec || !rec.ready || !rec.instrument || rec.failed) {
-      ensureSampleInstrument(instrument);
+      if (!session) ensureSampleInstrument(instrument, partId);
       return false;
     }
     try {
@@ -241,20 +260,36 @@
 
   function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
 
+  // Both engines terminate in the same persistent per-part gain/pan bus.
+  function partBus(partId = "preview") {
+    if (partBuses.has(partId)) return partBuses.get(partId);
+    const ac = audio(), input = ac.createGain();
+    const pan = ac.createStereoPanner ? ac.createStereoPanner() : null;
+    input.connect(pan || master);
+    if (pan) pan.connect(master);
+    const bus = { input, pan };
+    partBuses.set(partId, bus);
+    return bus;
+  }
+  function updateMixer(score = C.state.score) {
+    if (!ctx || !score) return;
+    const solo = score.parts.some(part => mixerFor(score, part).solo);
+    for (const part of score.parts) {
+      const mx = mixerFor(score, part), bus = partBus(part.id);
+      const gain = mx.mute || (solo && !mx.solo) ? 0 : mx.volume;
+      bus.input.gain.setTargetAtTime(gain, ctx.currentTime, 0.015);
+      if (bus.pan) bus.pan.pan.setTargetAtTime(mx.pan, ctx.currentTime, 0.015);
+    }
+  }
+
   /* 음 하나 예약 */
-  function scheduleNote(preset, midi, when, dur, vel = 0.8, pan = 0) {
+  function scheduleNote(preset, midi, when, dur, vel = 0.8, pan = 0, partId = "preview") {
     const ac = audio();
     const f = midiToFreq(midi + (preset.octShift || 0));
     const g = ac.createGain();
     g.gain.value = 0;
     let dest = g;
-    let out = master;
-    if (Math.abs(pan) > 0.001 && ac.createStereoPanner) {
-      const pn = ac.createStereoPanner();
-      pn.pan.value = Math.max(-1, Math.min(1, pan));
-      pn.connect(master);
-      out = pn;
-    }
+    const out = partBus(partId).input;
     if (preset.filter) {
       const fl = ac.createBiquadFilter();
       fl.type = preset.filter.type;
@@ -300,7 +335,7 @@
       const src = ac.createBufferSource(); src.buffer = buf;
       const bg = ac.createGain(); bg.gain.value = preset.breath * vel;
       const bf = ac.createBiquadFilter(); bf.type = "bandpass"; bf.frequency.value = f * 2; bf.Q.value = 1.2;
-      src.connect(bf).connect(bg).connect(master);
+      src.connect(bf).connect(bg).connect(out);
       src.start(when); live.add(src);
     }
 
@@ -347,50 +382,28 @@
     return {
       mute: !!rec.mute,
       solo: !!rec.solo,
-      volume: Math.max(0, Math.min(1.5, rec.volume === undefined ? 1 : +rec.volume)),
+      volume: Math.max(0, Math.min(1.5, Number.isFinite(+rec.volume) ? +rec.volume : 1)),
       pan: Math.max(-1, Math.min(1, +rec.pan || 0)),
     };
   }
 
   function playableRefs(score, opts) {
     let refs = C.visibleStaffRefs ? C.visibleStaffRefs(score, opts.viewMode, { hideEmptyStaves: false }) : C.staffRefs(score);
-    const hasSolo = refs.some(ref => mixerFor(score, ref.part).solo);
-    refs = refs.filter(ref => {
-      const mx = mixerFor(score, ref.part);
-      return hasSolo ? mx.solo : !mx.mute;
-    });
-    return refs;
+    // Keep silent parts in the plan so live unmute/solo never requires recompiling.
+    return refs.filter(ref => !(ref.staff.staffType === "tab" && ref.staff.linkedStaffId && refs.some(other => other.staff.id === ref.staff.linkedStaffId && other.staff.staffType !== "tab")));
   }
 
-  function swingDelay(score, tempoMap, abs, tick, len) {
-    const mode = score.playbackSettings?.swing || "off";
-    const ratio = SWING[mode] || 0;
-    if (!ratio) return 0;
-    const eighth = new Fraction(1, 8);
-    const q = tick.div(eighth);
-    if (q.d !== 1 || q.n % 2 !== 1) return 0;
-    return tempoMap.durationSec(abs, eighth) * (ratio * 2 - 1);
-  }
-
-  function swingAbs(score, abs) {
-    const mode = score.playbackSettings?.swing || "off";
-    const ratio = SWING[mode] || 0;
-    if (!ratio) return abs;
-    const L = C.measureLen(score);
-    const m = Math.floor(abs.div(L).value + 1e-9);
-    const tick = abs.sub(L.mul(new Fraction(m, 1)));
-    const eighth = new Fraction(1, 8);
-    const q = tick.div(eighth);
-    if (q.d !== 1 || q.n % 2 !== 1) return abs;
-    return abs.add(eighth.mul(new Fraction(Math.round((ratio * 2 - 1) * 1000), 1000)));
-  }
 
   function endingMatches(label, pass) {
     return String(label || "")
       .split(/[,\s]+/)
       .map(x => x.trim().replace(/\.$/, ""))
       .filter(Boolean)
-      .some(x => x === String(pass));
+      .some(x => {
+        if (x === String(pass)) return true;
+        const range = x.match(/^(\d+)-(\d+)$/);
+        return range && pass >= +range[1] && pass <= +range[2];
+      });
   }
 
   function endingStopAfter(score, m) {
@@ -400,335 +413,413 @@
     return m;
   }
 
-  function repeatStartBefore(score, m) {
-    for (let i = m; i >= 0; i--) {
-      if (C.ensureMeasureMeta(score.measures[i] || {}).startRepeat) return i;
-    }
-    return 0;
-  }
 
   function buildPlaybackPlan(score) {
     C.ensureParts(score);
-    const maxMeasures = Math.max(1, ...C.staffRefs(score).map(r => r.measures.length));
-    const plan = [];
-    const endPass = new Map();
-    let m = 0, guard = 0;
-    const currentPass = () => Math.max(1, ...endPass.values(), 1);
-    while (m < maxMeasures && guard++ < maxMeasures * 16) {
-      const mm = C.ensureMeasureMeta(score.measures[m] || {});
-      const pass = currentPass();
+    const count = score.measures.length, plan = [], warnings = [];
+    const repeatEnds = new Map(), stack = [];
+    score.measures.forEach((mm, m) => {
+      if (mm.startRepeat) stack.push(m);
+      if (mm.endRepeat) repeatEnds.set(m, stack.pop() ?? 0);
+    });
+    const passes = new Map(), usedJumps = new Set();
+    let m = 0, pass = 1, jumped = false, codaTaken = false, jumpMode = "", playRepeats = true, guard = 0;
+    const markerAt = marker => score.measures.findIndex(mm => mm.marker === marker || (mm.markers || []).includes(marker));
+    while (m >= 0 && m < count && guard++ < Math.max(64, count * 64)) {
+      const mm = score.measures[m], activeEnd = [...repeatEnds].find(([end, start]) => start <= m && m <= end)?.[0];
+      if (activeEnd !== undefined) pass = passes.get(activeEnd) || 1;
       if (mm.endingStart && !endingMatches(mm.endingStart, pass)) {
-        m = endingStopAfter(score, m) + 1;
-        continue;
+        const stop = endingStopAfter(score, m);
+        // A skipped first ending can contain the repeat's closing barline.
+        if (repeatEnds.has(stop)) passes.set(stop, Math.max(pass, passes.get(stop) || 1));
+        m = stop + 1; continue;
       }
-      plan.push({ m, pass });
-      if (mm.endRepeat) {
-        const count = Math.max(2, Math.min(8, mm.repeatCount || 2));
-        const used = endPass.get(m) || 1;
-        if (used < count) {
-          endPass.set(m, used + 1);
-          m = repeatStartBefore(score, m);
-          continue;
+      plan.push({ m, pass, jumped });
+      const hasMarker = value => mm.marker === value || (mm.markers || []).includes(value);
+      if (jumped && /alFine$/i.test(jumpMode) && hasMarker("fine")) break;
+      if (jumped && !codaTaken && /alCoda$/i.test(jumpMode) && hasMarker("toCoda")) {
+        const target = markerAt("coda");
+        codaTaken = true;
+        if (target >= 0) { m = target; continue; }
+        warnings.push("To Coda has no Coda target.");
+      }
+      if (mm.jump && !usedJumps.has(m)) {
+        const jump = typeof mm.jump === "string" ? { type: mm.jump } : mm.jump;
+        const type = String(jump.type || "").replace(/[.\s]/g, "");
+        if (/^D[CS](alFine|alCoda)?$/i.test(type)) {
+          usedJumps.add(m);
+          const target = /^DS/i.test(type) ? markerAt("segno") : 0;
+          if (target >= 0) {
+            jumped = true; jumpMode = type; playRepeats = !!jump.playRepeats;
+            passes.clear(); pass = 1; m = target; continue;
+          }
+          warnings.push("D.S. has no Segno target.");
         }
       }
+      if (mm.endRepeat && (!jumped || (mm.repeatAfterJump ?? playRepeats))) {
+        const repeatCount = Math.max(2, Math.min(8, mm.repeatCount || 2));
+        const used = passes.get(m) || 1;
+        if (used < repeatCount) {
+          passes.set(m, used + 1); pass = used + 1;
+          const target = repeatEnds.get(m) ?? 0;
+          for (const [end, start] of repeatEnds) if (end < m && start >= target) passes.delete(end);
+          m = target; continue;
+        }
+      }
+      if (mm.endingStop && !mm.endRepeat) pass = 1;
       m++;
     }
-    return plan.length ? plan : Array.from({ length: maxMeasures }, (_, i) => ({ m: i, pass: 1 }));
+    if (guard >= Math.max(64, count * 64)) warnings.push("Playback jump limit reached.");
+    Object.defineProperty(plan, "warnings", { value: warnings });
+    return plan;
   }
 
-  function buildTempoMap(score, refs) {
-    const L = C.measureLen(score);
-    const maxMeasures = Math.max(1, ...refs.map(r => r.measures.length));
-    const totalAbs = L.mul(new Fraction(maxMeasures, 1));
-    const changes = [{ abs: Fraction.ZERO, tempo: Math.max(30, Math.min(280, score.tempo || 100)) }];
-    const seen = new Set(["0/1"]);
-    for (const ref of refs) {
-      for (let m = 0; m < ref.measures.length; m++) {
-        for (const entry of C.measureEntries(ref.measures[m], { score })) {
-          const ev = entry.ev;
-          const tick = entry.tick;
-          if (ev.tempo && !isNaN(+ev.tempo)) {
-            const abs = L.mul(new Fraction(m, 1)).add(tick);
-            const key = abs.toString();
-            const tempo = Math.max(30, Math.min(280, Math.round(+ev.tempo)));
-            if (key === "0/1") changes[0].tempo = tempo;
-            else if (!seen.has(key)) { changes.push({ abs, tempo }); seen.add(key); }
-          }
-        }
+  function secondsMap(changes) {
+    changes.sort((a, b) => a.abs.cmp(b.abs));
+    const unique = [];
+    for (const change of changes) {
+      if (unique.length && unique[unique.length - 1].abs.eq(change.abs)) unique[unique.length - 1] = change;
+      else unique.push(change);
+    }
+    const seconds = [0];
+    for (let i = 1; i < unique.length; i++) seconds[i] = seconds[i - 1] + unique[i].abs.sub(unique[i - 1].abs).value * 240 / unique[i - 1].tempo;
+    const indexAt = abs => {
+      let lo = 0, hi = unique.length - 1;
+      while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (unique[mid].abs.lte(abs)) lo = mid; else hi = mid - 1; }
+      return lo;
+    };
+    const secondsAt = abs => { const i = indexAt(abs); return seconds[i] + abs.sub(unique[i].abs).value * 240 / unique[i].tempo; };
+    return { changes: unique, secondsAt, tempoAt: abs => unique[indexAt(abs)].tempo, durationSec: (abs, len) => secondsAt(abs.add(len)) - secondsAt(abs) };
+  }
+
+  function buildTempoMap(score, refs = C.staffRefs(score)) {
+    const starts = startsFor(score), changes = [{ abs: Fraction.ZERO, tempo: Math.max(1, +score.tempo || 100) }];
+    const seen = new Set();
+    for (const ref of refs) for (let m = 0; m < ref.measures.length; m++) {
+      for (const entry of C.measureEntries(ref.measures[m], { score })) if (+entry.ev.tempo > 0) {
+        const abs = starts[m].add(entry.tick), key = abs.toString();
+        if (!seen.has(key)) { changes.push({ abs, tempo: +entry.ev.tempo }); seen.add(key); }
       }
     }
-    changes.sort((a, b) => a.abs.cmp(b.abs));
-    const seconds = [0];
-    for (let i = 1; i < changes.length; i++) {
-      const prev = changes[i - 1], cur = changes[i];
-      seconds[i] = seconds[i - 1] + cur.abs.sub(prev.abs).value * 4 * 60 / prev.tempo;
+    const map = secondsMap(changes);
+    const measureTimes = starts.map(map.secondsAt), beatTimes = [];
+    for (let m = 0; m < score.measures.length; m++) {
+      const ts = timeAt(score, m);
+      for (let tick = Fraction.ZERO; tick.lt(lengthAt(score, m)); tick = tick.add(F(1, ts.den))) {
+        beatTimes.push({ abs: starts[m].add(tick), t: map.secondsAt(starts[m].add(tick)), accent: tick.n === 0 });
+      }
     }
-    const secondsAt = (abs) => {
-      let i = 0;
-      while (i + 1 < changes.length && changes[i + 1].abs.lte(abs)) i++;
-      return seconds[i] + abs.sub(changes[i].abs).value * 4 * 60 / changes[i].tempo;
-    };
-    const durationSec = (abs, len) => secondsAt(abs.add(len)) - secondsAt(abs);
-    const beatLen = new Fraction(1, score.timeSig.den);
-    const beatTimes = [];
-    let beatAbs = Fraction.ZERO, beatIdx = 0;
-    while (beatAbs.lt(totalAbs)) {
-      beatTimes.push({ t: secondsAt(beatAbs), accent: beatIdx % score.timeSig.num === 0 });
-      beatAbs = beatAbs.add(beatLen);
-      beatIdx++;
-    }
-    const measureTimes = [];
-    for (let m = 0; m <= maxMeasures; m++) measureTimes.push(secondsAt(L.mul(new Fraction(m, 1))));
-    return { changes, secondsAt, durationSec, beatTimes, measureTimes, totalSec: secondsAt(totalAbs), maxMeasures };
+    return { ...map, starts, measureTimes, beatTimes, totalSec: measureTimes[measureTimes.length - 1], maxMeasures: score.measures.length };
   }
 
   function compile(score, opts = {}) {
     C.ensureParts(score);
-    const refs = playableRefs(score, opts);
-    const tempoMap = buildTempoMap(score, refs);
-    const plan = buildPlaybackPlan(score);
-    const L = C.measureLen(score);
-    let planSec = 0;
-    const expandedMeasureTimes = [0];
-    const expandedPlan = plan.map((item, i) => {
-      const baseStartSec = tempoMap.measureTimes[item.m] || 0;
-      const baseEndSec = tempoMap.measureTimes[item.m + 1] ?? baseStartSec;
-      const out = { ...item, planIdx: i, startSec: planSec, baseStartSec };
-      planSec += Math.max(0, baseEndSec - baseStartSec);
-      expandedMeasureTimes.push(planSec);
+    const refs = playableRefs(score, opts), base = buildTempoMap(score), plan = buildPlaybackPlan(score);
+    if (score.parts.filter(p => p.instrument !== "drums" && p.group !== "percussion").length > 15) plan.warnings.push("MIDI has only 15 melodic channels; additional parts share channels.");
+    let totalAbs = Fraction.ZERO;
+    const tempoChanges = [], signatures = [], beats = [];
+    const expandedPlan = plan.map((item, planIdx) => {
+      const baseAbs = base.starts[item.m], len = lengthAt(score, item.m), ts = timeAt(score, item.m);
+      const out = { ...item, planIdx, abs: totalAbs, baseAbs, len };
+      tempoChanges.push({ abs: totalAbs, tempo: base.tempoAt(baseAbs) });
+      for (const change of base.changes) if (change.abs.gt(baseAbs) && change.abs.lt(baseAbs.add(len))) tempoChanges.push({ abs: totalAbs.add(change.abs.sub(baseAbs)), tempo: change.tempo });
+      signatures.push({ abs: totalAbs, timeSig: ts, keySig: C.keySigAt ? C.keySigAt(score, item.m) : score.keySig });
+      for (let tick = Fraction.ZERO; tick.lt(len); tick = tick.add(F(1, ts.den))) beats.push({ abs: totalAbs.add(tick), accent: tick.n === 0 });
+      totalAbs = totalAbs.add(len);
       return out;
     });
-    const expandedBeatTimes = [];
-    const beatLen = new Fraction(1, score.timeSig.den);
-    for (const item of expandedPlan) {
-      let beatAbs = L.mul(new Fraction(item.m, 1));
-      const endAbs = beatAbs.add(L);
-      let beatIdx = 0;
-      while (beatAbs.lt(endAbs)) {
-        expandedBeatTimes.push({
-          t: item.startSec + tempoMap.secondsAt(beatAbs) - item.baseStartSec,
-          accent: beatIdx % score.timeSig.num === 0,
-        });
-        beatAbs = beatAbs.add(beatLen);
-        beatIdx++;
-      }
-    }
-    const spw = 4 * 60 / (tempoMap.changes[0]?.tempo || score.tempo || 100); // 호환용 초기 온음표 초
-    const events = [];
-    const timelineEvents = [];
-    const consumed = new Set(); // "m:e:midi" 타이로 흡수된 음
+    if (!tempoChanges.length) tempoChanges.push({ abs: Fraction.ZERO, tempo: +score.tempo || 100 });
+    const events = [], timelineEvents = [], positions = new Map(), holds = new Map();
     const slurCover = C.slurCoverMap ? C.slurCoverMap(score) : new Set();
-    const dynList = []; // 명시적 셈여림 [{t, v}] — 헤어핀 목표 탐색용
-    const posById = new Map(); // 이벤트 id → {t, vel} (쉼표 포함)
-
+    const shiftAt = (ref, id) => {
+      const here = positions.get(id)?.original;
+      const position = positions.get(id);
+      let transpose = ref.part.transpose;
+      for (let m = position.m; m >= 0; m--) if (ref.measures[m]?.transpose) { transpose = ref.measures[m].transpose; break; }
+      let shift = +(transpose?.chromatic || 0) + 12 * +(transpose?.octaveChange || 0);
+      if (C.ottavaShiftAt) return shift + C.ottavaShiftAt(score, id);
+      for (const sp of score.spanners || []) if (sp.type === "ottava") {
+        const a = positions.get(sp.startId), b = positions.get(sp.endId);
+        if (a && b && a.ref === ref.globalIdx && b.ref === ref.globalIdx && a.voice === position.voice && b.voice === position.voice && here.gte(a.original) && here.lte(b.original)) shift += +sp.shift || 12;
+      }
+      return shift;
+    };
+    for (const ref of refs) for (let m = 0; m < ref.measures.length; m++) for (const en of C.measureEntries(ref.measures[m], { score })) {
+      positions.set(en.ev.id, { original: base.starts[m].add(en.tick), ref: ref.globalIdx, m, voice: en.voice });
+    }
+    const occurrences = [];
     for (const ref of refs) {
-      let vel = VELS.mf;
-      let soundFlag = null;
-      for (const item of expandedPlan) {
-        const m = item.m;
-        const entries = ref.measures[m] ? C.measureEntries(ref.measures[m], { score }) : [{ ev: C.fullRest(score), e: 0, voice: 1, tick: Fraction.ZERO }];
-        for (const entry of entries) {
-          const ev = entry.ev;
-          const e = entry.e;
-          const voice = entry.voice;
-          const tick = entry.tick;
-          const abs = L.mul(new Fraction(m, 1)).add(tick);
-          const evLen = C.durValue(ev.dur);
-          const t = item.startSec + tempoMap.secondsAt(abs) - item.baseStartSec + swingDelay(score, tempoMap, abs, tick, evLen);
-          const dval = tempoMap.durationSec(abs, evLen);
-          if (ev.dynamic && VELS[ev.dynamic] !== undefined) {
-            vel = VELS[ev.dynamic];
-            dynList.push({ t, v: vel });
-          }
-          if (ev.soundFlag) soundFlag = ev.soundFlag === "arco" || ev.soundFlag === "open" ? null : ev.soundFlag;
-          posById.set(ev.id, { t, vel });
-          timelineEvents.push({ id: ev.id, t, mIdx: m, pass: item.pass, partIdx: ref.partIdx, staffIdx: ref.staffIdx });
-          if (ev.type === "note") {
-            (ev.graceBefore || []).forEach((gr, gi, arr) => {
-              const gm = [];
-              for (const note of gr.notes || []) gm.push({ midi: C.midiOf(note), durSec: 0.055, durVal: new Fraction(1, 32) });
-              if (gm.length) {
-                events.push({
-                  id: gr.id, t: Math.max(0, t - 0.06 * (arr.length - gi)), durSec: 0.055, midis: gm, mIdx: m,
-                  absVal: L.mul(new Fraction(item.planIdx, 1)).add(tick),
-                  partIdx: ref.partIdx, staffIdx: ref.staffIdx,
-                  channel: Math.min(15, ref.partIdx),
-                  instrument: ref.instrument,
-                  mixer: mixerFor(score, ref.part),
-                  velBase: vel, boost: 0, gate: 0.9,
-                });
-              }
-            });
-            const midis = [];
-            for (const note of ev.notes) {
-              const midi = ev.drumId ? (ev.midi || C.drumSpec(ev.drumId).midi) : C.midiOf(note);
-              const key = item.planIdx + ":" + ref.globalIdx + ":" + voice + ":" + m + ":" + e + ":" + midi;
-              if (consumed.has(key)) continue;
-              // 타이 체인 길이 합산
-              let totalLen = evLen;
-              let cur = { ...ref, m, e, voice, ev }, curNote = note;
-              while (curNote.tie) {
-                const nx = C.nextEvent(score, cur.m, cur.e, { ...ref, voice });
-                if (!nx || nx.ev.type !== "note") break;
-                const n2 = nx.ev.notes.find(n => C.midiOf(n) === midi && n.step === curNote.step);
-                if (!n2) break;
-                consumed.add(item.planIdx + ":" + ref.globalIdx + ":" + voice + ":" + nx.m + ":" + nx.e + ":" + midi);
-                totalLen = totalLen.add(C.durValue(nx.ev.dur));
-                cur = nx; curNote = n2;
-              }
-              midis.push({ midi, durSec: tempoMap.durationSec(abs, totalLen), durVal: totalLen });
+      let vel = VELS.mf, soundFlag = null;
+      const lanes = new Map();
+      for (const item of expandedPlan) for (const entry of C.measureEntries(ref.measures[item.m], { score })) {
+        const ev = entry.ev, len = ev.full ? item.len : C.durValue(ev.dur), abs = item.abs.add(entry.tick);
+        if (VELS[ev.dynamic] !== undefined) vel = VELS[ev.dynamic];
+        if (ev.soundFlag) soundFlag = ["arco", "open"].includes(ev.soundFlag) ? null : ev.soundFlag;
+        const occ = { ...entry, ev, len, abs, ref, item, vel, soundFlag };
+        occurrences.push(occ);
+        const lane = lanes.get(entry.voice) || []; lane.push(occ); lanes.set(entry.voice, lane);
+        timelineEvents.push({ id: ev.id, absVal: abs, durVal: len, mIdx: item.m, pass: item.pass, planIdx: item.planIdx, partIdx: ref.partIdx, staffIdx: ref.staffIdx });
+        if (ev.artics?.includes("fermata")) {
+          const end = abs.add(len), extra = len.mul(F(3, 5)), key = end.toString();
+          if (!holds.has(key) || holds.get(key).extra.lt(extra)) holds.set(key, { at: end, extra });
+        }
+      }
+      for (const lane of lanes.values()) {
+        const consumed = new Set();
+        lane.forEach((occ, idx) => {
+          const { ev, abs, len, item, voice } = occ;
+          if (ev.type !== "note") return;
+          const ar = ev.artics || [], shift = shiftAt(ref, ev.id);
+          const baseEvent = {
+            id: ev.id, absVal: abs, durVal: len, mIdx: item.m, planIdx: item.planIdx, pass: item.pass, voice,
+            partIdx: ref.partIdx, staffIdx: ref.staffIdx, partId: ref.part.id,
+            instrument: ev.drumId ? "drums" : ref.instrument, channel: ev.drumId ? 9 : channelFor(ref.part, ref.partIdx),
+            mixer: mixerFor(score, ref.part), velBase: occ.vel, boost: (+ev.velocityOffset || 0) / 127,
+            gate: slurCover.has(ev.id) ? 1.02 : 0.95,
+          };
+          if (ar.includes("tenuto")) baseEvent.gate = 1;
+          if (ar.includes("staccato")) baseEvent.gate = slurCover.has(ev.id) ? 0.7 : 0.45;
+          if (ar.includes("accent")) baseEvent.boost += 0.14;
+          if (ar.includes("marcato")) { baseEvent.boost += 0.2; baseEvent.gate = Math.min(baseEvent.gate, 0.92); }
+          if (["pizzicato", "palmMute"].includes(occ.soundFlag)) baseEvent.gate = Math.min(baseEvent.gate, 0.38);
+          if (occ.soundFlag === "mute") { baseEvent.gate = Math.min(baseEvent.gate, 0.72); baseEvent.boost -= 0.08; }
+          const midis = [];
+          ev.notes.forEach((note, ni) => {
+            if (consumed.has(idx + ":" + ni)) return;
+            let total = len, current = note, last = occ;
+            for (let j = idx + 1; current.tie && j < lane.length; j++) {
+              const next = lane[j];
+              // Ties cannot jump backwards through a repeat, Coda, or a skipped ending.
+              if (!next.abs.eq(last.abs.add(last.len)) || !positions.get(next.ev.id).original.eq(positions.get(last.ev.id).original.add(last.len))) break;
+              const nidx = next.ev.type === "note" ? next.ev.notes.findIndex(n => C.pitchEq(n, current)) : -1;
+              if (nidx < 0) break;
+              consumed.add(j + ":" + nidx); current = next.ev.notes[nidx]; total = total.add(next.len); last = next;
             }
-            if (midis.length) {
-              if (ev.arpeggiate) midis.forEach((n, i) => { n.offsetSec = i * 0.028; });
-              const ar = ev.artics || [];
-              let gate = 0.95, boost = 0;
-              if (slurCover.has(ev.id)) gate = 1.02;            // 레가토
-              if (ar.includes("tenuto")) gate = 1.0;
-              if (ar.includes("staccato")) gate = slurCover.has(ev.id) ? 0.7 : 0.45;
-              if (ar.includes("fermata")) gate = Math.max(gate, 1.05);
-              if (ar.includes("accent")) boost += 0.14;
-              if (ar.includes("marcato")) { boost += 0.2; if (!ar.includes("staccato")) gate = Math.min(gate, 0.92); }
-              if (soundFlag === "pizzicato" || soundFlag === "palmMute") gate = Math.min(gate, 0.38);
-              if (soundFlag === "mute") { gate = Math.min(gate, 0.72); boost -= 0.08; }
-              if (soundFlag === "tremolo") { gate = Math.min(gate, 0.55); boost += 0.04; }
-              if (ev.tremolo) { gate = Math.min(gate, 0.42); boost += 0.03; }
-              events.push({
-                id: ev.id, t, durSec: dval, midis, mIdx: m,
-                absVal: L.mul(new Fraction(item.planIdx, 1)).add(tick),
-                partIdx: ref.partIdx, staffIdx: ref.staffIdx,
-                channel: ev.drumId ? 9 : Math.min(15, ref.partIdx),
-                instrument: ev.drumId ? "drums" : ref.instrument,
-                mixer: mixerFor(score, ref.part),
-                velBase: vel, boost, gate,
-              });
+            const midi = ev.drumId ? +(note.midi ?? ev.midi ?? C.drumSpec(ev.drumId).midi) : C.midiOf(note) + shift;
+            midis.push({ midi: Math.max(0, Math.min(127, midi)), durVal: total, offsetVal: ev.arpeggiate ? F(ni, 64) : Fraction.ZERO });
+          });
+          if (!midis.length) return;
+          const ornament = ev.ornament, tremolo = ev.tremolo || (occ.soundFlag === "tremolo" ? 3 : 0);
+          if (ornament || tremolo || ev.glissando) {
+            const first = ev.notes[0], rootMidi = midis[0].midi;
+            const key = C.keySigAt ? C.keySigAt(score, item.m) : score.keySig;
+            const neighbor = delta => { const step = first.step + delta; return C.midiOf({ step: (step + 7) % 7, oct: first.oct + Math.floor(step / 7), alter: C.keyAlterFor((step + 7) % 7, key) }) + shift; };
+            let pattern = [rootMidi], slices = 1;
+            if (ornament === "trill") { pattern = [rootMidi, neighbor(1)]; slices = Math.max(2, Math.ceil(len.div(F(1, 32)).value)); }
+            else if (ornament === "mordent" || ornament === "invMordent") { pattern = [rootMidi, neighbor(ornament === "mordent" ? -1 : 1), rootMidi]; slices = 3; }
+            else if (ornament === "turn" || ornament === "invTurn") { const dir = ornament === "turn" ? 1 : -1; pattern = [neighbor(dir), rootMidi, neighbor(-dir), rootMidi]; slices = 4; }
+            else if (tremolo) slices = Math.max(2, Math.ceil(len.value * Math.pow(2, Math.min(6, (+tremolo || 3) + 2))));
+            else if (ev.glissando && lane[idx + 1]?.ev.type === "note") {
+              const target = C.midiOf(lane[idx + 1].ev.notes[0]) + shift, dir = Math.sign(target - rootMidi);
+              pattern = Array.from({ length: Math.min(49, Math.abs(target - rootMidi) + 1) }, (_, i) => rootMidi + dir * i); slices = pattern.length;
             }
-          }
+            slices = Math.min(256, slices);
+            let at = abs;
+            for (let i = 0; i < slices; i++) {
+              let span = len.div(F(slices));
+              if (/^(invMordent|mordent)$/.test(ornament)) span = i < 2 ? (len.div(F(3)).lt(F(1, 32)) ? len.div(F(3)) : F(1, 32)) : abs.add(len).sub(at);
+              const pitches = tremolo && !ornament ? midis.map(n => ({ ...n, durVal: span })) : [{ midi: Math.max(0, Math.min(127, pattern[i % pattern.length])), durVal: span }];
+              events.push({ ...baseEvent, absVal: at, durVal: span, midis: pitches, gate: i === slices - 1 ? baseEvent.gate : 1, ornament: ornament || undefined });
+              at = at.add(span);
+            }
+            if (ornament && midis.length > 1) events.push({ ...baseEvent, midis: midis.slice(1) });
+          } else events.push({ ...baseEvent, midis });
+          (ev.graceBefore || []).forEach((gr, gi, arr) => {
+            const before = abs.sub(F(arr.length - gi, 32)), at = before.n < 0 ? Fraction.ZERO : before;
+            events.push({ ...baseEvent, id: gr.id, absVal: at, durVal: F(1, 32), gate: 0.9, midis: (gr.notes || []).map(n => ({ midi: C.midiOf(n) + shift, durVal: F(1, 32) })) });
+          });
+        });
+      }
+    }
+    // Apply a hairpin only to its own staff and each actual traversal.
+    for (const sp of score.spanners || []) if (["cresc", "dim"].includes(sp.type)) {
+      for (const a of occurrences.filter(o => o.ev.id === sp.startId)) {
+        const b = occurrences.find(o => o.ref === a.ref && o.ev.id === sp.endId && o.abs.gte(a.abs));
+        if (!b) continue;
+        const after = occurrences.find(o => o.ref === a.ref && o.abs.gt(b.abs) && VELS[o.ev.dynamic] !== undefined);
+        let target = after?.vel ?? a.vel + (sp.type === "cresc" ? 0.16 : -0.16);
+        if ((sp.type === "cresc" && target < a.vel) || (sp.type === "dim" && target > a.vel)) target = a.vel + (sp.type === "cresc" ? 0.16 : -0.16);
+        for (const ev of events) if (ev.partIdx === a.ref.partIdx && ev.staffIdx === a.ref.staffIdx && ev.absVal.gte(a.abs) && ev.absVal.lte(b.abs)) {
+          ev.velBase = a.vel + (target - a.vel) * (a.abs.eq(b.abs) ? 1 : ev.absVal.sub(a.abs).div(b.abs.sub(a.abs)).value);
         }
       }
     }
-
-    // 헤어핀: 시작 레벨 → (헤어핀 뒤 첫 셈여림 | ±0.16) 선형 보간
-    for (const sp of score.spanners || []) {
-      if (sp.type !== "cresc" && sp.type !== "dim") continue;
-      const a = posById.get(sp.startId), b = posById.get(sp.endId);
-      if (!a || !b || b.t < a.t) continue;
-      const v0 = a.vel;
-      const after = dynList.find(d => d.t > b.t + 1e-6);
-      let v1 = after ? after.v : v0 + (sp.type === "cresc" ? 0.16 : -0.16);
-      if (sp.type === "cresc" && v1 < v0) v1 = v0 + 0.16;
-      if (sp.type === "dim" && v1 > v0) v1 = v0 - 0.16;
-      v1 = Math.max(0.2, Math.min(1, v1));
-      for (const ev of events) {
-        if (ev.t >= a.t - 1e-9 && ev.t <= b.t + 1e-9) {
-          const f = b.t === a.t ? 1 : (ev.t - a.t) / (b.t - a.t);
-          ev.velBase = v0 + (v1 - v0) * f;
-        }
+    const holdList = [...holds.values()].sort((a, b) => a.at.cmp(b.at));
+    const held = abs => holdList.reduce((sum, hold) => hold.at.lte(abs) ? sum.add(hold.extra) : sum, abs);
+    const swung = (abs, item) => {
+      const ratio = SWING[score.playbackSettings?.swing] || 0;
+      if (!ratio || !item) return abs;
+      const tick = abs.sub(item.abs), q = tick.div(F(1, 8));
+      return q.d === 1 && q.n % 2 === 1 ? abs.add(F(Math.round((ratio * 2 - 1) * 1000), 8000)) : abs;
+    };
+    for (const change of tempoChanges) change.abs = held(change.abs);
+    const clock = secondsMap(tempoChanges);
+    for (const ev of events) {
+      const original = ev.absVal, item = expandedPlan[ev.planIdx], onset = held(swung(original, item));
+      ev.durVal = held(original.add(ev.durVal)).sub(held(original));
+      ev.absVal = onset; ev.t = clock.secondsAt(onset); ev.durSec = clock.durationSec(onset, ev.durVal);
+      for (const n of ev.midis) {
+        const end = held(swung(original.add(n.durVal), item));
+        n.durVal = end.sub(onset);
+        n.durSec = clock.durationSec(onset, n.durVal);
+        n.offsetVal = n.offsetVal || Fraction.ZERO; n.offsetSec = clock.durationSec(onset, n.offsetVal);
       }
+      ev.vel = Math.max(0.01, Math.min(1, ev.velBase + ev.boost));
     }
-    for (const ev of events) ev.vel = Math.max(0.15, Math.min(1, (ev.velBase + ev.boost) * (ev.mixer?.volume ?? 1)));
-
+    for (const ev of timelineEvents) {
+      const end = held(ev.absVal.add(ev.durVal)); ev.absVal = held(ev.absVal);
+      ev.t = clock.secondsAt(ev.absVal); ev.durSec = clock.secondsAt(end) - ev.t;
+    }
+    for (const beat of beats) { beat.abs = held(beat.abs); beat.t = clock.secondsAt(beat.abs); }
+    for (const sig of signatures) sig.abs = held(sig.abs);
+    for (const item of expandedPlan) { item.abs = held(item.abs); item.startSec = clock.secondsAt(item.abs); item.baseStartSec = base.secondsAt(item.baseAbs); }
+    totalAbs = held(totalAbs);
+    const totalSec = clock.secondsAt(totalAbs);
     events.sort((a, b) => a.t - b.t || a.partIdx - b.partIdx || a.staffIdx - b.staffIdx);
     timelineEvents.sort((a, b) => a.t - b.t || a.partIdx - b.partIdx || a.staffIdx - b.staffIdx);
-    return {
-      events, timelineEvents,
-      spw,
-      mLenSec: expandedMeasureTimes[1] - expandedMeasureTimes[0],
-      totalSec: Math.max(1, planSec || tempoMap.totalSec),
-      beatTimes: expandedBeatTimes,
-      measureTimes: expandedMeasureTimes,
-      tempoChanges: tempoMap.changes,
-      playbackPlan: expandedPlan,
-    };
+    const measureTimes = expandedPlan.map(p => p.startSec).concat(totalSec);
+    return { events, timelineEvents, spw: 240 / clock.changes[0].tempo, mLenSec: measureTimes[1] || totalSec,
+      totalSec, totalAbs, beatTimes: beats, measureTimes, tempoChanges: clock.changes, signatures,
+      playbackPlan: expandedPlan, warnings: plan.warnings, secondsAt: clock.secondsAt };
   }
 
   /* ---------------- 재생 컨트롤 ---------------- */
   const player = {
-    playing: false,
-    startCtxTime: 0,
-    startOffset: 0,
-    timer: null,
-    raf: null,
-    compiled: null,
-    loading: false,
-    startToken: 0,
-    nextIdx: 0,
-    nextBeat: 0,
-    metronome: false,
-    onTick: null,   // (sec, compiled) → UI 갱신
-    onState: null,  // (playing) → UI 갱신
-    onEnd: null,
+    playing: false, startCtxTime: 0, startOffset: 0, timer: null, raf: null, compiled: null,
+    loading: false, startToken: 0, nextIdx: 0, nextBeat: 0, metronome: false,
+    rate: 1, loop: null, countIn: false, cycle: 0, sessionSamples: new Set(),
+    onTick: null, onState: null, onEnd: null, score: null,
   };
 
-  async function play(fromSec = 0, opts = {}) {
-    stop(false);
-    const token = ++player.startToken;
-    const score = C.state.score;
-    const ac = audio();
-    const comp = compile(score, opts);
-    if (!comp.events.length && !player.metronome) {
-      // 빈 악보도 커서는 움직이게 재생은 허용
-    }
-    player.compiled = comp;
-    player.loading = true;
-    player.onState && player.onState(true);
-    try {
-      await Promise.race([warmSamplesForScore(score), delay(2200)]);
-    } catch (e) { }
-    if (token !== player.startToken) return;
-    player.loading = false;
-    player.startOffset = Math.max(0, Math.min(fromSec, comp.totalSec - 0.001));
-    player.startCtxTime = ac.currentTime + 0.12;
-    player.nextIdx = comp.events.findIndex(ev => ev.t >= player.startOffset - 1e-6);
+  function silence() {
+    for (const node of live) { try { node.stop(); } catch (e) { } }
+    live.clear();
+    for (const rec of sampleInstruments.values()) if (rec.instrument && rec.ready) { try { rec.instrument.stop(); } catch (e) { } }
+  }
+  function setRate(rate) {
+    const pos = pausePos();
+    player.rate = Math.max(0.5, Math.min(2, +rate || 1));
+    if (player.playing) seek(pos);
+    return player.rate;
+  }
+  function setLoop(loop, endSec) {
+    if (typeof loop === "number") loop = { startSec: loop, endSec };
+    const start = Math.max(0, +loop?.startSec || 0), end = +loop?.endSec;
+    player.loop = loop && Number.isFinite(end) && end > start ? { startSec: start, endSec: end } : null;
+    if (player.playing) seek(pausePos());
+    return player.loop;
+  }
+  function bounds() {
+    const end = Math.min(player.compiled?.totalSec || 0, player.loop?.endSec ?? Infinity);
+    const start = Math.min(Math.max(0, player.loop?.startSec || 0), Math.max(0, end - 0.001));
+    return { start, end, looping: !!player.loop && end > start };
+  }
+  function rewindIndices(offset) {
+    const comp = player.compiled;
+    player.nextIdx = comp.events.findIndex(ev => ev.t >= offset - 1e-7);
     if (player.nextIdx < 0) player.nextIdx = comp.events.length;
-    player.nextBeat = comp.beatTimes.findIndex(b => b.t >= player.startOffset - 1e-6);
+    player.nextBeat = comp.beatTimes.findIndex(beat => beat.t >= offset - 1e-7);
     if (player.nextBeat < 0) player.nextBeat = comp.beatTimes.length;
-    player.playing = true;
-
-    const LOOKAHEAD = 0.18;
-
-    const pump = () => {
-      const now = ac.currentTime;
-      const horizon = now - player.startCtxTime + player.startOffset + LOOKAHEAD;
-      const evs = comp.events;
-      while (player.nextIdx < evs.length && evs[player.nextIdx].t <= horizon) {
-        const ev = evs[player.nextIdx];
-        const when = player.startCtxTime + (ev.t - player.startOffset);
-        const preset = INSTRUMENTS[ev.instrument] || INSTRUMENTS[score.instrument] || INSTRUMENTS.piano;
-        for (const n of ev.midis) {
-          const dur = Math.max(0.05, n.durSec * (ev.gate || 0.95));
-          const noteWhen = when + (n.offsetSec || 0);
-          if (!scheduleSampleNote(ev.instrument || score.instrument, n.midi, noteWhen, dur, ev.vel || 0.7)) {
-            scheduleNote(preset, n.midi, noteWhen, dur, ev.vel || 0.7, ev.mixer?.pan || 0);
+    player.chase = comp.events.filter(ev => ev.t < offset - 1e-7 && ev.midis.some(n => ev.t + (n.offsetSec || 0) + n.durSec * ev.gate > offset));
+  }
+  function seek(sec) {
+    if (!player.compiled) return 0;
+    const range = bounds();
+    const pos = Math.max(range.looping ? range.start : 0, Math.min(+sec || 0, range.end - 0.001));
+    silence();
+    player.startOffset = pos; player.startCtxTime = (ctx?.currentTime || 0) + 0.03; player.cycle = 0;
+    rewindIndices(pos);
+    if (player.playing) pump();
+    return pos;
+  }
+  function pausePos() {
+    if (!player.playing || !ctx) return player.startOffset || 0;
+    let pos = (ctx.currentTime - player.startCtxTime) * player.rate + player.startOffset;
+    const range = bounds();
+    if (range.looping && pos >= range.end) pos = range.start + (pos - range.end) % (range.end - range.start);
+    return Math.max(0, pos);
+  }
+  function pump() {
+    if (!player.playing) return;
+    const range = bounds(), comp = player.compiled, now = ctx.currentTime, horizon = now + 0.18;
+    updateMixer(player.score);
+    let safety = 0;
+    while (safety++ < 64) {
+      const offset = player.cycle ? range.start : player.startOffset;
+      const cycleTime = player.startCtxTime + (player.cycle ? (range.end - player.startOffset + (player.cycle - 1) * (range.end - range.start)) / player.rate : 0);
+      const toTime = sec => cycleTime + (sec - offset) / player.rate;
+      if (player.chase && cycleTime <= horizon) {
+        for (const ev of player.chase) for (const n of ev.midis) {
+          const duration = Math.min(ev.t + (n.offsetSec || 0) + n.durSec * ev.gate - offset, range.end - offset) / player.rate;
+          if (duration > 0 && cycleTime >= now - 0.08) {
+            const when = Math.max(now, cycleTime), preset = INSTRUMENTS[ev.instrument] || INSTRUMENTS.piano;
+            if (!scheduleSampleNote(ev.instrument, n.midi, when, duration, ev.vel, ev.partId, player.sessionSamples)) scheduleNote(preset, n.midi, when, duration, ev.vel, 0, ev.partId);
           }
+        }
+        player.chase = null;
+      }
+      while (player.nextIdx < comp.events.length) {
+        const ev = comp.events[player.nextIdx];
+        if (ev.t >= range.end - 1e-8 || toTime(ev.t) > horizon) break;
+        const when = toTime(ev.t);
+        if (when >= now - 0.08) for (const n of ev.midis) {
+          const noteWhen = Math.max(now, when + (n.offsetSec || 0) / player.rate);
+          const remaining = Math.max(0, range.end - ev.t - (n.offsetSec || 0));
+          const dur = Math.min(n.durSec * ev.gate, remaining) / player.rate;
+          if (dur <= 0) continue;
+          const preset = INSTRUMENTS[ev.instrument] || INSTRUMENTS.piano;
+          if (!scheduleSampleNote(ev.instrument, n.midi, noteWhen, dur, ev.vel, ev.partId, player.sessionSamples)) scheduleNote(preset, n.midi, noteWhen, dur, ev.vel, 0, ev.partId);
         }
         player.nextIdx++;
       }
-      if (player.metronome) {
-        const beats = comp.beatTimes;
-        while (player.nextBeat < beats.length && beats[player.nextBeat].t <= horizon) {
-          const beat = beats[player.nextBeat];
-          const when = player.startCtxTime + (beat.t - player.startOffset);
-          if (when >= now - 0.01) scheduleClick(when, beat.accent);
-          player.nextBeat++;
-        }
+      while (player.nextBeat < comp.beatTimes.length) {
+        const beat = comp.beatTimes[player.nextBeat], when = toTime(beat.t);
+        if (beat.t >= range.end - 1e-8 || when > horizon) break;
+        if (player.metronome && when >= now - 0.01) scheduleClick(Math.max(now, when), beat.accent);
+        player.nextBeat++;
       }
-    };
-    pump();
-    player.timer = setInterval(pump, 25);
+      if (!range.looping || toTime(range.end) > horizon) break;
+      player.cycle++; rewindIndices(range.start);
+    }
+  }
 
+  async function play(fromSec = 0, opts = {}) {
+    stop(false);
+    const token = ++player.startToken, score = C.state.score, ac = audio();
+    player.score = score; player.compiled = compile(score, opts);
+    if (opts.rate !== undefined) player.rate = Math.max(0.5, Math.min(2, +opts.rate || 1));
+    if (opts.loop !== undefined) setLoop(opts.loop);
+    if (opts.countIn !== undefined) player.countIn = !!opts.countIn;
+    player.loading = true; player.onState?.(true);
+    updateMixer(score);
+    await Promise.race([warmSamplesForScore(score), delay(Math.max(0, opts.sampleTimeoutMs ?? 2200))]).catch(() => {});
+    if (token !== player.startToken) return;
+    // Snapshot once: a late sample load is available only to the next session.
+    player.sessionSamples = new Set([...sampleInstruments].filter(([, rec]) => rec.ready && !rec.failed).map(([key]) => key));
+    const expected = score.parts.filter(p => p.instrument !== "drums");
+    if (expected.some(p => !player.sessionSamples.has(p.id + ":" + sampleKey(p.instrument)))) setSampleStatus("fallback", "신스 사용", "이번 재생은 준비된 음원으로 끝까지 재생합니다. 다음 재생에 새 샘플을 적용합니다.");
+    player.loading = false;
+    seek(fromSec);
+    player.playing = true;
+    if (player.countIn && player.metronome) {
+      const planItem = [...player.compiled.playbackPlan].reverse().find(p => p.startSec <= player.startOffset) || player.compiled.playbackPlan[0];
+      const ts = timeAt(score, planItem?.m || 0);
+      const initialTempo = [...player.compiled.tempoChanges].reverse().find(c => player.compiled.secondsAt(c.abs) <= player.startOffset)?.tempo || score.tempo;
+      const beatSec = 240 / initialTempo / ts.den / player.rate;
+      silence(); player.startCtxTime = ac.currentTime + 0.08 + ts.num * beatSec;
+      for (let i = 0; i < ts.num; i++) scheduleClick(ac.currentTime + 0.08 + i * beatSec, i === 0);
+      rewindIndices(player.startOffset);
+    }
+    pump(); player.timer = setInterval(pump, 25);
     const tickLoop = () => {
       if (!player.playing) return;
-      const sec = ac.currentTime - player.startCtxTime + player.startOffset;
-      if (sec >= comp.totalSec + 0.25) {
-        stop(true);
-        player.onEnd && player.onEnd();
-        return;
-      }
-      player.onTick && player.onTick(Math.max(0, sec), comp);
+      const sec = pausePos(), range = bounds();
+      if (!range.looping && sec >= range.end + 0.1) { stop(true); player.onEnd?.(); return; }
+      player.onTick?.(Math.max(0, sec), player.compiled);
       player.raf = requestAnimationFrame(tickLoop);
     };
-    player.raf = requestAnimationFrame(tickLoop);
-    player.onState && player.onState(true);
+    player.raf = requestAnimationFrame(tickLoop); player.onState?.(true);
+    return player.compiled;
   }
 
   function stop(notify = true) {
@@ -736,101 +827,79 @@
     if (player.timer) { clearInterval(player.timer); player.timer = null; }
     if (player.raf) { cancelAnimationFrame(player.raf); player.raf = null; }
     const wasPlaying = player.playing || player.loading;
-    player.playing = false;
-    player.loading = false;
-    for (const node of live) { try { node.stop(); } catch (e) { } }
-    live.clear();
-    for (const rec of sampleInstruments.values()) {
-      if (rec.instrument && rec.ready) {
-        try { rec.instrument.stop(); } catch (e) { }
-      }
-    }
-    if (notify && wasPlaying && player.onState) player.onState(false);
-  }
-
-  function pausePos() {
-    if (!player.playing || !ctx) return 0;
-    return ctx.currentTime - player.startCtxTime + player.startOffset;
+    if (player.playing) player.startOffset = pausePos();
+    player.playing = false; player.loading = false; silence();
+    if (notify && wasPlaying) player.onState?.(false);
   }
 
   /* 미리듣기(클릭/입력 피드백) */
   function previewNote(midis, durSec = 0.45) {
-    const score = C.state.score;
-    const ref = C.activeRef ? C.activeRef(score) : null;
-    const preset = INSTRUMENTS[ref?.instrument || score.instrument] || INSTRUMENTS.piano;
-    const ac = audio();
-    const arr = Array.isArray(midis) ? midis : [midis];
-    const instrument = ref?.instrument || score.instrument;
-    for (const m of arr) {
-      if (!scheduleSampleNote(instrument, m, ac.currentTime + 0.01, durSec, 0.7)) {
-        scheduleNote(preset, m, ac.currentTime + 0.01, durSec, 0.7);
-      }
+    const score = C.state.score, ref = C.activeRef ? C.activeRef(score) : null;
+    const instrument = ref?.instrument || score.instrument, preset = INSTRUMENTS[instrument] || INSTRUMENTS.piano;
+    const ac = audio(), partId = ref?.part?.id || "preview";
+    updateMixer(score);
+    for (const midi of Array.isArray(midis) ? midis : [midis]) {
+      if (!scheduleSampleNote(instrument, midi, ac.currentTime + 0.01, durSec, 0.7, partId)) scheduleNote(preset, midi, ac.currentTime + 0.01, durSec, 0.7, 0, partId);
     }
   }
 
-  /* ---------------- MIDI 내보내기 (SMF type 0) ---------------- */
+  /* ---------------- MIDI 내보내기 (SMF type 1) ---------------- */
   function exportMidi(score) {
-    const PPQ = 480;
     const comp = compile(score);
-    const toTicks = (abs) => Math.round(abs.value * 4 * PPQ);
-
-    const msgs = []; // {tick, data[]}
-    for (const chg of comp.tempoChanges) {
-      msgs.push({ tick: toTicks(chg.abs), data: [0xFF, 0x51, 0x03, ...u24(Math.round(60000000 / chg.tempo))] });
+    const gcd = (a, b) => b ? gcd(b, a % b) : a;
+    let PPQ = 480;
+    for (const ev of comp.events) for (const pos of [ev.absVal, ...ev.midis.map(n => n.durVal)]) {
+      const den = pos.d / gcd(pos.d, 4), next = PPQ / gcd(PPQ, den) * den;
+      if (next <= 32767) PPQ = next;
     }
-    msgs.push({ tick: 0, data: [0xFF, 0x58, 0x04, score.timeSig.num, Math.log2(score.timeSig.den), 24, 8] });
-    for (const part of score.parts || [{ instrument: score.instrument }]) {
-      const ch = Math.min(15, (score.parts || []).indexOf(part));
-      const gm = (INSTRUMENTS[part.instrument || score.instrument] || INSTRUMENTS.piano).gm;
-      const mx = mixerFor(score, part);
-      msgs.push({ tick: 0, data: [0xC0 | ch, gm] });
-      msgs.push({ tick: 0, data: [0xB0 | ch, 7, Math.max(0, Math.min(127, Math.round(mx.volume * 100)))] });
-      msgs.push({ tick: 0, data: [0xB0 | ch, 10, Math.max(0, Math.min(127, Math.round(64 + mx.pan * 63)))] });
+    const toTicks = abs => Math.round(abs.n * 4 * PPQ / abs.d);
+    const u24 = v => [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+    const vlq = v => { const out = [v & 127]; while ((v = Math.floor(v / 128)) > 0) out.unshift((v & 127) | 128); return out; };
+    const textMeta = (type, value) => { const bytes = [...new TextEncoder().encode(value)]; return [255, type, ...vlq(bytes.length), ...bytes]; };
+    const conductor = [{ tick: 0, data: textMeta(3, "Tempo / meter") }];
+    for (const chg of comp.tempoChanges) conductor.push({ tick: toTicks(chg.abs), data: [255, 81, 3, ...u24(Math.max(1, Math.min(0xffffff, Math.round(60000000 / chg.tempo))))] });
+    let lastSig = "", lastKey = null;
+    for (const sig of comp.signatures) {
+      const ts = sig.timeSig, key = sig.keySig, label = ts.num + "/" + ts.den;
+      if (label !== lastSig) { conductor.push({ tick: toTicks(sig.abs), data: [255, 88, 4, ts.num, Math.log2(ts.den), 24, 8] }); lastSig = label; }
+      if (key !== lastKey) { conductor.push({ tick: toTicks(sig.abs), data: [255, 89, 2, key & 255, 0] }); lastKey = key; }
     }
-    for (const ev of comp.events) {
-      const v = Math.max(1, Math.min(127, Math.round((ev.vel || 0.7) * 120)));
-      const gate = Math.min(ev.gate || 0.95, 0.98);
-      for (const n of ev.midis) {
-        const ch = ev.channel || 0;
-        msgs.push({ tick: toTicks(swingAbs(score, ev.absVal)), data: [0x90 | ch, n.midi, v] });
-        msgs.push({ tick: toTicks(swingAbs(score, ev.absVal.add(n.durVal.mul(new Fraction(gate * 1000 | 0, 1000))))), data: [0x80 | ch, n.midi, 0] });
-      }
+    const anySolo = score.parts.some(p => mixerFor(score, p).solo);
+    const tracks = [conductor, ...score.parts.map((part, pIdx) => {
+      const ch = channelFor(part, pIdx), mx = mixerFor(score, part);
+      const gm = Number.isInteger(part.midiProgram) ? part.midiProgram : (INSTRUMENTS[part.instrument] || INSTRUMENTS.piano).gm;
+      return [{ tick: 0, data: textMeta(3, part.name || part.instrument || "Part") },
+        { tick: 0, data: [0xC0 | ch, gm & 127] },
+        { tick: 0, data: [0xB0 | ch, 7, mx.mute || (anySolo && !mx.solo) ? 0 : Math.min(127, Math.round(mx.volume * 100))] },
+        { tick: 0, data: [0xB0 | ch, 10, Math.max(0, Math.min(127, Math.round(64 + mx.pan * 63)))] }];
+    })];
+    for (const ev of comp.events) for (const n of ev.midis) {
+      const ch = ev.channel, start = ev.absVal.add(n.offsetVal || Fraction.ZERO);
+      const duration = n.durVal.mul(F(Math.round(ev.gate * 1000), 1000));
+      const tick = toTicks(start), end = Math.max(tick + 1, toTicks(start.add(duration)));
+      tracks[ev.partIdx + 1].push({ tick, data: [0x90 | ch, Math.round(n.midi), Math.max(1, Math.min(127, Math.round(ev.vel * 120)))] },
+        { tick: end, data: [0x80 | ch, Math.round(n.midi), 0] });
     }
-    msgs.sort((a, b) => a.tick - b.tick || noteOffFirst(a, b));
-    function noteOffFirst(a, b) {
-      const offA = (a.data[0] & 0xF0) === 0x80 ? 0 : 1;
-      const offB = (b.data[0] & 0xF0) === 0x80 ? 0 : 1;
-      return offA - offB;
-    }
-
-    const track = [];
-    let last = 0;
-    for (const m of msgs) {
-      vlq(track, m.tick - last); last = m.tick;
-      track.push(...m.data);
-    }
-    vlq(track, 0); track.push(0xFF, 0x2F, 0x00);
-
     const bytes = [];
-    pushStr(bytes, "MThd"); pushU32(bytes, 6); pushU16(bytes, 0); pushU16(bytes, 1); pushU16(bytes, PPQ);
-    pushStr(bytes, "MTrk"); pushU32(bytes, track.length); bytes.push(...track);
-    return new Uint8Array(bytes);
-
-    function vlq(arr, v) {
-      v = Math.max(0, Math.round(v));
-      const stack = [v & 0x7F];
-      while (v >>= 7) stack.push((v & 0x7F) | 0x80);
-      stack.reverse().forEach(b => arr.push(b));
+    const str = value => { for (const ch of value) bytes.push(ch.charCodeAt(0)); };
+    const u16 = n => bytes.push((n >> 8) & 255, n & 255);
+    const u32 = n => bytes.push((n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255);
+    str("MThd"); u32(6); u16(1); u16(tracks.length); u16(PPQ);
+    for (const messages of tracks) {
+      const priority = msg => (msg.data[0] & 0xf0) === 0x80 ? 0 : (msg.data[0] & 0xf0) === 0x90 ? 2 : 1;
+      messages.sort((a, b) => a.tick - b.tick || priority(a) - priority(b));
+      const data = []; let previous = 0;
+      for (const msg of messages) { data.push(...vlq(msg.tick - previous), ...msg.data); previous = msg.tick; }
+      data.push(...vlq(Math.max(0, toTicks(comp.totalAbs) - previous)), 255, 47, 0);
+      str("MTrk"); u32(data.length); for (const byte of data) bytes.push(byte);
     }
-    function u24(v) { return [(v >> 16) & 255, (v >> 8) & 255, v & 255]; }
-    function pushStr(arr, s) { for (const ch of s) arr.push(ch.charCodeAt(0)); }
-    function pushU32(arr, v) { arr.push((v >> 24) & 255, (v >> 16) & 255, (v >> 8) & 255, v & 255); }
-    function pushU16(arr, v) { arr.push((v >> 8) & 255, v & 255); }
+    return new Uint8Array(bytes);
   }
 
   SF.playback = {
     INSTRUMENTS, audio,
     play, stop, previewNote, pausePos, player, compile, exportMidi,
+    setRate, setLoop, seek, updateMixer, partBuses, buildTempoMap,
     getSampleStatus, setSampleStatusHandler, ensureSampleInstrument, buildPlaybackPlan,
   };
 })(window.SF);

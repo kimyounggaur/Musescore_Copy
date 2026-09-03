@@ -1,0 +1,66 @@
+{
+  "name": "smplr",
+  "version": "1.0.0",
+  "homepage": "https://github.com/danigb/smplr#readme",
+  "description": "A Sampled collection of instruments",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danigb/smplr.git"
+  },
+  "keywords": [
+    "sampler",
+    "web",
+    "audio",
+    "instrument"
+  ],
+  "author": "danigb",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/danigb/smplr/issues"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.31.0",
+    "@types/audioworklet": "^0.0.100",
+    "@types/jest": "^30.0.0",
+    "jest": "^30.4.2",
+    "prettier": "^3.8.4",
+    "ts-jest": "^29.4.11",
+    "tsup": "^8.5.1",
+    "typedoc": "^0.28.19",
+    "typescript": "^5.6.3"
+  },
+  "overrides": {
+    "esbuild": "^0.28.1"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts  --sourcemap --dts --format esm,cjs",
+    "build:worklet:reverb": "esbuild src/reverb/worklet-processor.ts --bundle --minify > src/reverb/processor.min.js",
+    "test": "npm run test:unit && npm run test:types",
+    "test:unit": "jest",
+    "test:types": "tsc --noEmit",
+    "lint": "node scripts/check-deprecations.js",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,md}\"",
+    "publish": "npm run build && npm run test"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/site/"
+    ]
+  },
+  "packageManager": "npm@10.2.3"
+}
