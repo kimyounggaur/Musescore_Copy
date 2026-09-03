@@ -1,0 +1,25 @@
+{
+  "id": "./",
+  "name": "ScoreForge",
+  "short_name": "ScoreForge",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "theme_color": "#21242a",
+  "background_color": "#ffffff",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "file_handlers": [{
+    "action": "./",
+    "accept": {
+      "application/json": [".scoreforge.json", ".json"],
+      "application/vnd.recordare.musicxml+xml": [".musicxml", ".xml"],
+      "application/vnd.recordare.musicxml": [".mxl"],
+      "audio/midi": [".mid", ".midi"]
+    }
+  }]
+}

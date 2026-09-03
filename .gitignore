@@ -10,3 +10,10 @@ Thumbs.db
 *.log
 
 .vercel
+node_modules/
+tmp/
+tmp/*-task.txt
+tmp/*-result.md
+tmp/*-handoff.md
+output/playwright/
+.playwright-cli/
