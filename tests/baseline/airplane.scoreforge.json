@@ -1,0 +1,2958 @@
+{
+  "format": "scoreforge-1",
+  "meta": {
+    "title": "비행기",
+    "composer": "외국 곡"
+  },
+  "clef": "treble",
+  "keySig": 0,
+  "timeSig": {
+    "num": 4,
+    "den": 4
+  },
+  "tempo": 104,
+  "instrument": "piano",
+  "playbackSettings": {
+    "swing": "off",
+    "mixer": {
+      "e301": {
+        "mute": false,
+        "solo": false,
+        "volume": 1,
+        "pan": 0
+      }
+    }
+  },
+  "layout": {
+    "pageSize": "A4",
+    "orientation": "portrait",
+    "width": 1000,
+    "height": 1414,
+    "marginTop": 52,
+    "marginRight": 52,
+    "marginBottom": 52,
+    "marginLeft": 52,
+    "staffScale": 1,
+    "systemGap": 1,
+    "staffGap": 1,
+    "noteSpacing": 1,
+    "beamThickness": 1,
+    "measuresPerSystem": 0
+  },
+  "measures": [
+    {
+      "events": [
+        {
+          "id": "e327",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 2,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        },
+        {
+          "id": "e330",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 1,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        },
+        {
+          "id": "e331",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 0,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        },
+        {
+          "id": "e333",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 1,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        }
+      ],
+      "startRepeat": false,
+      "endRepeat": false,
+      "repeatCount": 2,
+      "endingStart": null,
+      "endingStop": false,
+      "breakType": null,
+      "sectionName": "",
+      "voices": [
+        [
+          {
+            "id": "e327",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 2,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          },
+          {
+            "id": "e330",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 1,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          },
+          {
+            "id": "e331",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 0,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          },
+          {
+            "id": "e333",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 1,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "id": "e303",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 2
+          }
+        ],
+        [
+          {
+            "id": "e304",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 3
+          }
+        ],
+        [
+          {
+            "id": "e305",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 4
+          }
+        ]
+      ]
+    },
+    {
+      "events": [
+        {
+          "id": "e334",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 2,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        },
+        {
+          "id": "e337",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 2,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        },
+        {
+          "id": "e338",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 2,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 2,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        }
+      ],
+      "startRepeat": false,
+      "endRepeat": false,
+      "repeatCount": 2,
+      "endingStart": null,
+      "endingStop": false,
+      "breakType": null,
+      "sectionName": "",
+      "voices": [
+        [
+          {
+            "id": "e334",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 2,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          },
+          {
+            "id": "e337",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 2,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          },
+          {
+            "id": "e338",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 2,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 2,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "id": "e306",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 2
+          }
+        ],
+        [
+          {
+            "id": "e307",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 3
+          }
+        ],
+        [
+          {
+            "id": "e308",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 4
+          }
+        ]
+      ]
+    },
+    {
+      "events": [
+        {
+          "id": "e339",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 1,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        },
+        {
+          "id": "e342",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 1,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        },
+        {
+          "id": "e343",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 2,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 1,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        }
+      ],
+      "startRepeat": false,
+      "endRepeat": false,
+      "repeatCount": 2,
+      "endingStart": null,
+      "endingStop": false,
+      "breakType": null,
+      "sectionName": "",
+      "voices": [
+        [
+          {
+            "id": "e339",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 1,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          },
+          {
+            "id": "e342",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 1,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          },
+          {
+            "id": "e343",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 2,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 1,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "id": "e309",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 2
+          }
+        ],
+        [
+          {
+            "id": "e310",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 3
+          }
+        ],
+        [
+          {
+            "id": "e311",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 4
+          }
+        ]
+      ]
+    },
+    {
+      "events": [
+        {
+          "id": "e344",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 2,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        },
+        {
+          "id": "e347",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 4,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        },
+        {
+          "id": "e348",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 2,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 4,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        }
+      ],
+      "startRepeat": false,
+      "endRepeat": false,
+      "repeatCount": 2,
+      "endingStart": null,
+      "endingStop": false,
+      "breakType": null,
+      "sectionName": "",
+      "voices": [
+        [
+          {
+            "id": "e344",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 2,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          },
+          {
+            "id": "e347",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 4,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          },
+          {
+            "id": "e348",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 2,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 4,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "id": "e312",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 2
+          }
+        ],
+        [
+          {
+            "id": "e313",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 3
+          }
+        ],
+        [
+          {
+            "id": "e314",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 4
+          }
+        ]
+      ]
+    },
+    {
+      "events": [
+        {
+          "id": "e349",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 2,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        },
+        {
+          "id": "e352",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 1,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        },
+        {
+          "id": "e353",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 0,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        },
+        {
+          "id": "e355",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 1,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        }
+      ],
+      "startRepeat": false,
+      "endRepeat": false,
+      "repeatCount": 2,
+      "endingStart": null,
+      "endingStop": false,
+      "breakType": null,
+      "sectionName": "",
+      "voices": [
+        [
+          {
+            "id": "e349",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 2,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          },
+          {
+            "id": "e352",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 1,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          },
+          {
+            "id": "e353",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 0,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          },
+          {
+            "id": "e355",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 1,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "id": "e315",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 2
+          }
+        ],
+        [
+          {
+            "id": "e316",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 3
+          }
+        ],
+        [
+          {
+            "id": "e317",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 4
+          }
+        ]
+      ]
+    },
+    {
+      "events": [
+        {
+          "id": "e356",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 2,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        },
+        {
+          "id": "e359",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 2,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        },
+        {
+          "id": "e360",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 2,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        },
+        {
+          "id": "e362",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 2,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        }
+      ],
+      "startRepeat": false,
+      "endRepeat": false,
+      "repeatCount": 2,
+      "endingStart": null,
+      "endingStop": false,
+      "breakType": null,
+      "sectionName": "",
+      "voices": [
+        [
+          {
+            "id": "e356",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 2,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          },
+          {
+            "id": "e359",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 2,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          },
+          {
+            "id": "e360",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 2,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          },
+          {
+            "id": "e362",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 2,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "id": "e318",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 2
+          }
+        ],
+        [
+          {
+            "id": "e319",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 3
+          }
+        ],
+        [
+          {
+            "id": "e320",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 4
+          }
+        ]
+      ]
+    },
+    {
+      "events": [
+        {
+          "id": "e363",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 1,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        },
+        {
+          "id": "e366",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 1,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        },
+        {
+          "id": "e367",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 2,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        },
+        {
+          "id": "e369",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 1,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        }
+      ],
+      "startRepeat": false,
+      "endRepeat": false,
+      "repeatCount": 2,
+      "endingStart": null,
+      "endingStop": false,
+      "breakType": null,
+      "sectionName": "",
+      "voices": [
+        [
+          {
+            "id": "e363",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 1,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          },
+          {
+            "id": "e366",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 1,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          },
+          {
+            "id": "e367",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 2,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          },
+          {
+            "id": "e369",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 1,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "id": "e321",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 2
+          }
+        ],
+        [
+          {
+            "id": "e322",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 3
+          }
+        ],
+        [
+          {
+            "id": "e323",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 4
+          }
+        ]
+      ]
+    },
+    {
+      "events": [
+        {
+          "id": "e370",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 1,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 0,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ]
+        }
+      ],
+      "startRepeat": false,
+      "endRepeat": false,
+      "repeatCount": 2,
+      "endingStart": null,
+      "endingStop": false,
+      "breakType": null,
+      "sectionName": "",
+      "voices": [
+        [
+          {
+            "id": "e370",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 0,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "id": "e324",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 2
+          }
+        ],
+        [
+          {
+            "id": "e325",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 3
+          }
+        ],
+        [
+          {
+            "id": "e326",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 4
+          }
+        ]
+      ]
+    }
+  ],
+  "parts": [
+    {
+      "id": "e301",
+      "kind": "solo",
+      "name": "피아노",
+      "shortName": "Pno.",
+      "group": "solo",
+      "instrument": "piano",
+      "brace": null,
+      "staves": [
+        {
+          "id": "e302",
+          "name": "",
+          "clef": "treble",
+          "staffType": "standard",
+          "instrumentType": "pitched",
+          "staffIdx": 0,
+          "measures": [
+            {
+              "events": [
+                {
+                  "id": "e327",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 2,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                },
+                {
+                  "id": "e330",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 1,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                },
+                {
+                  "id": "e331",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 0,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                },
+                {
+                  "id": "e333",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 1,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                }
+              ],
+              "startRepeat": false,
+              "endRepeat": false,
+              "repeatCount": 2,
+              "endingStart": null,
+              "endingStop": false,
+              "breakType": null,
+              "sectionName": "",
+              "voices": [
+                [
+                  {
+                    "id": "e327",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 2,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  },
+                  {
+                    "id": "e330",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 1,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  },
+                  {
+                    "id": "e331",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 0,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  },
+                  {
+                    "id": "e333",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 1,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  }
+                ],
+                [
+                  {
+                    "id": "e303",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 2
+                  }
+                ],
+                [
+                  {
+                    "id": "e304",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 3
+                  }
+                ],
+                [
+                  {
+                    "id": "e305",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 4
+                  }
+                ]
+              ]
+            },
+            {
+              "events": [
+                {
+                  "id": "e334",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 2,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                },
+                {
+                  "id": "e337",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 2,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                },
+                {
+                  "id": "e338",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 2,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 2,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                }
+              ],
+              "startRepeat": false,
+              "endRepeat": false,
+              "repeatCount": 2,
+              "endingStart": null,
+              "endingStop": false,
+              "breakType": null,
+              "sectionName": "",
+              "voices": [
+                [
+                  {
+                    "id": "e334",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 2,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  },
+                  {
+                    "id": "e337",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 2,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  },
+                  {
+                    "id": "e338",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 2,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 2,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  }
+                ],
+                [
+                  {
+                    "id": "e306",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 2
+                  }
+                ],
+                [
+                  {
+                    "id": "e307",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 3
+                  }
+                ],
+                [
+                  {
+                    "id": "e308",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 4
+                  }
+                ]
+              ]
+            },
+            {
+              "events": [
+                {
+                  "id": "e339",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 1,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                },
+                {
+                  "id": "e342",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 1,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                },
+                {
+                  "id": "e343",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 2,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 1,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                }
+              ],
+              "startRepeat": false,
+              "endRepeat": false,
+              "repeatCount": 2,
+              "endingStart": null,
+              "endingStop": false,
+              "breakType": null,
+              "sectionName": "",
+              "voices": [
+                [
+                  {
+                    "id": "e339",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 1,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  },
+                  {
+                    "id": "e342",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 1,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  },
+                  {
+                    "id": "e343",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 2,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 1,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  }
+                ],
+                [
+                  {
+                    "id": "e309",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 2
+                  }
+                ],
+                [
+                  {
+                    "id": "e310",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 3
+                  }
+                ],
+                [
+                  {
+                    "id": "e311",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 4
+                  }
+                ]
+              ]
+            },
+            {
+              "events": [
+                {
+                  "id": "e344",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 2,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                },
+                {
+                  "id": "e347",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 4,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                },
+                {
+                  "id": "e348",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 2,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 4,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                }
+              ],
+              "startRepeat": false,
+              "endRepeat": false,
+              "repeatCount": 2,
+              "endingStart": null,
+              "endingStop": false,
+              "breakType": null,
+              "sectionName": "",
+              "voices": [
+                [
+                  {
+                    "id": "e344",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 2,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  },
+                  {
+                    "id": "e347",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 4,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  },
+                  {
+                    "id": "e348",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 2,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 4,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  }
+                ],
+                [
+                  {
+                    "id": "e312",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 2
+                  }
+                ],
+                [
+                  {
+                    "id": "e313",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 3
+                  }
+                ],
+                [
+                  {
+                    "id": "e314",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 4
+                  }
+                ]
+              ]
+            },
+            {
+              "events": [
+                {
+                  "id": "e349",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 2,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                },
+                {
+                  "id": "e352",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 1,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                },
+                {
+                  "id": "e353",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 0,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                },
+                {
+                  "id": "e355",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 1,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                }
+              ],
+              "startRepeat": false,
+              "endRepeat": false,
+              "repeatCount": 2,
+              "endingStart": null,
+              "endingStop": false,
+              "breakType": null,
+              "sectionName": "",
+              "voices": [
+                [
+                  {
+                    "id": "e349",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 2,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  },
+                  {
+                    "id": "e352",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 1,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  },
+                  {
+                    "id": "e353",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 0,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  },
+                  {
+                    "id": "e355",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 1,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  }
+                ],
+                [
+                  {
+                    "id": "e315",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 2
+                  }
+                ],
+                [
+                  {
+                    "id": "e316",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 3
+                  }
+                ],
+                [
+                  {
+                    "id": "e317",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 4
+                  }
+                ]
+              ]
+            },
+            {
+              "events": [
+                {
+                  "id": "e356",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 2,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                },
+                {
+                  "id": "e359",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 2,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                },
+                {
+                  "id": "e360",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 2,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                },
+                {
+                  "id": "e362",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 2,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                }
+              ],
+              "startRepeat": false,
+              "endRepeat": false,
+              "repeatCount": 2,
+              "endingStart": null,
+              "endingStop": false,
+              "breakType": null,
+              "sectionName": "",
+              "voices": [
+                [
+                  {
+                    "id": "e356",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 2,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  },
+                  {
+                    "id": "e359",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 2,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  },
+                  {
+                    "id": "e360",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 2,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  },
+                  {
+                    "id": "e362",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 2,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  }
+                ],
+                [
+                  {
+                    "id": "e318",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 2
+                  }
+                ],
+                [
+                  {
+                    "id": "e319",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 3
+                  }
+                ],
+                [
+                  {
+                    "id": "e320",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 4
+                  }
+                ]
+              ]
+            },
+            {
+              "events": [
+                {
+                  "id": "e363",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 1,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                },
+                {
+                  "id": "e366",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 1,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                },
+                {
+                  "id": "e367",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 2,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                },
+                {
+                  "id": "e369",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 1,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                }
+              ],
+              "startRepeat": false,
+              "endRepeat": false,
+              "repeatCount": 2,
+              "endingStart": null,
+              "endingStop": false,
+              "breakType": null,
+              "sectionName": "",
+              "voices": [
+                [
+                  {
+                    "id": "e363",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 1,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  },
+                  {
+                    "id": "e366",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 1,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  },
+                  {
+                    "id": "e367",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 2,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  },
+                  {
+                    "id": "e369",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 1,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  }
+                ],
+                [
+                  {
+                    "id": "e321",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 2
+                  }
+                ],
+                [
+                  {
+                    "id": "e322",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 3
+                  }
+                ],
+                [
+                  {
+                    "id": "e323",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 4
+                  }
+                ]
+              ]
+            },
+            {
+              "events": [
+                {
+                  "id": "e370",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 1,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 0,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ]
+                }
+              ],
+              "startRepeat": false,
+              "endRepeat": false,
+              "repeatCount": 2,
+              "endingStart": null,
+              "endingStop": false,
+              "breakType": null,
+              "sectionName": "",
+              "voices": [
+                [
+                  {
+                    "id": "e370",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 0,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ]
+                  }
+                ],
+                [
+                  {
+                    "id": "e324",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 2
+                  }
+                ],
+                [
+                  {
+                    "id": "e325",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 3
+                  }
+                ],
+                [
+                  {
+                    "id": "e326",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 4
+                  }
+                ]
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "activePartIdx": 0,
+  "activeStaffIdx": 0,
+  "spanners": []
+}

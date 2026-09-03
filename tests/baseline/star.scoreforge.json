@@ -1,0 +1,4798 @@
+{
+  "format": "scoreforge-1",
+  "meta": {
+    "title": "반짝반짝 작은 별",
+    "composer": "프랑스 민요"
+  },
+  "clef": "treble",
+  "keySig": 0,
+  "timeSig": {
+    "num": 4,
+    "den": 4
+  },
+  "tempo": 92,
+  "instrument": "piano",
+  "playbackSettings": {
+    "swing": "off",
+    "mixer": {
+      "e183": {
+        "mute": false,
+        "solo": false,
+        "volume": 1,
+        "pan": 0
+      }
+    }
+  },
+  "layout": {
+    "pageSize": "A4",
+    "orientation": "portrait",
+    "width": 1000,
+    "height": 1414,
+    "marginTop": 52,
+    "marginRight": 52,
+    "marginBottom": 52,
+    "marginLeft": 52,
+    "staffScale": 1,
+    "systemGap": 1,
+    "staffGap": 1,
+    "noteSpacing": 1,
+    "beamThickness": 1,
+    "measuresPerSystem": 0
+  },
+  "measures": [
+    {
+      "events": [
+        {
+          "id": "e221",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 0,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "도"
+        },
+        {
+          "id": "e224",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 0,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "도"
+        },
+        {
+          "id": "e225",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 4,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "솔"
+        },
+        {
+          "id": "e227",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 4,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "솔"
+        }
+      ],
+      "startRepeat": false,
+      "endRepeat": false,
+      "repeatCount": 2,
+      "endingStart": null,
+      "endingStop": false,
+      "breakType": null,
+      "sectionName": "",
+      "voices": [
+        [
+          {
+            "id": "e221",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 0,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "도"
+          },
+          {
+            "id": "e224",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 0,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "도"
+          },
+          {
+            "id": "e225",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 4,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "솔"
+          },
+          {
+            "id": "e227",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 4,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "솔"
+          }
+        ],
+        [
+          {
+            "id": "e185",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 2
+          }
+        ],
+        [
+          {
+            "id": "e186",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 3
+          }
+        ],
+        [
+          {
+            "id": "e187",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 4
+          }
+        ]
+      ]
+    },
+    {
+      "events": [
+        {
+          "id": "e228",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 5,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "라"
+        },
+        {
+          "id": "e231",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 5,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "라"
+        },
+        {
+          "id": "e232",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 2,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 4,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "솔"
+        }
+      ],
+      "startRepeat": false,
+      "endRepeat": false,
+      "repeatCount": 2,
+      "endingStart": null,
+      "endingStop": false,
+      "breakType": null,
+      "sectionName": "",
+      "voices": [
+        [
+          {
+            "id": "e228",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 5,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "라"
+          },
+          {
+            "id": "e231",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 5,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "라"
+          },
+          {
+            "id": "e232",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 2,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 4,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "솔"
+          }
+        ],
+        [
+          {
+            "id": "e188",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 2
+          }
+        ],
+        [
+          {
+            "id": "e189",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 3
+          }
+        ],
+        [
+          {
+            "id": "e190",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 4
+          }
+        ]
+      ]
+    },
+    {
+      "events": [
+        {
+          "id": "e233",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 3,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "파"
+        },
+        {
+          "id": "e236",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 3,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "파"
+        },
+        {
+          "id": "e237",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 2,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "미"
+        },
+        {
+          "id": "e239",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 2,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "미"
+        }
+      ],
+      "startRepeat": false,
+      "endRepeat": false,
+      "repeatCount": 2,
+      "endingStart": null,
+      "endingStop": false,
+      "breakType": null,
+      "sectionName": "",
+      "voices": [
+        [
+          {
+            "id": "e233",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 3,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "파"
+          },
+          {
+            "id": "e236",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 3,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "파"
+          },
+          {
+            "id": "e237",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 2,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "미"
+          },
+          {
+            "id": "e239",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 2,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "미"
+          }
+        ],
+        [
+          {
+            "id": "e191",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 2
+          }
+        ],
+        [
+          {
+            "id": "e192",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 3
+          }
+        ],
+        [
+          {
+            "id": "e193",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 4
+          }
+        ]
+      ]
+    },
+    {
+      "events": [
+        {
+          "id": "e240",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 1,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "레"
+        },
+        {
+          "id": "e243",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 1,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "레"
+        },
+        {
+          "id": "e244",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 2,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 0,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "도"
+        }
+      ],
+      "startRepeat": false,
+      "endRepeat": false,
+      "repeatCount": 2,
+      "endingStart": null,
+      "endingStop": false,
+      "breakType": null,
+      "sectionName": "",
+      "voices": [
+        [
+          {
+            "id": "e240",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 1,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "레"
+          },
+          {
+            "id": "e243",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 1,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "레"
+          },
+          {
+            "id": "e244",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 2,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 0,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "도"
+          }
+        ],
+        [
+          {
+            "id": "e194",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 2
+          }
+        ],
+        [
+          {
+            "id": "e195",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 3
+          }
+        ],
+        [
+          {
+            "id": "e196",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 4
+          }
+        ]
+      ]
+    },
+    {
+      "events": [
+        {
+          "id": "e245",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 4,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "솔"
+        },
+        {
+          "id": "e248",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 4,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "솔"
+        },
+        {
+          "id": "e249",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 3,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "파"
+        },
+        {
+          "id": "e251",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 3,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "파"
+        }
+      ],
+      "startRepeat": false,
+      "endRepeat": false,
+      "repeatCount": 2,
+      "endingStart": null,
+      "endingStop": false,
+      "breakType": null,
+      "sectionName": "",
+      "voices": [
+        [
+          {
+            "id": "e245",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 4,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "솔"
+          },
+          {
+            "id": "e248",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 4,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "솔"
+          },
+          {
+            "id": "e249",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 3,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "파"
+          },
+          {
+            "id": "e251",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 3,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "파"
+          }
+        ],
+        [
+          {
+            "id": "e197",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 2
+          }
+        ],
+        [
+          {
+            "id": "e198",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 3
+          }
+        ],
+        [
+          {
+            "id": "e199",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 4
+          }
+        ]
+      ]
+    },
+    {
+      "events": [
+        {
+          "id": "e252",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 2,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "미"
+        },
+        {
+          "id": "e255",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 2,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "미"
+        },
+        {
+          "id": "e256",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 2,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 1,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "레"
+        }
+      ],
+      "startRepeat": false,
+      "endRepeat": false,
+      "repeatCount": 2,
+      "endingStart": null,
+      "endingStop": false,
+      "breakType": null,
+      "sectionName": "",
+      "voices": [
+        [
+          {
+            "id": "e252",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 2,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "미"
+          },
+          {
+            "id": "e255",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 2,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "미"
+          },
+          {
+            "id": "e256",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 2,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 1,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "레"
+          }
+        ],
+        [
+          {
+            "id": "e200",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 2
+          }
+        ],
+        [
+          {
+            "id": "e201",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 3
+          }
+        ],
+        [
+          {
+            "id": "e202",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 4
+          }
+        ]
+      ]
+    },
+    {
+      "events": [
+        {
+          "id": "e257",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 4,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "솔"
+        },
+        {
+          "id": "e260",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 4,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "솔"
+        },
+        {
+          "id": "e261",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 3,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "파"
+        },
+        {
+          "id": "e263",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 3,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "파"
+        }
+      ],
+      "startRepeat": false,
+      "endRepeat": false,
+      "repeatCount": 2,
+      "endingStart": null,
+      "endingStop": false,
+      "breakType": null,
+      "sectionName": "",
+      "voices": [
+        [
+          {
+            "id": "e257",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 4,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "솔"
+          },
+          {
+            "id": "e260",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 4,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "솔"
+          },
+          {
+            "id": "e261",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 3,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "파"
+          },
+          {
+            "id": "e263",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 3,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "파"
+          }
+        ],
+        [
+          {
+            "id": "e203",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 2
+          }
+        ],
+        [
+          {
+            "id": "e204",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 3
+          }
+        ],
+        [
+          {
+            "id": "e205",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 4
+          }
+        ]
+      ]
+    },
+    {
+      "events": [
+        {
+          "id": "e264",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 2,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "미"
+        },
+        {
+          "id": "e267",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 2,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "미"
+        },
+        {
+          "id": "e268",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 2,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 1,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "레"
+        }
+      ],
+      "startRepeat": false,
+      "endRepeat": false,
+      "repeatCount": 2,
+      "endingStart": null,
+      "endingStop": false,
+      "breakType": null,
+      "sectionName": "",
+      "voices": [
+        [
+          {
+            "id": "e264",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 2,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "미"
+          },
+          {
+            "id": "e267",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 2,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "미"
+          },
+          {
+            "id": "e268",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 2,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 1,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "레"
+          }
+        ],
+        [
+          {
+            "id": "e206",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 2
+          }
+        ],
+        [
+          {
+            "id": "e207",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 3
+          }
+        ],
+        [
+          {
+            "id": "e208",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 4
+          }
+        ]
+      ]
+    },
+    {
+      "events": [
+        {
+          "id": "e269",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 0,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "도"
+        },
+        {
+          "id": "e272",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 0,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "도"
+        },
+        {
+          "id": "e273",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 4,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "솔"
+        },
+        {
+          "id": "e275",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 4,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "솔"
+        }
+      ],
+      "startRepeat": false,
+      "endRepeat": false,
+      "repeatCount": 2,
+      "endingStart": null,
+      "endingStop": false,
+      "breakType": null,
+      "sectionName": "",
+      "voices": [
+        [
+          {
+            "id": "e269",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 0,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "도"
+          },
+          {
+            "id": "e272",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 0,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "도"
+          },
+          {
+            "id": "e273",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 4,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "솔"
+          },
+          {
+            "id": "e275",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 4,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "솔"
+          }
+        ],
+        [
+          {
+            "id": "e209",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 2
+          }
+        ],
+        [
+          {
+            "id": "e210",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 3
+          }
+        ],
+        [
+          {
+            "id": "e211",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 4
+          }
+        ]
+      ]
+    },
+    {
+      "events": [
+        {
+          "id": "e276",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 5,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "라"
+        },
+        {
+          "id": "e279",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 5,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "라"
+        },
+        {
+          "id": "e280",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 2,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 4,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "솔"
+        }
+      ],
+      "startRepeat": false,
+      "endRepeat": false,
+      "repeatCount": 2,
+      "endingStart": null,
+      "endingStop": false,
+      "breakType": null,
+      "sectionName": "",
+      "voices": [
+        [
+          {
+            "id": "e276",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 5,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "라"
+          },
+          {
+            "id": "e279",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 5,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "라"
+          },
+          {
+            "id": "e280",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 2,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 4,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "솔"
+          }
+        ],
+        [
+          {
+            "id": "e212",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 2
+          }
+        ],
+        [
+          {
+            "id": "e213",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 3
+          }
+        ],
+        [
+          {
+            "id": "e214",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 4
+          }
+        ]
+      ]
+    },
+    {
+      "events": [
+        {
+          "id": "e281",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 3,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "파"
+        },
+        {
+          "id": "e284",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 3,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "파"
+        },
+        {
+          "id": "e285",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 2,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "미"
+        },
+        {
+          "id": "e287",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 2,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "미"
+        }
+      ],
+      "startRepeat": false,
+      "endRepeat": false,
+      "repeatCount": 2,
+      "endingStart": null,
+      "endingStop": false,
+      "breakType": null,
+      "sectionName": "",
+      "voices": [
+        [
+          {
+            "id": "e281",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 3,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "파"
+          },
+          {
+            "id": "e284",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 3,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "파"
+          },
+          {
+            "id": "e285",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 2,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "미"
+          },
+          {
+            "id": "e287",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 2,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "미"
+          }
+        ],
+        [
+          {
+            "id": "e215",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 2
+          }
+        ],
+        [
+          {
+            "id": "e216",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 3
+          }
+        ],
+        [
+          {
+            "id": "e217",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 4
+          }
+        ]
+      ]
+    },
+    {
+      "events": [
+        {
+          "id": "e288",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 1,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "레"
+        },
+        {
+          "id": "e291",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 4,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 1,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "레"
+        },
+        {
+          "id": "e292",
+          "type": "note",
+          "voice": 1,
+          "dur": {
+            "n": 1,
+            "d": 2,
+            "dots": 0
+          },
+          "notes": [
+            {
+              "step": 0,
+              "alter": 0,
+              "oct": 4,
+              "tie": false,
+              "__acc": null
+            }
+          ],
+          "lyric": "도"
+        }
+      ],
+      "startRepeat": false,
+      "endRepeat": false,
+      "repeatCount": 2,
+      "endingStart": null,
+      "endingStop": false,
+      "breakType": null,
+      "sectionName": "",
+      "voices": [
+        [
+          {
+            "id": "e288",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 1,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "레"
+          },
+          {
+            "id": "e291",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 4,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 1,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "레"
+          },
+          {
+            "id": "e292",
+            "type": "note",
+            "voice": 1,
+            "dur": {
+              "n": 1,
+              "d": 2,
+              "dots": 0
+            },
+            "notes": [
+              {
+                "step": 0,
+                "alter": 0,
+                "oct": 4,
+                "tie": false,
+                "__acc": null
+              }
+            ],
+            "lyric": "도"
+          }
+        ],
+        [
+          {
+            "id": "e218",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 2
+          }
+        ],
+        [
+          {
+            "id": "e219",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 3
+          }
+        ],
+        [
+          {
+            "id": "e220",
+            "type": "rest",
+            "dur": {
+              "n": 1,
+              "d": 1,
+              "dots": 0
+            },
+            "notes": [],
+            "full": true,
+            "voice": 4
+          }
+        ]
+      ]
+    }
+  ],
+  "parts": [
+    {
+      "id": "e183",
+      "kind": "solo",
+      "name": "피아노",
+      "shortName": "Pno.",
+      "group": "solo",
+      "instrument": "piano",
+      "brace": null,
+      "staves": [
+        {
+          "id": "e184",
+          "name": "",
+          "clef": "treble",
+          "staffType": "standard",
+          "instrumentType": "pitched",
+          "staffIdx": 0,
+          "measures": [
+            {
+              "events": [
+                {
+                  "id": "e221",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 0,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "도"
+                },
+                {
+                  "id": "e224",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 0,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "도"
+                },
+                {
+                  "id": "e225",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 4,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "솔"
+                },
+                {
+                  "id": "e227",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 4,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "솔"
+                }
+              ],
+              "startRepeat": false,
+              "endRepeat": false,
+              "repeatCount": 2,
+              "endingStart": null,
+              "endingStop": false,
+              "breakType": null,
+              "sectionName": "",
+              "voices": [
+                [
+                  {
+                    "id": "e221",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 0,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "도"
+                  },
+                  {
+                    "id": "e224",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 0,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "도"
+                  },
+                  {
+                    "id": "e225",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 4,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "솔"
+                  },
+                  {
+                    "id": "e227",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 4,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "솔"
+                  }
+                ],
+                [
+                  {
+                    "id": "e185",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 2
+                  }
+                ],
+                [
+                  {
+                    "id": "e186",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 3
+                  }
+                ],
+                [
+                  {
+                    "id": "e187",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 4
+                  }
+                ]
+              ]
+            },
+            {
+              "events": [
+                {
+                  "id": "e228",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 5,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "라"
+                },
+                {
+                  "id": "e231",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 5,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "라"
+                },
+                {
+                  "id": "e232",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 2,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 4,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "솔"
+                }
+              ],
+              "startRepeat": false,
+              "endRepeat": false,
+              "repeatCount": 2,
+              "endingStart": null,
+              "endingStop": false,
+              "breakType": null,
+              "sectionName": "",
+              "voices": [
+                [
+                  {
+                    "id": "e228",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 5,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "라"
+                  },
+                  {
+                    "id": "e231",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 5,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "라"
+                  },
+                  {
+                    "id": "e232",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 2,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 4,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "솔"
+                  }
+                ],
+                [
+                  {
+                    "id": "e188",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 2
+                  }
+                ],
+                [
+                  {
+                    "id": "e189",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 3
+                  }
+                ],
+                [
+                  {
+                    "id": "e190",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 4
+                  }
+                ]
+              ]
+            },
+            {
+              "events": [
+                {
+                  "id": "e233",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 3,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "파"
+                },
+                {
+                  "id": "e236",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 3,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "파"
+                },
+                {
+                  "id": "e237",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 2,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "미"
+                },
+                {
+                  "id": "e239",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 2,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "미"
+                }
+              ],
+              "startRepeat": false,
+              "endRepeat": false,
+              "repeatCount": 2,
+              "endingStart": null,
+              "endingStop": false,
+              "breakType": null,
+              "sectionName": "",
+              "voices": [
+                [
+                  {
+                    "id": "e233",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 3,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "파"
+                  },
+                  {
+                    "id": "e236",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 3,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "파"
+                  },
+                  {
+                    "id": "e237",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 2,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "미"
+                  },
+                  {
+                    "id": "e239",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 2,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "미"
+                  }
+                ],
+                [
+                  {
+                    "id": "e191",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 2
+                  }
+                ],
+                [
+                  {
+                    "id": "e192",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 3
+                  }
+                ],
+                [
+                  {
+                    "id": "e193",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 4
+                  }
+                ]
+              ]
+            },
+            {
+              "events": [
+                {
+                  "id": "e240",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 1,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "레"
+                },
+                {
+                  "id": "e243",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 1,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "레"
+                },
+                {
+                  "id": "e244",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 2,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 0,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "도"
+                }
+              ],
+              "startRepeat": false,
+              "endRepeat": false,
+              "repeatCount": 2,
+              "endingStart": null,
+              "endingStop": false,
+              "breakType": null,
+              "sectionName": "",
+              "voices": [
+                [
+                  {
+                    "id": "e240",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 1,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "레"
+                  },
+                  {
+                    "id": "e243",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 1,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "레"
+                  },
+                  {
+                    "id": "e244",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 2,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 0,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "도"
+                  }
+                ],
+                [
+                  {
+                    "id": "e194",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 2
+                  }
+                ],
+                [
+                  {
+                    "id": "e195",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 3
+                  }
+                ],
+                [
+                  {
+                    "id": "e196",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 4
+                  }
+                ]
+              ]
+            },
+            {
+              "events": [
+                {
+                  "id": "e245",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 4,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "솔"
+                },
+                {
+                  "id": "e248",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 4,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "솔"
+                },
+                {
+                  "id": "e249",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 3,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "파"
+                },
+                {
+                  "id": "e251",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 3,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "파"
+                }
+              ],
+              "startRepeat": false,
+              "endRepeat": false,
+              "repeatCount": 2,
+              "endingStart": null,
+              "endingStop": false,
+              "breakType": null,
+              "sectionName": "",
+              "voices": [
+                [
+                  {
+                    "id": "e245",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 4,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "솔"
+                  },
+                  {
+                    "id": "e248",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 4,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "솔"
+                  },
+                  {
+                    "id": "e249",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 3,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "파"
+                  },
+                  {
+                    "id": "e251",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 3,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "파"
+                  }
+                ],
+                [
+                  {
+                    "id": "e197",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 2
+                  }
+                ],
+                [
+                  {
+                    "id": "e198",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 3
+                  }
+                ],
+                [
+                  {
+                    "id": "e199",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 4
+                  }
+                ]
+              ]
+            },
+            {
+              "events": [
+                {
+                  "id": "e252",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 2,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "미"
+                },
+                {
+                  "id": "e255",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 2,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "미"
+                },
+                {
+                  "id": "e256",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 2,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 1,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "레"
+                }
+              ],
+              "startRepeat": false,
+              "endRepeat": false,
+              "repeatCount": 2,
+              "endingStart": null,
+              "endingStop": false,
+              "breakType": null,
+              "sectionName": "",
+              "voices": [
+                [
+                  {
+                    "id": "e252",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 2,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "미"
+                  },
+                  {
+                    "id": "e255",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 2,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "미"
+                  },
+                  {
+                    "id": "e256",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 2,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 1,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "레"
+                  }
+                ],
+                [
+                  {
+                    "id": "e200",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 2
+                  }
+                ],
+                [
+                  {
+                    "id": "e201",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 3
+                  }
+                ],
+                [
+                  {
+                    "id": "e202",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 4
+                  }
+                ]
+              ]
+            },
+            {
+              "events": [
+                {
+                  "id": "e257",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 4,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "솔"
+                },
+                {
+                  "id": "e260",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 4,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "솔"
+                },
+                {
+                  "id": "e261",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 3,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "파"
+                },
+                {
+                  "id": "e263",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 3,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "파"
+                }
+              ],
+              "startRepeat": false,
+              "endRepeat": false,
+              "repeatCount": 2,
+              "endingStart": null,
+              "endingStop": false,
+              "breakType": null,
+              "sectionName": "",
+              "voices": [
+                [
+                  {
+                    "id": "e257",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 4,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "솔"
+                  },
+                  {
+                    "id": "e260",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 4,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "솔"
+                  },
+                  {
+                    "id": "e261",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 3,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "파"
+                  },
+                  {
+                    "id": "e263",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 3,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "파"
+                  }
+                ],
+                [
+                  {
+                    "id": "e203",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 2
+                  }
+                ],
+                [
+                  {
+                    "id": "e204",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 3
+                  }
+                ],
+                [
+                  {
+                    "id": "e205",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 4
+                  }
+                ]
+              ]
+            },
+            {
+              "events": [
+                {
+                  "id": "e264",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 2,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "미"
+                },
+                {
+                  "id": "e267",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 2,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "미"
+                },
+                {
+                  "id": "e268",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 2,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 1,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "레"
+                }
+              ],
+              "startRepeat": false,
+              "endRepeat": false,
+              "repeatCount": 2,
+              "endingStart": null,
+              "endingStop": false,
+              "breakType": null,
+              "sectionName": "",
+              "voices": [
+                [
+                  {
+                    "id": "e264",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 2,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "미"
+                  },
+                  {
+                    "id": "e267",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 2,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "미"
+                  },
+                  {
+                    "id": "e268",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 2,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 1,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "레"
+                  }
+                ],
+                [
+                  {
+                    "id": "e206",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 2
+                  }
+                ],
+                [
+                  {
+                    "id": "e207",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 3
+                  }
+                ],
+                [
+                  {
+                    "id": "e208",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 4
+                  }
+                ]
+              ]
+            },
+            {
+              "events": [
+                {
+                  "id": "e269",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 0,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "도"
+                },
+                {
+                  "id": "e272",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 0,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "도"
+                },
+                {
+                  "id": "e273",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 4,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "솔"
+                },
+                {
+                  "id": "e275",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 4,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "솔"
+                }
+              ],
+              "startRepeat": false,
+              "endRepeat": false,
+              "repeatCount": 2,
+              "endingStart": null,
+              "endingStop": false,
+              "breakType": null,
+              "sectionName": "",
+              "voices": [
+                [
+                  {
+                    "id": "e269",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 0,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "도"
+                  },
+                  {
+                    "id": "e272",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 0,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "도"
+                  },
+                  {
+                    "id": "e273",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 4,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "솔"
+                  },
+                  {
+                    "id": "e275",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 4,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "솔"
+                  }
+                ],
+                [
+                  {
+                    "id": "e209",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 2
+                  }
+                ],
+                [
+                  {
+                    "id": "e210",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 3
+                  }
+                ],
+                [
+                  {
+                    "id": "e211",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 4
+                  }
+                ]
+              ]
+            },
+            {
+              "events": [
+                {
+                  "id": "e276",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 5,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "라"
+                },
+                {
+                  "id": "e279",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 5,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "라"
+                },
+                {
+                  "id": "e280",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 2,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 4,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "솔"
+                }
+              ],
+              "startRepeat": false,
+              "endRepeat": false,
+              "repeatCount": 2,
+              "endingStart": null,
+              "endingStop": false,
+              "breakType": null,
+              "sectionName": "",
+              "voices": [
+                [
+                  {
+                    "id": "e276",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 5,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "라"
+                  },
+                  {
+                    "id": "e279",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 5,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "라"
+                  },
+                  {
+                    "id": "e280",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 2,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 4,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "솔"
+                  }
+                ],
+                [
+                  {
+                    "id": "e212",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 2
+                  }
+                ],
+                [
+                  {
+                    "id": "e213",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 3
+                  }
+                ],
+                [
+                  {
+                    "id": "e214",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 4
+                  }
+                ]
+              ]
+            },
+            {
+              "events": [
+                {
+                  "id": "e281",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 3,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "파"
+                },
+                {
+                  "id": "e284",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 3,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "파"
+                },
+                {
+                  "id": "e285",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 2,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "미"
+                },
+                {
+                  "id": "e287",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 2,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "미"
+                }
+              ],
+              "startRepeat": false,
+              "endRepeat": false,
+              "repeatCount": 2,
+              "endingStart": null,
+              "endingStop": false,
+              "breakType": null,
+              "sectionName": "",
+              "voices": [
+                [
+                  {
+                    "id": "e281",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 3,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "파"
+                  },
+                  {
+                    "id": "e284",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 3,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "파"
+                  },
+                  {
+                    "id": "e285",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 2,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "미"
+                  },
+                  {
+                    "id": "e287",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 2,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "미"
+                  }
+                ],
+                [
+                  {
+                    "id": "e215",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 2
+                  }
+                ],
+                [
+                  {
+                    "id": "e216",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 3
+                  }
+                ],
+                [
+                  {
+                    "id": "e217",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 4
+                  }
+                ]
+              ]
+            },
+            {
+              "events": [
+                {
+                  "id": "e288",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 1,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "레"
+                },
+                {
+                  "id": "e291",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 4,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 1,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "레"
+                },
+                {
+                  "id": "e292",
+                  "type": "note",
+                  "voice": 1,
+                  "dur": {
+                    "n": 1,
+                    "d": 2,
+                    "dots": 0
+                  },
+                  "notes": [
+                    {
+                      "step": 0,
+                      "alter": 0,
+                      "oct": 4,
+                      "tie": false,
+                      "__acc": null
+                    }
+                  ],
+                  "lyric": "도"
+                }
+              ],
+              "startRepeat": false,
+              "endRepeat": false,
+              "repeatCount": 2,
+              "endingStart": null,
+              "endingStop": false,
+              "breakType": null,
+              "sectionName": "",
+              "voices": [
+                [
+                  {
+                    "id": "e288",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 1,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "레"
+                  },
+                  {
+                    "id": "e291",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 4,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 1,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "레"
+                  },
+                  {
+                    "id": "e292",
+                    "type": "note",
+                    "voice": 1,
+                    "dur": {
+                      "n": 1,
+                      "d": 2,
+                      "dots": 0
+                    },
+                    "notes": [
+                      {
+                        "step": 0,
+                        "alter": 0,
+                        "oct": 4,
+                        "tie": false,
+                        "__acc": null
+                      }
+                    ],
+                    "lyric": "도"
+                  }
+                ],
+                [
+                  {
+                    "id": "e218",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 2
+                  }
+                ],
+                [
+                  {
+                    "id": "e219",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 3
+                  }
+                ],
+                [
+                  {
+                    "id": "e220",
+                    "type": "rest",
+                    "dur": {
+                      "n": 1,
+                      "d": 1,
+                      "dots": 0
+                    },
+                    "notes": [],
+                    "full": true,
+                    "voice": 4
+                  }
+                ]
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "activePartIdx": 0,
+  "activeStaffIdx": 0,
+  "spanners": []
+}

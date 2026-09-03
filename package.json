@@ -1,0 +1,10 @@
+{
+  "name": "scoreforge",
+  "version": "3.0.0",
+  "private": true,
+  "scripts": {
+    "check": "node tests/check.mjs",
+    "test": "node tests/run-node.mjs",
+    "serve": "node tests/serve.mjs"
+  }
+}
