@@ -25,7 +25,7 @@
 ## 실행한 검증
 
 - `npm run check`: JS 20개 구문 검사 통과.
-- `npm test`: 104개 통과, 실패 0개. 별도 실행하는 브라우저 parent 1개는 기본 명령에서 의도적으로 skip.
+- `npm test`: 105개 통과, 실패 0개. 별도 실행하는 브라우저 parent 1개는 기본 명령에서 의도적으로 skip.
 - `node --test tests/ui-v3.test.mjs` (Playwright 경로 지정): 13/13 통과. 실제 Edge 편집·다운로드·재생·터치 포함.
 - `tests/verify-release.mjs`: 데모 4곡, 입출력 12개, 선택/화음/마디/페이지/공유 읽기 전용/3개 화면 폭/4테마/언어/axe 통합 검증.
 - `tests/verify-offline.mjs`: 앱 셸 41개 캐시, Supabase 데이터 캐시 제외, 오프라인 재시작/로컬 악보 복구/재생, CSP/브라우저 예외 0건.
@@ -55,4 +55,6 @@
 
 ## 배포
 
-기존 Vercel 프로젝트 `musescore-copy`에 연결된 master를 사용한다. 최종 커밋/원격 배포 확인 결과는 후속 검증 기록으로 갱신한다.
+기존 Vercel 프로젝트 `musescore-copy`에 연결된 master를 사용한다. `28e28c0` push로 자동 production 배포 READY를 확인했다.
+
+첫 운영 검사에서 Vercel cleanUrls의 index.html 리다이렉트 응답을 오프라인 탐색에 그대로 반환하면 실패하는 문제를 발견했다. 3.0.1에서 탐색 응답의 리다이렉트 이력을 제거하면서 CSP/Content-Type/본문을 보존하도록 수정했다. 로컬 검증 서버에도 cleanUrls를 재현하고 회귀 테스트를 추가했다. 최종 운영 재검증 결과는 후속 기록에 남긴다.

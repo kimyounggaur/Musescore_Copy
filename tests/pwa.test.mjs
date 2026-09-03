@@ -51,3 +51,12 @@ test('release manifest references local files and matching version', () => {
   const version = readFileSync('js/version.js', 'utf8').match(/SF\.VERSION = "([^"]+)"/)[1];
   assert.ok(readFileSync('sw.js', 'utf8').includes('CACHE_VERSION = "' + version + '"'));
 });
+test('cleanUrls redirected HTML can be returned to an offline navigation', async () => {
+  const { context } = serviceWorker();
+  context.nav = { mode: 'navigate' };
+  context.cachedRedirect = { redirected: true, body: '<h1>Offline</h1>', status: 200, statusText: 'OK', headers: { 'Content-Type': 'text/html', 'Content-Security-Policy': "default-src 'self'" } };
+  const result = vm.runInContext('navigationResponse(nav, cachedRedirect)', context);
+  assert.equal(result.redirected, false);
+  assert.equal(result.headers.get('Content-Security-Policy'), "default-src 'self'");
+  assert.equal(await result.text(), '<h1>Offline</h1>');
+});

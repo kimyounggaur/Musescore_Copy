@@ -36,7 +36,7 @@ try {
   await page.locator('#btn-play').click();
   await page.waitForFunction(() => SF.playback.player.playing);
   await page.evaluate(() => SF.playback.stop());
-  const result = { offlineReload: true, savedScoreRestored: true, localVendorLoaded: await page.evaluate(() => !!window.supabase), playbackStarted: true, cachedFiles: cached.length, csp, errors };
+  const result = { origin: base, version: await page.evaluate(() => SF.VERSION), offlineReload: true, savedScoreRestored: true, localVendorLoaded: await page.evaluate(() => !!window.supabase), playbackStarted: true, cachedFiles: cached.length, csp, errors };
   await mkdir('output/playwright/v3', { recursive: true });
   await page.screenshot({ path: 'output/playwright/v3/offline.png' });
   await writeFile('output/playwright/v3/offline.json', JSON.stringify(result, null, 2));

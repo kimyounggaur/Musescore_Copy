@@ -9,13 +9,19 @@ const server = http.createServer(async (req, res) => {
     const headers = { 'Cache-Control': 'no-cache' };
     if (process.env.SF_HEADERS === '1') {
       const config = JSON.parse(await readFile(path.join(root, 'vercel.json'), 'utf8'));
+      if (config.cleanUrls && pathname.endsWith('.html')) {
+        const location = pathname.replace(/index\.html$/, '').replace(/\.html$/, '') + new URL(req.url, 'http://localhost').search;
+        res.writeHead(308, { Location: location }).end(); return;
+      }
       for (const rule of config.headers || []) if (new RegExp('^' + rule.source + '$').test(pathname)) {
         for (const header of rule.headers) headers[header.key] = header.value;
       }
     }
     const p = path.resolve(root, '.' + decodeURIComponent(new URL(req.url, 'http://localhost').pathname));
     if (p !== root && !p.startsWith(root + path.sep)) { res.writeHead(403).end(); return; }
-    const file = (await stat(p)).isDirectory() ? path.join(p, 'index.html') : p;
+    let file;
+    try { file = (await stat(p)).isDirectory() ? path.join(p, 'index.html') : p; }
+    catch { file = p + '.html'; await stat(file); }
     res.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream', ...headers });
     res.end(await readFile(file));
   } catch { res.writeHead(404).end('Not found'); }

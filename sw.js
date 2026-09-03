@@ -1,5 +1,5 @@
 "use strict";
-const CACHE_VERSION = "3.0.0";
+const CACHE_VERSION = "3.0.1";
 const SHELL_CACHE = "scoreforge-shell-" + CACHE_VERSION;
 const SAMPLE_CACHE = "scoreforge-samples-v1";
 const SAMPLE_META = "scoreforge-sample-meta-v1";
@@ -67,15 +67,21 @@ async function sampleResponse(event) {
 async function shellResponse(request) {
   const cache = await caches.open(SHELL_CACHE);
   const cached = await cache.match(request, { ignoreSearch: true });
-  if (cached) return cached;
+  if (cached) return navigationResponse(request, cached);
   if (request.mode === "navigate") {
     const url = new URL(request.url);
     if (url.pathname === new URL(self.registration.scope).pathname || url.pathname.endsWith("/index.html")) {
       const entry = await cache.match(local("index.html"));
-      if (entry) return entry;
+      if (entry) return navigationResponse(request, entry);
     }
   }
   return fetch(request);
+}
+function navigationResponse(request, response) {
+  // cleanUrls may cache a followed index.html redirect. Navigations use manual
+  // redirect mode, so return a fresh same-origin response without redirect history.
+  if (request.mode !== "navigate" || !response.redirected) return response;
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers: response.headers });
 }
 self.addEventListener("fetch", event => {
   const request = event.request;
