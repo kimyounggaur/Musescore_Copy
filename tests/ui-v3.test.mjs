@@ -65,7 +65,7 @@ test('real browser UI editing, persistence, pagination, exports and responsive c
       await page.waitForSelector('#dlg-prompt[open]');
       const before = await page.evaluate(() => SF.core.state.revision); await page.keyboard.press('Escape');
       assert.equal(await page.evaluate(() => SF.core.state.revision), before);
-      await page.locator('#btn-shortcuts').click(); await page.keyboard.press('Control+k');
+      await openTools(); await page.locator('#btn-shortcuts').click(); await page.keyboard.press('Control+k');
       assert.equal(await page.locator('#shortcut-list .pulse').count(), 1);
       await page.keyboard.press('Escape');
     });

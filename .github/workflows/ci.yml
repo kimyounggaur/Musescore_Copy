@@ -37,6 +37,8 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run build
       - name: Start local server
+        env:
+          SF_HEADERS: '1'
         run: |
           npm run serve > /tmp/scoreforge-server.log 2>&1 &
           for attempt in $(seq 1 30); do
