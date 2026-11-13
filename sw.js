@@ -1,5 +1,5 @@
 "use strict";
-const CACHE_VERSION = "3.0.1";
+const CACHE_VERSION = "3.0.1+dc741db8f6e10042";
 const SHELL_CACHE = "scoreforge-shell-" + CACHE_VERSION;
 const SAMPLE_CACHE = "scoreforge-samples-v1";
 const SAMPLE_META = "scoreforge-sample-meta-v1";
@@ -75,7 +75,14 @@ async function shellResponse(request) {
       if (entry) return navigationResponse(request, entry);
     }
   }
-  return fetch(request);
+  const response = await fetch(request);
+  // Manuals are fetched and cached only after a visitor opens them.
+  const url = new URL(request.url);
+  const manualRoot = new URL("manual/", self.registration.scope).pathname;
+  if (url.origin === self.location.origin && url.pathname.startsWith(manualRoot) && response.ok) {
+    await cache.put(request, response.clone());
+  }
+  return response;
 }
 function navigationResponse(request, response) {
   // cleanUrls may cache a followed index.html redirect. Navigations use manual

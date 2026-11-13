@@ -552,18 +552,16 @@ var SampleLoaderImpl = class {
           }
           const path = (_b2 = (_a2 = json.samples.map) == null ? void 0 : _a2[name]) != null ? _b2 : name;
           const url = `${base}/${path}.${format}`;
-          let buffer = __privateGet(this, _cache2).get(url);
-          if (!buffer) {
-            const fetched = yield loadAudioBuffer(
-              __privateGet(this, _context),
-              url,
-              __privateGet(this, _storage)
-            );
-            if (fetched) {
-              buffer = fetched;
-              __privateGet(this, _cache2).set(url, buffer);
-            }
+          // Cache the in-flight decode as well, so simultaneous parts share it.
+          let pending = __privateGet(this, _cache2).get(url);
+          if (!pending) {
+            pending = loadAudioBuffer(__privateGet(this, _context), url, __privateGet(this, _storage));
+            __privateGet(this, _cache2).set(url, pending);
           }
+          let buffer;
+          try { buffer = yield pending; }
+          catch (error) { __privateGet(this, _cache2).delete(url); throw error; }
+          if (!buffer) __privateGet(this, _cache2).delete(url);
           if (buffer) result.set(name, buffer);
           loaded++;
           onProgress == null ? void 0 : onProgress(loaded, total);
@@ -3792,14 +3790,20 @@ var Soundfont = Instrument(
     );
   }
 );
+// ScoreForge: share decoded buffers across parts while each part retains its mixer bus.
+var scoreforgeSoundfontData = new WeakMap();
 function loadSoundfontData(context, config) {
-  return __async(this, null, function* () {
-    const [{ buffers, noteNames }, loopData] = yield Promise.all([
-      decodeSoundfontFile(context, config),
-      fetchSoundfontLoopData(config.loopDataUrl)
-    ]);
-    return { buffers, noteNames, loopData };
-  });
+  let records = scoreforgeSoundfontData.get(context);
+  if (!records) { records = new Map(); scoreforgeSoundfontData.set(context, records); }
+  const key = config.instrumentUrl + "|" + (config.loopDataUrl || "");
+  if (!records.has(key)) {
+    const loading = Promise.all([
+      decodeSoundfontFile(context, config), fetchSoundfontLoopData(config.loopDataUrl)
+    ]).then(([{ buffers, noteNames }, loopData]) => ({ buffers, noteNames, loopData }));
+    records.set(key, loading);
+    loading.catch(() => { if (records.get(key) === loading) records.delete(key); });
+  }
+  return records.get(key);
 }
 function decodeSoundfontFile(context, config) {
   return __async(this, null, function* () {
@@ -3825,6 +3829,7 @@ function decodeSoundfontFile(context, config) {
         }
       }))
     );
+    if (!buffers.size) throw new Error("Soundfont: no audio samples could be decoded");
     return { buffers, noteNames: [...buffers.keys()] };
   });
 }

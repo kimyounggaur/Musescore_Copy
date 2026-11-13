@@ -4,6 +4,8 @@ import { readFile, mkdir } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import vm from 'node:vm';
 const require = createRequire(import.meta.url);
+let playwright;
+try { playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright'); } catch {}
 
 test('UI architecture and shortcut table have one authoritative definition', async () => {
   const names = ['app', 'input', 'editing', 'panels', 'keymap', 'ui-dialog', 'ui-v3', 'palette', 'export-ui'];
@@ -23,9 +25,9 @@ test('UI architecture and shortcut table have one authoritative definition', asy
   assert.ok(html.indexOf('js/auth.js') < html.indexOf('js/app.js'));
 });
 
-test('real browser UI editing, persistence, pagination, exports and responsive controls', { skip: !process.env.PLAYWRIGHT_MODULE, timeout: 180000 }, async t => {
-  const { chromium } = require(process.env.PLAYWRIGHT_MODULE);
-  const browser = await chromium.launch({ channel: 'msedge', headless: true });
+test('real browser UI editing, persistence, pagination, exports and responsive controls', { skip: !playwright || !(process.env.PLAYWRIGHT_MODULE || process.env.SF_BROWSER === '1') || process.env.SF_SKIP_BROWSER === '1', timeout: 180000 }, async t => {
+  const { chromium } = playwright;
+  const browser = await chromium.launch({ ...(process.env.PLAYWRIGHT_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHANNEL } : {}), ...(process.env.PLAYWRIGHT_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH } : {}), headless: true });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1080 } });
   page.setDefaultTimeout(8000);
   const errors = []; page.on('pageerror', e => errors.push(e.message));
@@ -36,6 +38,9 @@ test('real browser UI editing, persistence, pagination, exports and responsive c
   await page.waitForFunction(() => SF.engrave.isFontReady());
   await mkdir('output/playwright', { recursive: true });
   const settle = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const openTools = async () => {
+    if (await page.locator('#toolbar-more-menu').evaluate(el => el.hidden)) await page.locator('#btn-toolbar-more').click();
+  };
   await settle();
   const reset = async (count = 8) => {
     await page.evaluate(count => {
@@ -116,50 +121,50 @@ test('real browser UI editing, persistence, pagination, exports and responsive c
       await page.evaluate(()=>SF.app.setReadOnly(true));const revision=await page.evaluate(()=>SF.core.state.revision);await page.keyboard.press('Control+z');await page.evaluate(()=>SF.app.actions.pasteClipboard());assert.equal(await page.evaluate(()=>SF.core.state.revision),revision);await page.evaluate(()=>SF.app.setReadOnly(false));
     });
     await t.test('pages keep coordinates, title editing and vector/font exports', async () => {
-      await reset(48);await page.evaluate(()=>SF.core.mutate('페이지 검증',s=>{s.layout.measuresPerSystem=4;}));await page.locator('#page-mode').selectOption('pages');await settle();assert.ok(await page.locator('#svg-host svg.page').count()>1);
+      await reset(48);await page.evaluate(()=>SF.core.mutate('페이지 검증',s=>{s.layout.measuresPerSystem=4;}));await openTools();await page.locator('#page-mode').selectOption('pages');await settle();assert.ok(await page.locator('#svg-host svg.page').count()>1);
       await page.locator('#score-svg-page-1 [data-ref]').first().click();await settle();assert.ok(await page.evaluate(()=>SF.app.actions.selectedEvent().m)>0);
       assert.equal(await page.evaluate(()=>{const el=document.querySelector('#score-svg-page-1 [data-ref]');const r=el.getBoundingClientRect();const p=SF.app.actions.svgPoint({target:el,clientX:r.x+r.width/2,clientY:r.y+r.height/2});return SF.engrave.hitTest(p.x,p.y).page;}),1);
       await page.locator('#score-svg-page-0 [data-meta=title]').click();await page.locator('#score-meta-editor').fill('검증 제목');await page.locator('#score-meta-editor').press('Enter');await settle();assert.equal(await page.evaluate(()=>SF.core.state.score.meta.title),'검증 제목');
-      const info=await page.evaluate(async()=>{const before=SF.engrave.getLayout();const result=await SF.exportUI.exportPages();return {pages:result.pages.length,font:result.pages[0].includes('data:font/woff2;base64,'),same:before===SF.engrave.getLayout()};});assert.ok(info.pages>1&&info.font&&info.same);
+      const info=await page.evaluate(async()=>{const before=SF.engrave.getLayout();const result=await SF.exportUI.exportPages();return {pages:result.pages.length,font:/<defs>[\s\S]*<path id="sf-bv-0-/.test(result.pages[0]) && /href="#sf-bv-0-/.test(result.pages[0]) && !result.pages[0].includes('data:font/woff2;'),same:before===SF.engrave.getLayout()};});assert.ok(info.pages>1&&info.font&&info.same);
       await page.screenshot({path:'output/playwright/ui-v3-pages.png'});
     });
     await t.test('folded measure navigation, piano keyboard input, transport rate and live mixer are connected', async () => {
-      await reset(8);await page.locator('#view-select').selectOption('0');await settle();assert.equal(await page.evaluate(()=>SF.engrave.getLayout().multiRest),true);
+      await reset(8);await openTools();await page.locator('#view-select').selectOption('0');await settle();assert.equal(await page.evaluate(()=>SF.engrave.getLayout().multiRest),true);
       await page.evaluate(()=>SF.app.actions.scrollToMeasure(5));await settle();assert.equal(await page.evaluate(()=>SF.app.actions.selectedEvent().m),5);
       await page.locator('#canvas').focus();await page.keyboard.press('n');await settle();assert.equal(await page.evaluate(()=>SF.engrave.getLayout().multiRest),false);
-      await page.locator('#piano-keys [data-midi="60"]').focus();await page.keyboard.press('ArrowRight');assert.equal(await page.evaluate(()=>document.activeElement.dataset.midi),'61');
+      await openTools();await page.locator('#btn-piano').click();await page.locator('#piano-keys [data-midi="60"]').focus();await page.keyboard.press('ArrowRight');assert.equal(await page.evaluate(()=>document.activeElement.dataset.midi),'61');
       await page.keyboard.press('Enter');await settle();assert.equal(await page.evaluate(()=>SF.core.midiOf(SF.core.findEvent(SF.core.state.score,SF.app.ui.lastInsertedId).ev.notes[0])),61);assert.equal(await page.locator('#piano-keys [tabindex="0"]').count(),1);
       await page.locator('#canvas').focus();await page.keyboard.press('Escape');
-      const old=await page.evaluate(()=>[SF.core.state.revision,SF.core.state.score.tempo]);await page.locator('#playback-rate').selectOption('2');assert.deepEqual(await page.evaluate(()=>[SF.core.state.revision,SF.core.state.score.tempo]),old);
+      const old=await page.evaluate(()=>[SF.core.state.revision,SF.core.state.score.tempo]);await openTools();await page.locator('#playback-rate').selectOption('2');assert.deepEqual(await page.evaluate(()=>[SF.core.state.revision,SF.core.state.score.tempo]),old);
       await page.evaluate(()=>{window.mixerCalls=0;const update=SF.playback.updateMixer;SF.playback.updateMixer=(...args)=>{window.mixerCalls++;return update(...args);};});
-      await page.locator('#btn-mixer').click();await page.locator('[data-mix=mute]').first().check();assert.equal(await page.evaluate(()=>window.mixerCalls),1);await page.keyboard.press('Escape');
+      await openTools();await page.locator('#btn-mixer').click();await page.locator('[data-mix=mute]').first().check();assert.equal(await page.evaluate(()=>window.mixerCalls),1);await page.keyboard.press('Escape');
     });
     await t.test('MIDI options, safe names, responsive properties and accessibility', async () => {
       await reset();
       await page.evaluate(()=>{SF.io.requestMidiOptions({tracks:[{index:0,name:'<img src=x onerror=alert(1)>'}]},{name:'검증.mid'}).then(v=>window.midiOptionResult=v);});
-      await page.locator('#midi-grid').selectOption(String(1/32));await page.locator('#midi-triplets').check();await page.locator('#dlg-midi-import button[type=submit]').click();assert.deepEqual(await page.evaluate(()=>window.midiOptionResult),{grid:1/32,detectTriplets:true,tracks:[0]});
+      await page.locator('#midi-grid').selectOption(String(1/32));await page.locator('#midi-triplets').check();await page.locator('#dlg-midi-import button[type=submit]').click();assert.deepEqual(await page.evaluate(()=>window.midiOptionResult),{grid:1/32,detectTriplets:true,splitHands:false,tracks:[0]});
       await page.evaluate(()=>{SF.core.mutate('이름',s=>{s.parts[0].name='<img src=x onerror=alert(1)>';});SF.app.update({immediate:true});});assert.equal(await page.locator('#staff-select img,#view-select img').count(),0);
       for(const [width,height]of [[375,812],[768,1024]]) {
         await page.setViewportSize({width,height});await page.evaluate(()=>{document.querySelector('#properties-panel').classList.add('collapsed');SF.app.update();});await settle();
-        await page.locator('#btn-props').click();assert.equal(await page.locator('#properties-panel').isVisible(),true);await page.screenshot({path:`output/playwright/ui-v3-${width}-properties.png`});await page.locator('#btn-props-close').click();
+        await openTools();await page.locator('#btn-props').click();assert.equal(await page.locator('#properties-panel').isVisible(),true);await page.screenshot({path:`output/playwright/ui-v3-${width}-properties.png`});await page.locator('#btn-props-close').click();
         await page.locator('#palette-tab-duration').click();await page.screenshot({path:`output/playwright/ui-v3-${width}-palette.png`});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
       }
       await page.setViewportSize({width:1440,height:1080});await settle();
       if(process.env.AXE_MODULE) {
         await page.addScriptTag({path:process.env.AXE_MODULE});
         for(const theme of ['dark','light','pretty','cute']) {
-          await page.locator('#theme-select').selectOption(theme);
+          await openTools();await page.locator('#theme-select').selectOption(theme);
           const violations=await page.evaluate(async()=>{const r=await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa']}});return r.violations.filter(v=>v.impact==='critical').map(v=>({id:v.id,help:v.help}));});assert.deepEqual(violations,[],theme);
         }
       }
     });
     await t.test('actual playback keeps live mixer running, selected loop, count-in and click seek', async () => {
       await reset();await page.evaluate(()=>{SF.core.setScore(SF.io.DEMOS.butterfly());const ids=SF.core.state.score.measures[0].events.map(e=>e.id);SF.app.ui.selection=ids[0];SF.app.ui.selAnchor=ids.at(-1);SF.app.update({immediate:true});});
-      await page.locator('#canvas').focus();await page.keyboard.press('Control+l');await settle();
+      await page.locator('#canvas').focus();await page.keyboard.press('Alt+l');await settle();
       assert.ok(await page.evaluate(()=>SF.app.ui.loop.endSec>SF.app.ui.loop.startSec));assert.ok(await page.locator('.loop-overlay').count());
-      await page.locator('#btn-metronome').click();await page.locator('#count-in').check();await page.locator('#btn-play').click();await page.waitForFunction(()=>SF.playback.player.playing);
-      await page.locator('#btn-mixer').click();await page.locator('[data-mix=solo]').first().check();assert.equal(await page.evaluate(()=>SF.playback.player.playing),true);await page.keyboard.press('Escape');
-      await page.locator('#btn-loop').click();
+      await openTools();await page.locator('#btn-metronome').click();await openTools();await page.locator('#count-in').check();await page.locator('#btn-play').click();await page.waitForFunction(()=>SF.playback.player.playing);
+      await openTools();await page.locator('#btn-mixer').click();await page.locator('[data-mix=solo]').first().check();assert.equal(await page.evaluate(()=>SF.playback.player.playing),true);await page.keyboard.press('Escape');
+      await openTools();await page.locator('#btn-loop').click();
       const target=await page.evaluate(()=>SF.core.state.score.measures[2].events[0].id);await page.locator(`[data-ref="${target}"] .note-hit`).first().click();
       assert.ok(await page.evaluate(()=>SF.playback.pausePos())>1);
       await page.locator('#btn-stop').click();assert.equal(await page.evaluate(()=>SF.playback.player.playing),false);

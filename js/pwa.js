@@ -22,7 +22,12 @@
       if (SF.core.state.dirty) {
         const ok = await SF.ui.confirmDialog({ title: message("pwa.updateTitle", "새 버전 적용"), message: message("pwa.saveFirst", "현재 악보를 파일로 저장한 뒤 새 버전을 적용할까요?"), confirmText: message("pwa.saveReload", "저장 후 새로고침") });
         if (!ok) return;
-        SF.io.saveJSON(SF.core.state.score);
+        try {
+          if (await SF.io.saveJSON(SF.core.state.score) === false) return;
+        } catch (error) {
+          SF.app.toast(error.message);
+          return;
+        }
       }
       navigator.serviceWorker.addEventListener("controllerchange", () => location.reload(), { once: true });
       worker.postMessage({ type: "ACTIVATE_UPDATE" });
@@ -34,7 +39,7 @@
       for (const handle of launch.files || []) {
         try {
           const file = await handle.getFile();
-          SF.io.loadScoreFile(file, SF.app.handleLoadedScore);
+          await SF.io.loadScoreFile(file, SF.app.handleLoadedScore);
         } catch (error) { SF.app.toast(error.message); }
       }
     });

@@ -149,8 +149,8 @@
     canvas.addEventListener("pointermove",e=>{
       if(!points.has(e.pointerId))return;points.set(e.pointerId,{x:e.clientX,y:e.clientY});
       if(down&&Math.hypot(e.clientX-down.x,e.clientY-down.y)>8)clearTimeout(timer);
-      if(!pinch&&points.size===1&&down&&!A.ui.dragging&&!A.ui.inputMode&&!A.ui.speedy){canvas.scrollLeft=down.left+down.x-e.clientX;canvas.scrollTop=down.top+down.y-e.clientY;if(Math.hypot(e.clientX-down.x,e.clientY-down.y)>8)A.ui.suppressClickUntil=performance.now()+500;}
-      if(pinch&&points.size===2){e.preventDefault();A.ui.dragging=null;const [a,b]=[...points.values()];const ratio=Math.hypot(a.x-b.x,a.y-b.y)/pinch.distance;A.ui.zoom=Math.max(.5,Math.min(2.4,pinch.zoom*ratio));A.applyZoom();const r=A.ui.zoom/pinch.zoom,rect=canvas.getBoundingClientRect();canvas.scrollLeft=(pinch.left+pinch.x)*r-((a.x+b.x)/2-rect.left);canvas.scrollTop=(pinch.top+pinch.y)*r-((a.y+b.y)/2-rect.top);}
+      if(!pinch&&points.size===1&&down&&Math.hypot(e.clientX-down.x,e.clientY-down.y)>8){A.ui.dragging=null;canvas.scrollLeft=down.left+down.x-e.clientX;canvas.scrollTop=down.top+down.y-e.clientY;if(Math.hypot(e.clientX-down.x,e.clientY-down.y)>8)A.ui.suppressClickUntil=performance.now()+500;}
+      if(pinch&&points.size===2){e.preventDefault();A.ui.dragging=null;const [a,b]=[...points.values()];const ratio=Math.hypot(a.x-b.x,a.y-b.y)/pinch.distance;A.ui.zoom=Math.max(.5,Math.min(4,pinch.zoom*ratio));A.applyZoom();const r=A.ui.zoom/pinch.zoom,rect=canvas.getBoundingClientRect();canvas.scrollLeft=(pinch.left+pinch.x)*r-((a.x+b.x)/2-rect.left);canvas.scrollTop=(pinch.top+pinch.y)*r-((a.y+b.y)/2-rect.top);}
     },{passive:false});
     for(const name of ["pointerup","pointercancel"])window.addEventListener(name,e=>{points.delete(e.pointerId);clearTimeout(timer);if(pinch){A.ui.suppressClickUntil=performance.now()+500;A.ui.dragging=null;}if(points.size<2)pinch=null;if(name==="pointercancel")A.ui.dragging=null;});
   }
@@ -179,7 +179,7 @@
     for(const [key,value]of Object.entries(A.C.ensureStyle(A.C.state.score))){const input=A.$(`#style-${key}`);if(input){input.value=value;input.title=String(value);}}
   }
   function transport() {
-    const anchor=A.$("#tempo-input");const host=element("span",{class:"transport-options"});anchor.after(host);
+    const anchor=A.$("#tempo-input");const host=element("span",{class:"transport-options"});anchor.closest(".tempo-box").after(host);
     const rate=element("select",{id:"playback-rate",class:"tsel compact","aria-label":"재생 속도"});for(const value of [.5,.75,1,1.25,1.5,1.75,2])rate.add(new Option(`${value*100}%`,String(value)));rate.value="1";host.append(rate);rate.addEventListener("change",()=>{A.ui.playbackRate=+rate.value;A.P.setRate(A.ui.playbackRate);refresh();});
     const count=element("label",{class:"count-in"});const check=element("input",{id:"count-in",type:"checkbox"});count.append(check,document.createTextNode("예비박"));host.append(count);check.addEventListener("change",()=>A.ui.countIn=check.checked);
     button(host,"btn-loop","반복",toggleLoop);const duration=element("span",{id:"play-duration",class:"transport-duration",role:"timer","aria-label":"재생 시간"});host.append(duration);
@@ -187,8 +187,86 @@
     const mode=options(element("select",{id:"page-mode",class:"tsel compact","aria-label":"악보 보기 방식"}),{continuous:"연속 보기",pages:"페이지 보기"},A.ui.pageMode);views.append(mode);mode.addEventListener("change",()=>{A.ui.pageMode=mode.value;A.update();});
     const multi=element("label",{class:"multi-rest"});const m=element("input",{id:"multi-rest",type:"checkbox"});m.checked=A.ui.multiRest;multi.append(m,document.createTextNode("여러 마디 쉼표"));views.append(multi);m.addEventListener("change",()=>{A.ui.multiRest=m.checked;A.update();});
   }
+  function compoundBeat(score) {
+    const time = score.timeSig || {};
+    return time.den === 8 && time.num >= 6 && time.num % 3 === 0;
+  }
+  function tempoDisplay(score) { return Math.round(score.tempo / (compoundBeat(score) ? 1.5 : 1) * 10) / 10; }
+  function tempoFromDisplay(value, score) { return Math.round(value * (compoundBeat(score) ? 1.5 : 1)); }
+  function setupToolbar() {
+    const top = A.$(".topbar"), menu = A.$("#toolbar-more-menu"), trigger = A.$("#btn-toolbar-more");
+    function group(id, title, selectors) {
+      const section=element("section",{class:"toolbar-group",id});
+      section.append(element("h3",{},title));
+      const controls=element("div",{class:"toolbar-group-controls"});section.append(controls);
+      for(const selector of selectors) { const control=A.$(selector); if(control)controls.append(control); }
+      menu.append(section);return controls;
+    }
+    const view=group("toolbar-score","악보·보기",["#btn-settings","#staff-select","#view-select",".view-options","#btn-hide-empty","#btn-navigator","#btn-timeline","#btn-props"]);
+    const playback=group("toolbar-playback","재생 설정",["#btn-metronome",".transport-options","#swing-select","#btn-mixer","#instrument-select","#sample-status"]);
+    group("toolbar-input","입력 도구",["#btn-piano","#btn-midi","#midi-select","#btn-shortcuts"]);
+    group("toolbar-account","화면·계정",[".theme-control","#language-select",".authbar"]);
+    const quality=element("label",{class:"quality-control"},"피아노 음질");
+    const picker=options(element("select",{id:"piano-quality",class:"tsel","aria-label":"피아노 음질"}),{standard:"기본 (빠른 준비)",high:"고음질"},A.P.getPianoQuality?.()||"standard");
+    quality.append(picker);playback.append(quality);
+    picker.addEventListener("change",()=>A.P.setPianoQuality?.(picker.value));
+    button(playback,"btn-basic-sound","기본 소리로 바로 듣기",()=>A.P.useBasicSound?.());
+    // Controls keep a home marker so viewport changes preserve their exact order.
+    const compactControls=[A.$("#btn-redo"),A.$("#btn-rewind"),A.$(".tempo-box")].map(control=>{
+      const marker=document.createComment("toolbar control home");control.before(marker);return {control,marker};
+    });
+    const media=window.matchMedia("(max-width: 900px)");
+    const adapt=()=>{
+      for(const {control,marker} of compactControls) { if(media.matches)playback.append(control);else marker.after(control); }
+      if(!media.matches) menu.style.removeProperty("top");
+    };
+    media.addEventListener("change",adapt);adapt();
+    top.querySelectorAll(":scope > .tsep,:scope > .tspacer").forEach(el=>el.remove());
+    const close=()=>{menu.hidden=true;trigger.setAttribute("aria-expanded","false");};
+    trigger.addEventListener("click",event=>{
+      event.stopPropagation();const opening=menu.hidden;menu.hidden=!opening;trigger.setAttribute("aria-expanded",String(opening));
+      A.$("#file-menu").classList.remove("open");
+      if(opening) { menu.style.top=`${top.getBoundingClientRect().bottom+4}px`;menu.querySelector("button:not([hidden]),select")?.focus(); }
+    });
+    document.addEventListener("click",event=>{if(!menu.contains(event.target)&&event.target!==trigger)close();});
+    menu.addEventListener("keydown",event=>{if(event.key==="Escape"){event.preventDefault();close();trigger.focus();}});
+    menu.addEventListener("click",event=>{if(event.target.closest("button")&&!event.target.closest("#btn-loop,#btn-metronome"))close();});
+    // File menu includes account actions on every viewport, including phones.
+    const account=element("section",{id:"file-account-menu"});account.append(element("hr"),element("div",{class:"mtitle"},"계정"));
+    for(const [id,label] of [["btn-member-login","회원 로그인"],["btn-signup","회원가입"],["btn-logout","로그아웃"]]) {
+      const proxy=element("button",{type:"button",class:"mi","data-account-target":id},label);
+      proxy.addEventListener("click",()=>{A.$("#file-menu").classList.remove("open");A.$("#"+id)?.click();});account.append(proxy);
+    }
+    for(const [action,label] of [["account-settings","계정 관리"],["privacy","개인정보·이용 안내"]])account.append(element("button",{type:"button",class:"mi","data-act":action},label));
+    A.$("#file-menu").append(account);
+    organizeFileMenu();
+    // Export and cloud features may append their groups after UI initialization.
+    new MutationObserver(()=>organizeFileMenu()).observe(A.$("#file-menu"),{childList:true});
+    for(const [id,label] of [["btn-staff-text","텍스트"],["btn-break-page","페이지"],["btn-break-section","섹션"],["btn-rehearsal","리허설"]]) {
+      const control=A.$("#"+id);if(control)control.textContent=label;
+    }
+    void view;
+  }
+  function organizeFileMenu() {
+    const menu=A.$("#file-menu"), cloud=A.$("#cloud-menu"), firstExport=menu.querySelector('[data-act="musicxml"]');
+    if(cloud&&firstExport&&cloud.nextElementSibling!==firstExport)menu.insertBefore(cloud,firstExport);
+    const print=menu.querySelector('[data-act="print"]');
+    let anchor=print;
+    for(const action of ["png","svg"]) {
+      const item=menu.querySelector(`[data-act="${action}"]`);
+      if(item&&anchor) { if(item.nextElementSibling!==anchor)menu.insertBefore(item,anchor);anchor=item; }
+    }
+    menu.querySelectorAll(":scope > hr").forEach((hr,i)=>{if(i>1)hr.remove();});
+  }
   function refresh() {
     if(!A)return;addMeasureProperties();
+    const score=A.C.state.score,compound=compoundBeat(score),tempo=A.$("#tempo-input");
+    A.$("#tempo-unit").textContent=compound?"♩.":"♩";
+    tempo.min=compound?20:30;tempo.max=compound?186.7:280;tempo.step=compound?"0.1":"1";
+    tempo.setAttribute("aria-label",compound?"빠르기 (점4분음표 / 분)":"빠르기 (4분음표 / 분)");
+    for(const proxy of A.$$("[data-account-target]")){const target=A.$("#"+proxy.dataset.accountTarget);proxy.hidden=!target||target.hidden;}
+    const basic=A.$("#btn-basic-sound");if(basic)basic.hidden=A.P.getSampleStatus?.().state!=="loading";
+
     if(A.$("#page-mode"))A.$("#page-mode").value=A.ui.pageMode;
     if(A.$("#playback-rate"))A.$("#playback-rate").value=String(A.ui.playbackRate);
     const loop=A.$("#btn-loop");if(loop){loop.classList.toggle("on",!!A.ui.loop);loop.setAttribute("aria-pressed",String(!!A.ui.loop));}
@@ -201,9 +279,9 @@
     });
   }
   function init(api) {
-    A=api;transport();settingsExtras();bindTouch();
+    A=api;transport();setupToolbar();settingsExtras();bindTouch();
     A.$("#canvas").tabIndex=0;
-    A.$$("#file-menu .mi").forEach(el=>{el.tabIndex=0;el.setAttribute("role","menuitem");el.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();el.click();}});});
+    A.$$("#file-menu .mi,#help-resources .mi").forEach(el=>{el.tabIndex=0;el.setAttribute("role","menuitem");el.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();el.click();}});});
     for(const [id,run]of [["btn-trill",()=>ornament("trill")],["btn-mordent",()=>ornament("mordent")],["btn-turn",()=>ornament("turn")],["btn-ottava-up",()=>ottava(12)],["btn-ottava-down",()=>ottava(-12)],["btn-measure-insert",()=>measureAction("before")],["btn-measure-delete",()=>measureAction("range")],["btn-measure-options",showMeasureProperties]])A.$("#"+id).addEventListener("click",run);
     for(const [id,label]of Object.entries({before:"앞에 마디 삽입",after:"뒤에 마디 삽입",delete:"이 마디 삭제",range:"선택 마디 삭제",split:"마디 나누기",join:"마디 합치기",pickup:"못갖춘마디"}))SF.keymap.registerCommand({id:`measure-${id}`,label,run:()=>measureAction(id)});
     A.$("#canvas").addEventListener("click",e=>{
@@ -216,7 +294,7 @@
       let cancel=false;input.addEventListener("keydown",event=>{event.stopPropagation();if(event.key==="Escape"){cancel=true;input.blur();}if(event.key==="Enter"){event.preventDefault();input.blur();}});
       input.addEventListener("blur",()=>{const value=input.value.trim();input.remove();if(!cancel&&value!==(A.C.state.score.meta[key]||""))commit("악보 제목·저작자",s=>{s.meta[key]=value;});},{once:true});
     });
-    if(window.launchQueue)window.launchQueue.setConsumer(async params=>{for(const handle of params.files||[]) {const file=await handle.getFile();A.setReadOnly(false);A.IO.loadScoreFile(file,A.handleLoadedScore);}});
+
   }
-  SF.uiV3={init,refresh,drawLoop,toggleLoop,seekToEvent,measureAction,ornament,ottava,contextMenu,loadSettingsExtras};
+  SF.uiV3={init,refresh,drawLoop,toggleLoop,seekToEvent,measureAction,ornament,ottava,contextMenu,loadSettingsExtras,tempoDisplay,tempoFromDisplay};
 })(window.SF);

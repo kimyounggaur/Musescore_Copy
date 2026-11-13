@@ -955,6 +955,33 @@
 
   const STORAGE_KEY = "scoreforge-language";
   const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
+  group("review", `
+    more | 더 보기 ▾ | More ▾
+    moreTools | 더 보기 도구 | More tools
+    scoreView | 악보·보기 | Score and view
+    playbackSettings | 재생 설정 | Playback settings
+    inputTools | 입력 도구 | Input tools
+    displayAccount | 화면·계정 | Appearance and account
+    quality | 피아노 음질 | Piano quality
+    standard | 기본 (빠른 준비) | Standard (fast loading)
+    high | 고음질 | High quality
+    basic | 기본 소리로 바로 듣기 | Play now with basic sound
+    account | 계정 | Account
+    accountManage | 계정 관리 | Account settings
+    privacy | 개인정보·이용 안내 | Privacy and terms
+    manuals | 설명서와 데모 악보 | Manuals and demo scores
+    credits | 글꼴·음원 출처와 라이선스 | Font and audio credits and licenses
+    text | 텍스트 | Text
+    section | 섹션 | Section
+    page | 페이지 | Page
+    rehearsal | 리허설 | Rehearsal
+    dottedTempo | 빠르기 ♩.= | Tempo ♩.=
+    quarterTempo | 빠르기 (4분음표 / 분) | Tempo (quarter notes per minute)
+    compoundTempo | 빠르기 (점4분음표 / 분) | Tempo (dotted quarter notes per minute)
+    ensembleLoss | 편성을 바꾸면 {details}의 내용이 지워집니다. 계속할까요? | Changing ensemble removes {details}. Continue?
+    noteCount | {count}개 음표·화음 | {count} notes/chords
+    ensemble | 편성 변경 | Change ensemble
+  `);
   const normalize = value => String(value).replace(/\s+/g, " ").trim();
   const korean = /[가-힣]/;
   const unknownKeys = new Set();
@@ -1239,6 +1266,12 @@
       // An option without a value attribute otherwise changes its effective value
       // when its display text changes. Freeze that original value first.
       if (parent.tagName === "OPTION" && !parent.hasAttribute("value")) setAttribute(parent, "value", parent.value);
+      if (getLanguage() === "en") {
+        const previous = node.previousSibling;
+        const next = node.nextSibling;
+        if (previous?.nodeType === 1 && /[A-Za-z0-9]$/.test(previous.textContent || "") && /^[A-Za-z0-9]/.test(record.last)) record.last = " " + record.last;
+        if (next?.nodeType === 1 && /^[A-Za-z0-9]/.test(next.textContent || "") && /[A-Za-z0-9]$/.test(record.last)) record.last += " ";
+      }
       textRecords.set(node, record);
       if (!explicit && leaf) automaticTag(parent, null, record.match);
       if (node.nodeValue !== record.last) node.nodeValue = record.last;
@@ -1358,6 +1391,7 @@
     root = root || documentRoot || host.document?.documentElement;
     const untranslated = [];
     const preservedValues = [];
+    const joinedWords = [];
     function inspect(element, attribute, message) {
       const known = resolve(message);
       const item = { location: locationOf(element), attribute, message: message.trim(), key: known?.key || null };
@@ -1369,6 +1403,9 @@
     while (stack.length) {
       const node = stack.pop();
       if (isSkipped(node)) continue;
+      if (node.nodeType === 1 && getLanguage() === "en" && /(?:clickor|playand|keyboardbelow)/i.test(node.textContent || "")) {
+        if (!node.children?.length || [...node.children].every(child => !/(?:clickor|playand|keyboardbelow)/i.test(child.textContent || ""))) joinedWords.push({ location: locationOf(node), message: node.textContent });
+      }
       if (node.nodeType === 3 && korean.test(node.nodeValue)) {
         inspect(node.parentElement, "text", node.nodeValue);
       } else if (node.nodeType === 1) {
@@ -1379,7 +1416,7 @@
       }
       if (node.childNodes) for (let i = node.childNodes.length - 1; i >= 0; i--) stack.push(node.childNodes[i]);
     }
-    return { language: getLanguage(), unknownKeys: [...unknownKeys], missingEnglish: Object.keys(STRINGS.ko).filter(key => !own(STRINGS.en, key)), pendingMessages: [...unknownMessages], untranslated, preservedValues };
+    return { language: getLanguage(), unknownKeys: [...unknownKeys], missingEnglish: Object.keys(STRINGS.ko).filter(key => !own(STRINGS.en, key)), pendingMessages: [...unknownMessages], untranslated, preservedValues, joinedWords };
   }
   SF.t = t;
   SF.i18n = {

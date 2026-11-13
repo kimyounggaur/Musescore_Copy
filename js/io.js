@@ -20,12 +20,34 @@
     return (title || "악보").replace(/[\\/:*?"<>|]/g, "_").slice(0, 60);
   }
 
-  function saveJSON(score) {
+  let scoreFileHandle = null;
+  let savingFile = false;
+  function resetFileHandle(handle = null) { scoreFileHandle = handle; }
+  async function saveJSON(score, options = {}) {
+    if (savingFile) return false;
     const revision = C.state.revision;
-    download(safeName(score.meta.title) + ".scoreforge.json",
-      JSON.stringify({ app: "scoreforge", version: 1, score: C.toJSON(score) }, null, 1),
-      "application/json");
-    if (score === C.state.score) C.markSaved?.(revision);
+    const data = JSON.stringify({ app: "scoreforge", version: 2, score: C.toJSON(score) });
+    const filename = safeName(score.meta.title) + ".scoreforge.json";
+    savingFile = true;
+    try {
+      if (typeof window.showSaveFilePicker === "function") {
+        const handle = !options.saveAs && scoreFileHandle || await window.showSaveFilePicker({
+          suggestedName: filename,
+          types: [{ description: "ScoreForge 악보", accept: { "application/json": [".scoreforge.json", ".json"] } }],
+        });
+        const writable = await handle.createWritable();
+        try { await writable.write(data); await writable.close(); }
+        catch (error) { try { await writable.abort?.(); } catch (_) {} throw error; }
+        if (score === C.state.score) { scoreFileHandle = handle; C.markSaved?.(revision); }
+        return { method: "file" };
+      }
+      download(filename, data, "application/json");
+      if (score === C.state.score) C.markSaved?.(revision);
+      return { method: "download" };
+    } catch (error) {
+      if (error?.name === "AbortError") return false;
+      throw error;
+    } finally { savingFile = false; }
   }
 
   // Compatibility alias; all file loading goes through the unified dialog.
@@ -36,6 +58,10 @@
   let saveTimer = null;
   let autosaveStatus = { revision: -1, savedAt: 0, error: null, pending: false };
   function getAutosaveStatus() { return { ...autosaveStatus }; }
+  function cancelPendingAutosave() {
+    clearTimeout(saveTimer); saveTimer = null;
+    autosaveStatus.pending = false;
+  }
   function autosave(score, options = {}) {
     clearTimeout(saveTimer);
     const revision = C.state.revision;
@@ -692,8 +718,10 @@
             const ev = { id: C.newId(), type: isRest ? "rest" : "note", voice, dur, notes: [] };
             const pitch = el.querySelector(":scope > pitch"), unpitched = el.querySelector(":scope > unpitched");
             if (pitch) {
-              const step = STEP_IDX[textOf(pitch, "step")], oct = +textOf(pitch, "octave"), alter = +textOf(pitch, "alter") || 0;
-              if (step !== undefined && Number.isFinite(oct)) {
+              const step = STEP_IDX[textOf(pitch, "step")], oct = +textOf(pitch, "octave"), rawAlter = +textOf(pitch, "alter") || 0;
+              const alter = Math.max(-2, Math.min(2, Math.round(rawAlter)));
+              if (alter !== rawAlter) warn("지원하지 않는 미분음/임시표를 가장 가까운 지원 음높이로 바꿨어요");
+              if (step !== undefined && Number.isInteger(oct) && oct >= -1 && oct <= 9) {
                 ev.notes.push({ step, alter, oct, tie: !!el.querySelector('tie[type="start"], notations > tied[type="start"]') });
               } else warn("읽을 수 없는 음높이를 생략했어요");
             } else if (unpitched) {
@@ -915,7 +943,9 @@
         const notes = track.notes.filter(n => chs.includes(n.channel)); if (!notes.length) continue;
         const program = track.programs.find(p => chs.includes(p.channel))?.program || 0, percussion = chs[0] === 9;
         const instrument = instrumentForGm(program, percussion), splitHands = !!opts.splitHands && !percussion;
-        groups.push({ track, notes, program, percussion, spec: { kind: "solo", name: track.name + (parsed.format === 0 && channels.length > 1 ? ` (ch ${chs[0] + 1})` : ""), instrument, group: percussion ? "percussion" : "solo", staves: splitHands ? [{ clef: "treble" }, { clef: "bass" }] : [{ clef: percussion ? "percussion" : "treble" }] } });
+        const medianPitch = [...notes].sort((a, b) => a.midi - b.midi)[Math.floor(notes.length / 2)].midi;
+        const clef = percussion ? "percussion" : medianPitch < 60 ? "bass" : "treble";
+        groups.push({ track, notes, program, percussion, spec: { kind: "solo", name: track.name + (parsed.format === 0 && channels.length > 1 ? ` (ch ${chs[0] + 1})` : ""), instrument, group: percussion ? "percussion" : "solo", staves: splitHands ? [{ clef: "treble" }, { clef: "bass" }] : [{ clef }] } });
         if (track.programs.filter(p => chs.includes(p.channel)).some(p => p.program !== program)) warn(`${track.name}: 곡 중간 악기 변경은 첫 악기로 통합했어요`);
       }
     }
@@ -963,12 +993,12 @@
         const key = staff + ":" + start + ":" + length + (group.percussion ? ":" + note.midi : "");
         const entry = grouped.get(key) || { start, length, staff, triplet, notes: [] }; entry.notes.push(note); grouped.set(key, entry);
       }
-      const laneEnds = Array.from({ length: score.parts[partIdx].staves.length }, () => [Fraction.ZERO, Fraction.ZERO]);
+      const laneEnds = Array.from({ length: score.parts[partIdx].staves.length }, () => Array.from({ length: C.VOICE_COUNT || 4 }, () => Fraction.ZERO));
       const tuplets = new Map();
       for (const entry of [...grouped.values()].sort((a, b) => a.start.cmp(b.start) || b.length.cmp(a.length))) {
         if (entry.start.gte(starts[starts.length - 1])) continue;
         const lane = laneEnds[entry.staff].findIndex(end => end.lte(entry.start));
-        if (lane < 0) { warn(`${group.track.name}: 두 성부를 넘는 겹친 음을 생략했어요`); continue; }
+        if (lane < 0) { warn(`${group.track.name}: 네 성부를 넘는 겹친 음을 생략했어요`); continue; }
         laneEnds[entry.staff][lane] = entry.start.add(entry.length);
         const pos = locate(entry.start), keySig = keyAt(score, pos.m), voice = lane + 1;
         const pitches = entry.notes.map(n => ({ ...C.spellMidi(n.midi, keySig), tie: false }));
@@ -1175,8 +1205,8 @@
   };
 
   SF.io = {
-    download, saveJSON, openJSON, safeName,
-    autosave, loadAutosave, clearAutosave, getAutosaveStatus,
+    download, saveJSON, resetFileHandle, openJSON, safeName,
+    autosave, loadAutosave, clearAutosave, getAutosaveStatus, cancelPendingAutosave,
     exportMusicXML, buildDemo, DEMOS,
     parseMusicXML, readMxl, openScoreDialog, loadScoreFile,
     parseMidi, midiToScore, instrumentForGm, requestMidiOptions: null,

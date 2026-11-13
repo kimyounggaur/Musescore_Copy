@@ -1,19 +1,10 @@
 /* File/export dialogs live here; the score and renderer remain independent. */
 "use strict";
 (function (SF) {
-  let A, embeddedFont;
-  async function fontStyle() {
-    if(embeddedFont)return embeddedFont;
-    const response=await fetch("fonts/Bravura.woff2");
-    if(!response.ok)throw new Error("악보 글꼴을 불러오지 못했어요.");
-    const data=await response.arrayBuffer();let binary="";for(const n of new Uint8Array(data))binary+=String.fromCharCode(n);
-    embeddedFont=`<style>@font-face{font-family:BravuraSF;src:url(data:font/woff2;base64,${btoa(binary)}) format('woff2')}</style>`;
-    return embeddedFont;
-  }
+  let A;
   async function exportPages() {
     const result=await A.E.renderForExport(A.C.state.score,{viewMode:A.ui.viewMode,pageMode:"pages",multiRest:A.ui.viewMode.type==="part"&&A.ui.multiRest,numberFirstPage:true});
-    // The renderer already emits vector glyphs; unavailable fonts must not block export.
-    const font=await fontStyle().catch(()=>"");return {layout:result.layout,pages:result.pages.map(svg=>svg.replace(/(<svg\b[^>]*>)/,"$1"+font))};
+    return {layout:result.layout,pages:result.pages};
   }
   async function png(svg, page) {
     const blob=new Blob([svg],{type:"image/svg+xml;charset=utf-8"}),url=URL.createObjectURL(blob);
@@ -44,7 +35,7 @@
         const data=format==="png"?await png(result.pages[i],result.layout.pages[i]):result.pages[i];
         A.IO.download(`${name}${result.pages.length>1?`-${i+1}`:""}.${format}`,data,format==="png"?"image/png":"image/svg+xml");
       }
-      A.toast(format==="png"?"300dpi PNG를 내보냈어요.":"글꼴을 포함한 SVG를 내보냈어요.");
+      A.toast(format==="png"?"300dpi PNG를 내보냈어요.":"기호 윤곽선을 포함한 SVG를 내보냈어요.");
     } catch(error){A.toast(error.message);}
   }
   async function print() {
@@ -66,14 +57,15 @@
       const label=document.createElement("label");label.htmlFor="midi-grid";label.textContent="리듬 격자";
       const grid=document.createElement("select");grid.id="midi-grid";for(const d of [8,16,32])grid.add(new Option(`${d}분음표`,String(1/d)));grid.value=String(1/16);
       const triplets=document.createElement("label"),triplet=document.createElement("input");triplet.type="checkbox";triplet.id="midi-triplets";triplets.append(triplet,document.createTextNode("셋잇단음표 감지"));
+      const handLabel=document.createElement("label"),splitHands=document.createElement("input");splitHands.type="checkbox";splitHands.id="midi-split-hands";handLabel.append(splitHands,document.createTextNode("피아노 양손 나누기 (높은음·낮은음 보표)"));
       const tracks=document.createElement("fieldset");const legend=document.createElement("legend");legend.textContent="가져올 트랙";tracks.append(legend);
       const choices=[];
       (parsed.tracks||[]).forEach((track,i)=>{const l=document.createElement("label"),c=document.createElement("input");c.type="checkbox";c.checked=true;c.value=i;choices.push(c);l.append(c,document.createTextNode(track.name||`트랙 ${i+1}`));tracks.append(l);});
       const error=document.createElement("p");error.setAttribute("role","alert");const actions=document.createElement("div");actions.className="dlg-actions";
       const cancel=document.createElement("button");cancel.type="button";cancel.className="tbtn";cancel.textContent="취소";cancel.onclick=()=>dialog.close();
       const apply=document.createElement("button");apply.type="submit";apply.className="tbtn primary";apply.textContent="가져오기";actions.append(cancel,apply);
-      form.append(h,name,label,grid,triplets,tracks,error,actions);dialog.append(form);document.body.append(dialog);let result=null;
-      form.addEventListener("submit",e=>{e.preventDefault();const selected=choices.filter(c=>c.checked).map(c=>+c.value);if(!selected.length){error.textContent="트랙을 하나 이상 선택하세요.";return;}result={grid:+grid.value,detectTriplets:triplet.checked,tracks:selected};dialog.close();});
+      form.append(h,name,label,grid,triplets,handLabel,tracks,error,actions);dialog.append(form);document.body.append(dialog);let result=null;
+      form.addEventListener("submit",e=>{e.preventDefault();const selected=choices.filter(c=>c.checked).map(c=>+c.value);if(!selected.length){error.textContent="트랙을 하나 이상 선택하세요.";return;}result={grid:+grid.value,detectTriplets:triplet.checked,splitHands:splitHands.checked,tracks:selected};dialog.close();});
       dialog.addEventListener("close",()=>{dialog.remove();resolve(result);},{once:true});SF.ui.open(dialog);
     });
   }
@@ -81,11 +73,11 @@
     A=api;A.IO.requestMidiOptions=midiOptions;
     window.addEventListener("beforeprint",()=>{
       if(document.getElementById("print-pages"))return;
-      const result=A.E.render(A.C.state.score,{viewMode:A.ui.viewMode,pageMode:"pages",multiRest:A.ui.viewMode.type==="part"&&A.ui.multiRest,export:true,fallback:true,preserveLayout:true});
+      const result=A.E.render(A.C.state.score,{viewMode:A.ui.viewMode,pageMode:"pages",multiRest:A.ui.viewMode.type==="part"&&A.ui.multiRest,export:true,vectorGlyphs:true,preserveLayout:true});
       const host=document.createElement("div");host.id="print-pages";host.innerHTML=result.pages.join("");document.body.append(host);
     });
     window.addEventListener("afterprint",()=>document.getElementById("print-pages")?.remove());
-    const menu=A.$("#file-menu");for(const [format,label]of [["svg","SVG 내보내기 (글꼴 포함)"],["png","PNG 내보내기 (300dpi)"]]){
+    const menu=A.$("#file-menu");for(const [format,label]of [["svg","SVG 내보내기 (기호 윤곽선)"],["png","PNG 내보내기 (300dpi)"]]){
       const b=document.createElement("button");b.className="menu-item";b.dataset.act=format;b.type="button";b.textContent=label;menu.append(b);
       SF.keymap.registerCommand({id:`export-${format}`,label,run:()=>download(format)});
     }

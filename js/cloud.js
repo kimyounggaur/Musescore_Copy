@@ -150,7 +150,7 @@
       blocked: false };
   }
   async function send(job, actor, force = false) {
-    const fields = { title: titleOf(job.data.meta.title), data: job.data, measures: (job.data.measures || []).length };
+    const fields = { title: titleOf(job.data.meta.title), data: job.data, measures: (job.data.measures || job.data.parts?.[0]?.staves?.[0]?.measures || []).length };
     if (!job.id) {
       try {
         return await result(actor.db.from(TABLE).insert({ ...fields, id: job.insertId, owner: actor.owner }).select(COLUMNS).single(), actor);
@@ -291,7 +291,8 @@
     const clean = JSON.parse(JSON.stringify(data));
     clean.meta = { ...clean.meta, title: titleOf(title) };
     for (const key of META_KEYS) delete clean.meta[key];
-    snapshot(clean); // Enforce the client-side limit before normalizing.
+    // Validate the untouched payload; toJSON normalizes and could repair an invalid import.
+    if (new TextEncoder().encode(JSON.stringify(clean)).length >= 2000000) throw error("TOO_LARGE", "악보 데이터는 2MB 미만이어야 해요.");
     return C.fromJSON(clean);
   }
   async function load(id) {
@@ -313,27 +314,32 @@
     if (!row) throw error("NOT_FOUND", "공유가 중지되었거나 삭제된 악보예요.");
     return decode(row.data, row.title);
   }
-  async function installScore(score, readOnly) {
+  async function installScore(score, readOnly, options = {}) {
     if (!SF.app.setReadOnly || !SF.app.handleLoadedScore) throw error("INTEGRATION_REQUIRED", "악보 열기 연결이 준비되지 않았어요.");
+    // Ask while the previous editability/dirty state still describes the old work.
+    if (!options.confirmed && SF.app.confirmScoreReplacement && !await SF.app.confirmScoreReplacement()) return false;
     suppressChange = true;
     try {
-      SF.app.setReadOnly(readOnly);
-      SF.app.handleLoadedScore(score, score.meta.title, null, []);
+      const accepted = await SF.app.handleLoadedScore(score, score.meta.title, null, [], { readOnly, confirmed: true });
+      if (accepted === false) return false;
       SF.app.setReadOnly(readOnly);
       onScoreLoaded(C.state.score);
+      return true;
     } finally { suppressChange = false; }
   }
   async function openScore(id, shared = false) {
     const sequence = ++loadSequence, before = fingerprint(C.state.score);
     const score = shared ? await loadShared(id) : await load(id);
     if (sequence !== loadSequence) return null;
-    if (!isReadOnly() && (state.dirty || fingerprint(C.state.score) !== before)) {
+    let confirmed = false;
+    if (!isReadOnly() && (state.dirty || C.state.dirty || fingerprint(C.state.score) !== before)) {
       if (!await confirm("현재 악보의 변경 사항을 남겨 두려면 먼저 저장해 주세요. 선택한 악보를 열까요?", { title: "악보 열기", confirmLabel: "열기" })) return null;
+      confirmed = true;
     }
     if (sequence !== loadSequence) return null;
     if (!shared) await requireUser(score.meta.cloudOwner, score.meta.cloudProject);
     if (sequence !== loadSequence) return null;
-    await installScore(score, shared);
+    if (!await installScore(score, shared, { confirmed })) return null;
     if (!shared) clearShareURL();
     return score;
   }
@@ -342,7 +348,7 @@
   }
   async function makeLocalCopy() {
     const score = decode(snapshot(C.state.score), `${titleOf(C.state.score.meta.title)} 사본`);
-    await installScore(score, false);
+    if (!await installScore(score, false)) return null;
     clearShareURL();
     if (SF.io && SF.io.autosave) SF.io.autosave(C.state.score);
     toast("로컬 사본을 만들었어요. 이제 편집할 수 있어요.");
@@ -560,11 +566,6 @@
     });
     window.addEventListener("online", () => drain());
     window.addEventListener("offline", () => { if (state.dirty) status("오프라인 · 최신 악보 저장 대기 중"); });
-    document.addEventListener("keydown", event => {
-      if ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.key.toLowerCase() === "s") {
-        event.preventDefault(); event.stopImmediatePropagation(); runUI(saveCurrent);
-      }
-    }, true);
     onScoreLoaded(C.state.score);
     const slug = new URL(window.location.href).searchParams.get("share");
     if (slug !== null) await runUI(async () => { await openScore(slug, true); copy.hidden = !isReadOnly(); });

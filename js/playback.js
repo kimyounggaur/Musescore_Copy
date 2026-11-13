@@ -7,7 +7,6 @@
 (function (SF) {
   const C = SF.core;
   const { Fraction } = SF;
-  const SMPLR_URL = "https://unpkg.com/smplr@1.0.0/dist/index.mjs";
   const F = (n, d = 1) => new Fraction(n, d);
   const timeAt = (score, m) => C.timeSigAt ? C.timeSigAt(score, m) : score.measures.slice(0, m + 1).reduce((ts, mm) => mm.timeSig || ts, score.timeSig);
   const lengthAt = (score, m) => {
@@ -124,11 +123,17 @@
   const partBuses = new Map();
   let smplrModule = null;
   let smplrPromise = null;
+  let pianoQuality = "standard";
+  try { if (localStorage.getItem("scoreforge.piano-quality") === "high") pianoQuality = "high"; } catch (_) {}
+  let basicSoundResolver = null;
+  let sessionUsesFallback = false;
+  let sharedSampleLoader = null;
   let sampleStatus = { state: "idle", text: "샘플 대기", detail: "재생하면 smplr 실제 악기 샘플을 불러옵니다." };
   let onSampleStatus = null;
 
   const SAMPLE_MAP = {
-    piano: { kind: "splendid", label: "Splendid Grand Piano", volume: 98 },
+    piano: { kind: "soundfont", instrumentUrl: "vendor/audio/fluidr3-piano-mp3.js", kit: "FluidR3_GM", label: "FluidR3 Grand Piano", volume: 98 },
+    "piano-high": { kind: "splendid", label: "Splendid Grand Piano (고음질)", volume: 98 },
     epiano: { kind: "soundfont", instrument: "electric_piano_1", label: "Electric Piano", volume: 96 },
     musicbox: { kind: "soundfont", instrument: "music_box", label: "Music Box", volume: 104 },
     organ: { kind: "soundfont", instrument: "church_organ", label: "Church Organ", volume: 94 },
@@ -139,7 +144,9 @@
   };
 
   function setSampleStatus(state, text, detail) {
-    sampleStatus = { state, text, detail: detail || text };
+    sampleStatus = sessionUsesFallback && state === "ready"
+      ? { state: "fallback", text: "기본 소리 재생", detail: "샘플 준비가 끝났어요. 다음 재생부터 샘플 음원으로 들을 수 있어요." }
+      : { state, text, detail: detail || text };
     if (onSampleStatus) onSampleStatus(sampleStatus);
   }
 
@@ -156,7 +163,7 @@
     if (smplrModule) return smplrModule;
     if (!smplrPromise) {
       setSampleStatus("loading", "샘플 로딩", "smplr 라이브러리를 불러오는 중입니다.");
-      smplrPromise = import("../vendor/smplr/index.mjs").catch(() => import(SMPLR_URL)).then(mod => {
+      smplrPromise = import("../vendor/smplr/index.mjs").then(mod => {
         smplrModule = mod;
         return mod;
       }).catch(err => {
@@ -169,7 +176,22 @@
   }
 
   function sampleKey(instrument) {
+    if (instrument === "piano" && pianoQuality === "high") return "piano-high";
     return SAMPLE_MAP[instrument] ? instrument : "piano";
+  }
+
+  function getPianoQuality() { return pianoQuality; }
+  function setPianoQuality(value) {
+    pianoQuality = value === "high" ? "high" : "standard";
+    try { localStorage.setItem("scoreforge.piano-quality", pianoQuality); } catch (_) {}
+    if (player.loading) stop();
+    if (!player.playing) warmSamplesForScore(C.state.score, { resume: false });
+    return pianoQuality;
+  }
+  function useBasicSound() {
+    if (!basicSoundResolver) return false;
+    basicSoundResolver();
+    return true;
   }
 
   function createSampleInstrument(mod, key, partId) {
@@ -177,29 +199,32 @@
     const opts = {
       destination: partBus(partId).input,
       volume: spec.volume || 96,
+      storage: mod.CacheStorage ? mod.CacheStorage("scoreforge-audio-v1") : undefined,
+      loader: sharedSampleLoader || (sharedSampleLoader = mod.SampleLoader ? mod.SampleLoader(ctx, { storage: mod.CacheStorage ? mod.CacheStorage("scoreforge-audio-v1") : undefined }) : null),
       onLoadProgress: ({ loaded, total }) => {
         setSampleStatus("loading", `${loaded}/${total}`, `${spec.label} 샘플을 불러오는 중입니다.`);
       },
     };
     if (spec.kind === "splendid" && mod.SplendidGrandPiano) return mod.SplendidGrandPiano(ctx, opts);
-    if (mod.Soundfont) return mod.Soundfont(ctx, { ...opts, instrument: spec.instrument });
+    if (mod.Soundfont) return mod.Soundfont(ctx, { ...opts, ...(spec.instrumentUrl ? { instrumentUrl: spec.instrumentUrl } : { instrument: spec.instrument, kit: spec.kit }) });
     throw new Error("smplr Soundfont factory is unavailable");
   }
 
-  function ensureSampleInstrument(instrument, partId = "preview") {
-    audio();
+  function ensureSampleInstrument(instrument, partId = "preview", options = {}) {
+    audio(options.resume !== false);
     if (instrument === "drums") return Promise.resolve({ ready: false });
-    const key = partId + ":" + sampleKey(instrument);
+    const selected = sampleKey(instrument), key = partId + ":" + selected;
     const cached = sampleInstruments.get(key);
     if (cached && !cached.failed) return cached.promise;
     const rec = { instrument: null, ready: false, failed: false, promise: null };
     rec.promise = (async () => {
       const mod = await loadSmplrModule();
-      const inst = createSampleInstrument(mod, instrument, partId);
+      const inst = createSampleInstrument(mod, selected, partId);
       rec.instrument = inst;
       await (inst.ready || inst.load || Promise.resolve(inst));
+      if (typeof inst.isReady === "boolean" && !inst.isReady) throw new Error("샘플 음원 준비 실패");
       rec.ready = true;
-      setSampleStatus("ready", "샘플 준비", `${(SAMPLE_MAP[sampleKey(instrument)] || SAMPLE_MAP.piano).label} 샘플 음원 준비 완료`);
+      setSampleStatus("ready", "샘플 준비", `${(SAMPLE_MAP[selected] || SAMPLE_MAP.piano).label} 샘플 음원 준비 완료`);
       return rec;
     })().catch(err => {
       rec.failed = true;
@@ -211,16 +236,25 @@
     return rec.promise;
   }
 
-  function warmSamplesForScore(score) {
-    return Promise.all(score.parts.map(part => ensureSampleInstrument(part.instrument, part.id)));
+  function warmSamplesForScore(score, options = {}) {
+    if (!score?.parts?.length) return Promise.resolve([]);
+    return Promise.all(score.parts.map(part => ensureSampleInstrument(part.instrument, part.id, options)));
   }
 
-  function delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+  async function prepareSessionSamples(score, options) {
+    let timer, resolver;
+    const useBasic = new Promise(resolve => { resolver = () => resolve("basic"); basicSoundResolver = resolver; });
+    try {
+      const timeout = new Promise(resolve => { timer = setTimeout(() => resolve("timeout"), Math.max(0, options.sampleTimeoutMs ?? 20000)); });
+      const result = await Promise.race([warmSamplesForScore(score).then(() => "ready"), useBasic, timeout]);
+      return result === "basic" ? new Set() : new Set([...sampleInstruments].filter(([, rec]) => rec.ready && !rec.failed).map(([key]) => key));
+    } finally { clearTimeout(timer); if (basicSoundResolver === resolver) basicSoundResolver = null; }
   }
 
   function scheduleSampleNote(instrument, midi, when, dur, vel, partId = "preview", session = null) {
-    const key = partId + ":" + sampleKey(instrument);
+    const selected = session && instrument === "piano" && player.sessionQuality === "high" ? "piano-high"
+      : session && instrument === "piano" ? "piano" : sampleKey(instrument);
+    const key = partId + ":" + selected;
     if (instrument === "drums" || (session && !session.has(key))) return false;
     const rec = sampleInstruments.get(key);
     if (!rec || !rec.ready || !rec.instrument || rec.failed) {
@@ -244,7 +278,7 @@
     }
   }
 
-  function audio() {
+  function audio(resume = true) {
     if (!ctx) {
       ctx = new (window.AudioContext || window.webkitAudioContext)();
       limiter = ctx.createDynamicsCompressor();
@@ -254,7 +288,7 @@
       master.gain.value = 0.9;
       master.connect(limiter).connect(ctx.destination);
     }
-    if (ctx.state === "suspended") ctx.resume();
+    if (resume && ctx.state === "suspended") ctx.resume()?.catch?.(() => {});
     return ctx;
   }
 
@@ -263,7 +297,7 @@
   // Both engines terminate in the same persistent per-part gain/pan bus.
   function partBus(partId = "preview") {
     if (partBuses.has(partId)) return partBuses.get(partId);
-    const ac = audio(), input = ac.createGain();
+    const ac = audio(false), input = ac.createGain();
     const pan = ac.createStereoPanner ? ac.createStereoPanner() : null;
     input.connect(pan || master);
     if (pan) pan.connect(master);
@@ -792,12 +826,15 @@
     if (opts.countIn !== undefined) player.countIn = !!opts.countIn;
     player.loading = true; player.onState?.(true);
     updateMixer(score);
-    await Promise.race([warmSamplesForScore(score), delay(Math.max(0, opts.sampleTimeoutMs ?? 2200))]).catch(() => {});
+    const sessionSamples = await prepareSessionSamples(score, opts);
     if (token !== player.startToken) return;
-    // Snapshot once: a late sample load is available only to the next session.
-    player.sessionSamples = new Set([...sampleInstruments].filter(([, rec]) => rec.ready && !rec.failed).map(([key]) => key));
+    // A playback session keeps one consistent engine choice for every part.
+    player.sessionSamples = sessionSamples;
+    player.sessionQuality = pianoQuality;
     const expected = score.parts.filter(p => p.instrument !== "drums");
-    if (expected.some(p => !player.sessionSamples.has(p.id + ":" + sampleKey(p.instrument)))) setSampleStatus("fallback", "신스 사용", "이번 재생은 준비된 음원으로 끝까지 재생합니다. 다음 재생에 새 샘플을 적용합니다.");
+    sessionUsesFallback = expected.some(p => !player.sessionSamples.has(p.id + ":" + sampleKey(p.instrument)));
+    if (sessionUsesFallback) setSampleStatus("fallback", "기본 소리 재생", "이번 재생은 기본 소리를 사용해요. 샘플 준비 후 다시 재생하면 샘플 음원으로 들을 수 있어요.");
+    else setSampleStatus("ready", "샘플 재생", "준비된 실제 악기 샘플 음원으로 재생해요.");
     player.loading = false;
     seek(fromSec);
     player.playing = true;
@@ -824,6 +861,8 @@
 
   function stop(notify = true) {
     player.startToken++;
+    basicSoundResolver?.();
+    sessionUsesFallback = false;
     if (player.timer) { clearInterval(player.timer); player.timer = null; }
     if (player.raf) { cancelAnimationFrame(player.raf); player.raf = null; }
     const wasPlaying = player.playing || player.loading;
@@ -900,6 +939,6 @@
     INSTRUMENTS, audio,
     play, stop, previewNote, pausePos, player, compile, exportMidi,
     setRate, setLoop, seek, updateMixer, partBuses, buildTempoMap,
-    getSampleStatus, setSampleStatusHandler, ensureSampleInstrument, buildPlaybackPlan,
+    getSampleStatus, setSampleStatusHandler, ensureSampleInstrument, warmSamplesForScore, getPianoQuality, setPianoQuality, useBasicSound, buildPlaybackPlan,
   };
 })(window.SF);

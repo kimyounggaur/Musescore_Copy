@@ -93,7 +93,7 @@
     <text x="108" y="54" class="card-title">4. 재생과 확인</text>
     <text x="108" y="84" class="body">Space로 재생하고 샘플 악기 음색 확인</text>
     <text x="108" y="108" class="body">메트로놈, 스윙, 믹서, 재생 커서 사용</text>
-    <text x="108" y="142" class="tag">F11/F12</text>
+    <text x="108" y="142" class="tag">Alt+T/N</text>
     <text x="196" y="142" class="body">타임라인과 내비게이터로 이동</text>
   </g>
 

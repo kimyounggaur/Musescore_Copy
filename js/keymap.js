@@ -13,8 +13,8 @@
     ["paste", "붙여넣기", ["Ctrl+V"], "pasteClipboard"],
     ["cut", "잘라내기", ["Ctrl+X"], "cut"],
     ["select-all", "전체 선택", ["Ctrl+A"], "selectAll"],
-    ["loop", "선택 범위 반복 재생", ["Ctrl+L"], "loop"],
-    ["goto", "마디·리허설 이동", ["Ctrl+G", "Ctrl+F"], "gotoQuery"],
+    ["loop", "선택 범위 반복 재생", ["Alt+L"], "loop"],
+    ["goto", "마디·리허설 이동", ["Alt+G"], "gotoQuery"],
     ["play", "재생·일시정지", ["Space"], "togglePlay"],
     ["escape", "입력 종료·정지·선택 해제", ["Escape"], "escape"],
     ["speedy", "스피디 입력 전환", ["Q"], "speedy"],
@@ -38,8 +38,8 @@
     ["next-note", "화음의 다음 음 선택", ["Alt+ArrowUp"], "chordNote", [1]],
     ["prev-note", "화음의 이전 음 선택", ["Alt+ArrowDown"], "chordNote", [-1]],
     ["whole-chord", "화음 전체 선택", ["Alt+0"], "wholeChord"],
-    ["navigator", "내비게이터", ["F12"], "openNavigator"],
-    ["timeline", "타임라인", ["F11"], "openTimelinePanel"],
+    ["navigator", "내비게이터", ["Alt+N"], "openNavigator"],
+    ["timeline", "타임라인", ["Alt+T"], "openTimelinePanel"],
     ["speedy-chord", "스피디 화음 추가", ["Enter"], "addSpeedyChordTone", [], "speedy"],
     ["speedy-sharp", "스피디 반음 올림", ["+", "="], "transposeSelection", [1], "speedy"],
     ["speedy-flat", "스피디 반음 내림", ["-"], "transposeSelection", [-1], "speedy"],
@@ -53,17 +53,25 @@
     KEYMAP.push({ id: `speedy-rest-${i+1}`, label: `스피디 ${label} 쉼표`, keys: [`Shift+${i+1}`], action: "speedyRest", args: [dur], mode: "speedy" });
   });
   for (let voice = 1; voice <= 4; voice++) KEYMAP.push({id:`voice-${voice}`,label:`성부 ${voice}`,keys:[`Alt+${voice}`],action:"setCurrentVoice",args:[voice],mode:"all"});
-  for (let n = 2; n <= 9; n++) KEYMAP.push({id:`tuplet-${n}`,label:`${n}잇단음표`,keys:[`Ctrl+${n}`],action:"applyTuplet",args:[n],mode:"all"});
+  for (let n = 2; n <= 9; n++) KEYMAP.push({id:`tuplet-${n}`,label:`${n}잇단음표`,keys:[`Alt+Shift+${n}`],action:"applyTuplet",args:[n],mode:"all"});
   for (const letter of "ABCDEFG") for (const shift of [false,true]) KEYMAP.push({id:`pitch-${letter}-${shift}`,label:shift?`${letter} 화음 쌓기`:`${letter} 음 입력`,keys:[(shift?"Shift+":"")+letter],action:"letter",args:[letter,shift],mode:"all"});
   for (const direction of ["Up","Down","Left","Right"]) for (const modifier of ["","Ctrl+","Shift+"]) KEYMAP.push({id:`move-${modifier}${direction}`,label:`${modifier === "Ctrl+" ? "옥타브·마디 " : modifier === "Shift+" ? "범위 " : ""}${({Up:"위",Down:"아래",Left:"이전",Right:"다음"})[direction]}`,keys:[`${modifier}Arrow${direction}`],action:"arrow",args:[direction,modifier],mode:"all"});
   const extras = new Map();
   function registerCommand(command) { if (command?.id && command?.label && typeof command.run === "function") extras.set(command.id, command); }
   function combo(e) {
-    let key = e.key === " " ? "Space" : e.key.length === 1 ? e.key.toUpperCase() : e.key;
+    const rawKey = e.key || "";
+    let key = rawKey === " " ? "Space" : rawKey.length === 1 ? rawKey.toUpperCase() : rawKey;
     if (/^(Digit|Numpad)[0-9]$/.test(e.code)) key = e.code.slice(-1);
-    const symbolic = ["<", ">", "+", "_", "?"].includes(e.key);
+    // Outside text editors the shortcut follows the physical key even when a
+    // Korean IME (or another layout) reports a non-Latin character.
+    else if (!/^[A-Za-z]$/.test(rawKey) && /^Key[A-Z]$/.test(e.code)) key = e.code.slice(3);
+    const symbolic = ["<", ">", "+", "_", "?"].includes(rawKey);
     return `${e.ctrlKey || e.metaKey ? "Ctrl+" : ""}${e.altKey ? "Alt+" : ""}${e.shiftKey && !symbolic ? "Shift+" : ""}${key}`;
   }
+  function formatShortcut(key, mac = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || "")) {
+    return mac ? key.replace(/Ctrl\+/g, "⌘+").replace(/Alt\+/g, "⌥+").replace(/Shift\+/g, "⇧+") : key;
+  }
+
   function create(A) {
     const { C, ui, $, $$, P } = A;
     let pulseTimer;
@@ -74,7 +82,15 @@
     }
     const local = {
       openCommandPalette, undo: () => { C.undo(); A.afterHistory(); }, redo: () => { C.redo(); A.afterHistory(); },
-      cloudSave: () => SF.cloud.saveCurrent(), print: () => SF.exportUI.print(),
+      cloudSave: async () => {
+        try { return await SF.cloud.saveCurrent(); }
+        catch (error) {
+          if (["AUTH_REQUIRED", "SESSION_CHANGED", "session_not_found"].includes(error?.code)) SF.auth?.openDialog("member");
+          else A.toast(error?.message || "클라우드 저장을 마치지 못했어요.");
+          return false;
+        }
+      },
+      print: () => SF.exportUI.print(),
       input: () => A.setInputMode(!ui.inputMode), speedy: () => A.toggleSpeedy(!ui.speedy),
       cut: () => { if (A.copySelection({quiet:true})) A.deleteSelection(); },
       selectAll: () => { const ids = [...C.eventOrderMap(C.state.score).keys()]; ui.selection = ids.at(-1); ui.selAnchor = ids[0]; ui.selectAll = true; ui.selectedNoteIdx = null; A.update(); },
@@ -113,7 +129,7 @@
       for (const item of KEYMAP) {
         const row=document.createElement("div"); row.className="shortcut-row"; row.dataset.shortcut=item.id;
         const label=document.createElement("span"); label.textContent=item.label;
-        const key=document.createElement("kbd"); key.textContent=item.keys.join(" / "); row.append(label,key); host.append(row);
+        const key=document.createElement("kbd"); key.textContent=item.keys.map(key => formatShortcut(key)).join(" / "); row.append(label,key); host.append(row);
       }
     }
     function isShortcutOverlayOpen() { return $("#shortcut-overlay")?.open; }
@@ -124,8 +140,22 @@
       $("#shortcut-close").addEventListener("click",closeShortcutOverlay);
     }
     function bindKeys() {
+      document.addEventListener("click", e => {
+        if (!e.detail) return; // Keyboard activation retains focus and native Space/Enter.
+        const button = e.target.closest("button");
+        if (!button?.closest(".topbar, .palette-bar, #drum-pad, .zoom-ctrl")) return;
+        if (button.matches("[aria-haspopup], [aria-expanded], #btn-file, #btn-more")) return;
+        queueMicrotask(() => {
+          if (document.activeElement === button && !document.querySelector("dialog[open]")) {
+            $("#canvas")?.focus({ preventScroll: true });
+          }
+        });
+      });
       document.addEventListener("keydown", e => {
-        if(e.isComposing || e.defaultPrevented) return;
+        if(e.defaultPrevented) return;
+        const textEditor = e.target.closest("input, textarea, select, [contenteditable=true], [contenteditable=plaintext-only]");
+        if(textEditor) return;
+        if((e.isComposing || e.keyCode === 229) && !/^Key[A-Z]$/.test(e.code)) return;
         if(e.target.closest("button") && [" ","Enter"].includes(e.key)) return;
         const key=combo(e);
         if(isShortcutOverlayOpen()) {
@@ -134,12 +164,11 @@
           if(hit.length) { e.preventDefault(); clearTimeout(pulseTimer); $$(".shortcut-row.pulse").forEach(el=>el.classList.remove("pulse")); for(const x of hit) { const el=$("#shortcut-list").querySelector(`[data-shortcut="${CSS.escape(x.id)}"]`); el?.classList.add("pulse"); el?.scrollIntoView({block:"nearest"}); } pulseTimer=setTimeout(()=>$$(".shortcut-row.pulse").forEach(el=>el.classList.remove("pulse")),800); }
           return;
         }
-        if(e.target.closest("input, textarea, select, [contenteditable=true], [contenteditable=plaintext-only]")) return;
         if(document.querySelector("dialog[open]")) return;
         const external=[...extras.values()].find(x=>(x.keys||[]).includes(key));
         if(external) { e.preventDefault(); run(external); return; }
         if(ui.inputMode && C.isPercussionRef(A.activeRef()) && !e.ctrlKey && !e.metaKey && !e.altKey) {
-          const drum={K:"kick",S:"snare",H:"closed-hihat",O:"open-hihat",C:"crash"}[e.key.toUpperCase()];
+          const drum={K:"kick",S:"snare",H:"closed-hihat",O:"open-hihat",C:"crash"}[key.replace(/^Shift\+/, "")];
           if(drum) {e.preventDefault();A.inputDrum(drum);return;}
         }
         const item=KEYMAP.find(x=>x.keys.includes(key)&&(x.mode==="all"||x.mode===(ui.speedy?"speedy":"normal")));
@@ -153,7 +182,7 @@
     function renderCommands(q) {
       const host=$("#cmd-list"); host.replaceChildren();
       for(const item of items().filter(x=>`${x.label} ${SF.i18n?.translate(x.label)||x.label} ${x.id} ${(x.keys||[]).join(" ")}`.toLowerCase().includes(q.trim().toLowerCase())).slice(0,60)) {
-        const b=document.createElement("button"); b.type="button"; b.className="cmd-item"; b.textContent=(SF.i18n?.translate(item.label)||item.label) + (item.keys?.length&&!item.label.includes(item.keys[0])?`  ${item.keys[0]}`:"");
+        const b=document.createElement("button"); b.type="button"; b.className="cmd-item"; b.textContent=(SF.i18n?.translate(item.label)||item.label) + (item.keys?.length&&!item.label.includes(item.keys[0])?`  ${formatShortcut(item.keys[0])}`:"");
         b.addEventListener("click",()=>{$("#dlg-command").close();run(item);}); host.append(b);
       }
       host.firstElementChild?.classList.add("active");
@@ -171,5 +200,5 @@
     }
     return { bindKeys, bindShortcutOverlay, bindCommandPalette, openCommandPalette, closeShortcutOverlay, isShortcutOverlayOpen };
   }
-  SF.keymap = { KEYMAP, create, combo, registerCommand };
+  SF.keymap = { KEYMAP, create, combo, formatShortcut, registerCommand };
 })(window.SF);

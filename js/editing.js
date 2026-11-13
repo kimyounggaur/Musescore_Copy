@@ -78,10 +78,7 @@
     const ids = selectedIds();
     if (ids && ids.size > 1) {
       C.mutate("범위 삭제", (score) => {
-        for (const id of ids) {
-          const f = C.findEvent(score, id);
-          if (f) C.deleteEvent(score, f.m, f.e, f);
-        }
+        C.deleteEvents(score, ids);
       });
       ui.selection = null; ui.selAnchor = null;
       update();

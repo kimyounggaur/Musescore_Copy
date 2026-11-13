@@ -26,7 +26,7 @@
     speedyHeld: new Set(),
     zoom: 1,
     fitScale: 1,
-    pianoVisible: true,
+    pianoVisible: !matchMedia("(max-width: 900px)").matches,
     lyricVerse: 1,
     currentVoice: 1,
     viewMode: { type: "full", partIdx: null },
@@ -85,18 +85,6 @@
       hideEmptyStaves: ui.hideEmptyStaves, activeVoice: ui.currentVoice });
     layoutCache = res.layout;
     $("#svg-host").innerHTML = res.svg;
-    // Font glyph bounding boxes overlap adjacent chord heads. Give each visible
-    // head its own small pointer target, in the renderer's global coordinates.
-    for (const le of layoutCache.eventsById.values()) {
-      const event = $("#svg-host").querySelector(`[data-ref="${CSS.escape(le.id)}"]`);
-      for (const head of le.noteheads || []) {
-        const group = event?.querySelector(`[data-note="${head.index}"]`);
-        if (!group) continue;
-        const hit = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
-        for (const [key, value] of Object.entries({ class: "note-hit", cx: head.x, cy: head.y, rx: Math.max(6, head.width / 2), ry: Math.max(5, head.height / 2) })) hit.setAttribute(key, value);
-        group.append(hit);
-      }
-    }
     renderedScore = score; renderedRevision = changeRevision;
     const svg = $("#score-svg");
     if (svg) { svg.setAttribute("role", "img"); svg.setAttribute("aria-label", `악보: ${score.meta.title || "제목 없음"}, ${score.measures.length}마디`); }
@@ -156,10 +144,23 @@
     } });
   }
 
-  function saveScore() {
-    IO.saveJSON(C.state.score);
-    savedRevision = C.state.revision;
-    toast("악보 파일을 내려받았어요");
+  async function saveScore() {
+    try {
+      const result = await IO.saveJSON(C.state.score);
+      if (result === false) return false;
+      savedRevision = C.state.revision;
+      toast(result?.method === "file" ? "악보 파일을 저장했어요" : "악보 파일을 내려받았어요");
+      return true;
+    } catch (error) {
+      toast(`저장하지 못했어요 — ${error.message}`);
+      return false;
+    }
+  }
+  async function confirmScoreReplacement() {
+    if (C.state.readOnly || (!C.state.dirty && !SF.cloud?.state.dirty)) return true;
+    const current = C.state.score, revision = C.state.revision;
+    const accepted = await SF.ui.confirmDialog({ title: "저장하지 않은 변경", message: "저장하지 않은 변경이 있습니다. 다른 악보를 열면 현재 작업의 자동 저장본도 바뀝니다. 계속할까요?", confirmText: "계속 열기", cancelText: "현재 작업 유지", danger: true });
+    return accepted && current === C.state.score && revision === C.state.revision;
   }
   function setReadOnly(value) {
     C.state.readOnly = !!value; ui.readOnly = !!value;
@@ -189,7 +190,7 @@
     const wrap = $("#canvas");
     const pageW = E.pageWidth ? E.pageWidth(C.state.score) : E.PAGE_W;
     const avail = wrap.clientWidth - 28;
-    ui.fitScale = Math.min(1, avail / pageW);
+    ui.fitScale = Math.min(1, Math.max(matchMedia("(max-width: 900px)").matches ? 0.8 : 0.1, avail / pageW));
     const s = ui.fitScale * ui.zoom;
     host.style.width = pageW + "px";
     host.style.transform = `scale(${s})`;
@@ -198,7 +199,7 @@
     const headH = $("#paper-head").offsetHeight;
     wrap.querySelector(".paper-sizer").style.height = (h + headH + 70) * s + "px";
     wrap.querySelector(".paper-sizer").style.width = pageW * s + "px";
-    $("#zoom-label").textContent = Math.round(ui.zoom * 100) + "%";
+    $("#zoom-label").textContent = Math.round(s * 100) + "%";
   }
 
   /* ---------------- 좌표 변환 ---------------- */
@@ -474,6 +475,7 @@
         el.className = `sample-status ${st.state || "idle"}`;
         el.textContent = st.text || "샘플";
         el.title = st.detail || "실제 악기 샘플 음원";
+        SF.uiV3?.refresh();
       });
     }
   }
@@ -536,7 +538,7 @@
     $("#btn-redo").title = "다시 실행" + (C.redoLabel?.() ? ": " + C.redoLabel() : "");
     $("#btn-undo").setAttribute("aria-label", $("#btn-undo").title);
     $("#btn-redo").setAttribute("aria-label", $("#btn-redo").title);
-    $("#tempo-input").value = score.tempo;
+    $("#tempo-input").value = SF.uiV3?.tempoDisplay?.(score) ?? score.tempo;
     $("#swing-select").value = score.playbackSettings?.swing || "off";
     const staffSel = $("#staff-select");
     const staffValue = `${active.partIdx}:${active.staffIdx}`;
@@ -620,12 +622,17 @@
   /* ---------------- Supabase 인증 ---------------- */
 
   /* ---------------- 파일 열기 공통 처리 (메뉴·드래그&드롭) ---------------- */
-  function handleLoadedScore(loaded, name, err, report) {
+  async function handleLoadedScore(loaded, name, err, report, options = {}) {
     if (!loaded) {
       toast(`열 수 없어요: ${name}${err && err.message ? " — " + err.message : ""}`);
-      return;
+      return false;
     }
+    if (!options.confirmed && !await confirmScoreReplacement()) return false;
+    IO.cancelPendingAutosave?.();
+    IO.resetFileHandle?.();
+    setReadOnly(!!options.readOnly);
     C.setScore(loaded);
+    P.warmSamplesForScore?.(loaded, { resume: false }).catch(() => {});
     ui.selection = null; ui.selAnchor = null; ui.cursorId = null; ui.lastPitch = null;
     ui.speedy = false; ui.speedyStep = null; clearSpeedyHeld();
     stopPlayback();
@@ -635,6 +642,7 @@
     } else {
       toast(`"${loaded.meta.title || name}" 불러왔어요`);
     }
+    return true;
   }
 
   function showImportReport(name, score, report) {
@@ -663,7 +671,7 @@
         toast("악보 파일(.json/.musicxml/.mxl/.mid)을 끌어다 놓아주세요");
         return;
       }
-      IO.loadScoreFile(file, (...args) => { if (args[0]) setReadOnly(false); handleLoadedScore(...args); });
+      IO.loadScoreFile(file, handleLoadedScore);
     });
   }
 
@@ -675,14 +683,16 @@
       menu.classList.toggle("open");
     });
     document.addEventListener("click", () => menu.classList.remove("open"));
-    menu.addEventListener("click", async (e) => {
-      const item = e.target.closest("[data-act]");
+    document.addEventListener("click", async (e) => {
+      const item = e.target.closest("#file-menu [data-act], #help-resources [data-act]");
       if (!item) return;
       menu.classList.remove("open");
+      if (item.closest("#help-resources")) $("#dlg-help").close();
       const act = item.dataset.act;
       const score = C.state.score;
       if (act === "new") {
-        if (!await SF.ui.confirmDialog({ title: "새 악보", message: "새 악보를 만들까요? 현재 작업을 보관하려면 파일로 저장해 주세요.", confirmText: "새 악보 만들기", danger: true })) return;
+        if (!await confirmScoreReplacement()) return;
+        IO.cancelPendingAutosave?.(); IO.resetFileHandle?.();
         setReadOnly(false);
         C.setScore(C.createScore({}));
         ui.selection = null; ui.cursorId = null; ui.lastPitch = null;
@@ -690,7 +700,7 @@
         stopPlayback(); update();
         openSettings();
       } else if (act === "open") {
-        IO.openScoreDialog((...args) => { if (args[0]) setReadOnly(false); handleLoadedScore(...args); });
+        IO.openScoreDialog(handleLoadedScore);
       } else if (act === "save") {
         saveScore();
       } else if (act === "musicxml") {
@@ -712,6 +722,8 @@
       } else if (act.startsWith("demo-")) {
         const key = act.slice(5);
         if (IO.DEMOS[key]) {
+          if (!await confirmScoreReplacement()) return;
+          IO.cancelPendingAutosave?.(); IO.resetFileHandle?.();
           setReadOnly(false);
           C.setScore(IO.DEMOS[key]());
           ui.selection = null; ui.cursorId = null;
@@ -734,7 +746,10 @@
       localStorage.setItem("scoreforge.welcomed", "1");
     });
     $$("#dlg-welcome [data-start]").forEach(btn => {
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", async () => {
+        if (!await confirmScoreReplacement()) return;
+        IO.cancelPendingAutosave?.(); IO.resetFileHandle?.();
+        setReadOnly(false);
         const k = btn.dataset.start;
         if (k === "blank") {
           C.setScore(C.createScore({}));
@@ -847,20 +862,22 @@
       ui.pianoVisible = !ui.pianoVisible;
       refreshToolbar(); applyZoom();
     });
-    $("#btn-midi").addEventListener("click", () => {
+    $("#btn-midi").addEventListener("click", async () => {
+      if (!ui.midiEnabled && !await initMidi()) return;
       ui.midiEnabled = !ui.midiEnabled;
       refreshToolbar();
       toast(ui.midiEnabled ? "MIDI 입력 켜짐" : "MIDI 입력 꺼짐");
     });
     $("#midi-select").addEventListener("change", () => connectMidiInput($("#midi-select").value));
     $("#btn-help").addEventListener("click", () => $("#dlg-help").showModal());
-    $("#btn-zoom-in").addEventListener("click", () => { ui.zoom = Math.min(2.4, ui.zoom + 0.15); applyZoom(); });
+    $("#btn-zoom-in").addEventListener("click", () => { ui.zoom = Math.min(4, ui.zoom + 0.15); applyZoom(); });
     $("#btn-zoom-out").addEventListener("click", () => { ui.zoom = Math.max(0.5, ui.zoom - 0.15); applyZoom(); });
 
     $("#tempo-input").addEventListener("change", () => {
-      const v = Math.max(30, Math.min(280, +$("#tempo-input").value || 100));
+      const display = +$("#tempo-input").value || 100;
+      const v = Math.max(30, Math.min(280, SF.uiV3?.tempoFromDisplay?.(display, C.state.score) ?? display));
       if (v === C.state.score.tempo) return;
-      C.mutate("빠르기", (s2) => { s2.tempo = v; }, { coalesce: "tempo" });
+      C.mutate("빠르기", (s2) => { s2.tempo = v; }, { coalesce: "tempo", layout: false });
       stopPlayback(); update();
     });
     $("#swing-select").addEventListener("change", () => {
@@ -909,7 +926,7 @@
     canvas.addEventListener("wheel", (e) => {
       if (!e.ctrlKey) return;
       e.preventDefault();
-      ui.zoom = Math.max(0.5, Math.min(2.4, ui.zoom + (e.deltaY < 0 ? 0.1 : -0.1)));
+      ui.zoom = Math.max(0.5, Math.min(4, ui.zoom + (e.deltaY < 0 ? 0.1 : -0.1)));
       applyZoom();
     }, { passive: false });
 
@@ -967,7 +984,6 @@
     bindCommandPalette();
     bindProperties();
     bindNavigationPanels();
-    initMidi();
 
     const saved = IO.loadAutosave();
     if (saved) {
@@ -978,7 +994,8 @@
     }
     C.onChange((score, event) => {
       if (["saved", "autosaved"].includes(event?.type)) { refreshToolbar(); return; }
-      changeRevision = C.state.revision; update();
+      if (event?.layout !== false) changeRevision = C.state.revision;
+      update();
       if (["mutate", "undo", "redo"].includes(event?.type)) scheduleAutosave();
       if (event?.type === "setScore") { clearTimeout(saveTimer); SF.cloud?.onScoreLoaded(score); }
     });
@@ -994,10 +1011,11 @@
     update({ immediate: true });
     maybeShowWelcome();
 
+    P.warmSamplesForScore?.(C.state.score, { resume: false }).catch(() => {});
     E.loadFont(() => update({ force: true })); // Bravura 로드되면 다시 그림
   }
 
-  const api = { C, E, P, IO, Fraction, ui, $, $$, getLayoutCache: () => layoutCache, loadTheme, saveTheme, themeLabel, applyTheme, relayout, repaint, refreshChrome, update, scheduleAutosave, saveScore, setReadOnly, refreshCursor, applyZoom, svgPoint, select, selectedEvent, selectedIds, rangeNoteEnds, targetEvent, buildTimeline, startPlayback, playFromSelection, autoScroll, togglePlay, stopPlayback, buildToolbar, refreshToolbar, updateStatus, durName2, toast, flashHint, handleLoadedScore, showImportReport, bindDragDrop, bindMenu, maybeShowWelcome, bindWelcome, moveSelection, afterHistory, bindThemePicker, bindButtons, start };
+  const api = { C, E, P, IO, Fraction, ui, $, $$, getLayoutCache: () => layoutCache, loadTheme, saveTheme, themeLabel, applyTheme, relayout, repaint, refreshChrome, update, scheduleAutosave, saveScore, confirmScoreReplacement, setReadOnly, refreshCursor, applyZoom, svgPoint, select, selectedEvent, selectedIds, rangeNoteEnds, targetEvent, buildTimeline, startPlayback, playFromSelection, autoScroll, togglePlay, stopPlayback, buildToolbar, refreshToolbar, updateStatus, durName2, toast, flashHint, handleLoadedScore, showImportReport, bindDragDrop, bindMenu, maybeShowWelcome, bindWelcome, moveSelection, afterHistory, bindThemePicker, bindButtons, start };
   for (const module of [SF.input, SF.editing, SF.panels, SF.keymap]) Object.assign(api, module.create(api));
   const { activeRef, activeCtx, firstEventIdForVoice, setCurrentVoice, setActiveStaff, effectiveAlter, pitchFromStep, nearestOctave, findEventAtTick, advancePos, measureCountForEnd, ensureMeasureCount, clonePlain, cloneDurForPaste, selectionItems, copySelection, decoratePastedEvent, pasteClipboard, doInput, mirrorLinkedTab, inputDrum, inputMidiPitches, initMidi, refreshMidiDevices, connectMidiInput, onMidiMessage, pitchForStepLabel, previewSpeedyStep, doSpeedyInput, toggleSpeedyDot, addSpeedyChordTone, speedyDeleteAt, clearSpeedyHeld, setSpeedyHeld, cursorPos, initSpeedyMidi, toggleSpeedy, setInputMode, inputLetter, onCanvasMove, onCanvasClick, clampStep, onPointerDown, onPointerMove, onPointerUp, editLyric, editChordSymbol, buildPiano, setDuration, canDot, toggleDot, applyAccidental, transposeSelection, deleteSelection, repitchSelection, toggleTie, applyArticulation, applyDynamic, toggleSlur, toggleHairpin, applyTuplet, applyGraceBefore, toggleNotation, markerTarget, selectedMeasureRange, applyStartRepeat, applyEndRepeat, applyRepeatCount, applyVolta, applyChordSymbol, applyTempoMark, nextRehearsalMark, applyRehearsalMark, applyStaffText, htmlEsc, checked, selectedPropIds, firstSelectedRef, renderPropertiesPanel, mutateSelectedEvents, applyPropertyInput, applyMeasureBreak, bindProperties, refreshOpenOverlays, scrollToMeasure, renderNavigator, measureDensity, renderTimelinePanel, openNavigator, openTimelinePanel, gotoQuery, bindNavigationPanels, r1, mixerRecord, renderMixerRows, updateMixerValue, bindMixer, openSettings, bindSettings, bindKeys, bindShortcutOverlay, bindCommandPalette, openCommandPalette, closeShortcutOverlay, isShortcutOverlayOpen } = api;
   for (const method of ["undo", "redo"]) {
@@ -1009,7 +1027,7 @@
     if (C.state.readOnly) { toast("읽기 전용 악보예요. 사본을 만들어 편집하세요."); return; }
     return coreMutate(label, fn, opts);
   };
-  SF.app = { ui, update, relayout, repaint, refreshChrome, toast, handleLoadedScore, setReadOnly,
+  SF.app = { ui, update, relayout, repaint, refreshChrome, toast, handleLoadedScore, confirmScoreReplacement, setReadOnly,
     actions: api, registerCommand: command => SF.keymap.registerCommand(command), auth: SF.auth?.state };
   document.addEventListener("DOMContentLoaded", start);
 })(window.SF);

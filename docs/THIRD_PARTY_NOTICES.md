@@ -1,0 +1,16 @@
+# Third-party notices
+
+Verified against the upstream sources on 2026-11-13. The project name shown to users is ScoreForge. Existing repository and deployment addresses are retained to preserve installed apps, shared links, and browser-local scores; this app does not claim affiliation with MuseScore or Steinberg. The licenses below apply to the identified components, not automatically to ScoreForge's own source code.
+
+| Component | Creator / source | License and use |
+| --- | --- | --- |
+| Bravura music font | Steinberg Media Technologies GmbH; [upstream](https://github.com/steinbergmedia/bravura) | SIL Open Font License 1.1, reserved font name “Bravura”. The bundled font's own copyright notice (2021) and full license are extracted in [Bravura-LICENSE.txt](../fonts/Bravura-LICENSE.txt). Used for notation and exported documents. |
+| smplr 1.0.0 | danigb and contributors; [upstream](https://github.com/danigb/smplr) | MIT, audio sampling code. Bundled locally under `vendor/smplr/`; audio sample rights are separate. |
+| Supabase JS 2.114.0 | Supabase contributors; [upstream](https://github.com/supabase/supabase-js) | MIT. The full bundled notice is [supabase-LICENSE](../vendor/supabase-LICENSE). |
+| FluidR3 GM piano | Frank Wen (FluidR3); rendered distribution by Benjamin Gleitzman; [source and sample license](https://github.com/gleitz/midi-js-soundfonts#soundfonts-available) | Creative Commons Attribution 3.0, [license](https://creativecommons.org/licenses/by/3.0/). Standard acoustic grand piano, bundled locally as `vendor/audio/fluidr3-piano-mp3.js` (897,279 bytes). Modified distribution: retained 30 original MP3 samples, every minor third from A0 through C8, without re-encoding. Preserve attribution when redistributing samples. |
+| Musyng Kite GM soundfont | Musyng Kite soundfont authors; rendered distribution by Benjamin Gleitzman; [source and sample license](https://github.com/gleitz/midi-js-soundfonts#soundfonts-available) | Creative Commons Attribution-ShareAlike 3.0, [license](https://creativecommons.org/licenses/by-sa/3.0/). Existing additional instrument samples are fetched from the upstream distribution. The distribution README identifies the license separately from its MIT code license. |
+| Splendid Grand Piano | AKAI; SFZ mapping distributed by SFZ Instruments; [source](https://github.com/sfzinstruments/SplendidGrandPiano); [web sample mirror](https://github.com/smpldsnds/sfzinstruments-splendid-grand-piano) | The upstream README identifies the samples as public domain. Used for the optional high-quality piano. This records the distributor's statement; no broader warranty or ownership claim is made. |
+
+The font and JavaScript libraries are part of the app's local shell. The standard piano is included in the local shell for offline playback. Other audio samples may use upstream servers (`gleitz.github.io`, `smpldsnds.github.io`, or `goldst.dev`) depending on the instrument. Cached samples are bounded to 60 MB. When unavailable, playback can use the built-in synthesizer. Source filenames, fixed dependency versions, byte sizes, and SHA-256 digests for bundled libraries are in [vendor/manifest.json](../vendor/manifest.json).
+
+The developer retains the choice of an explicit license for original ScoreForge code. This change does not grant a new license on the owner's behalf.

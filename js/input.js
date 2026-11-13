@@ -21,7 +21,6 @@
   let midiInput = null;
   let midiBuffer = [];
   let midiTimer = null;
-  let speedyMidiStarted = false;
   let speedyMidiToastShown = false;
   function activeRef() { return C.activeRef(C.state.score); }
   function activeCtx() { return { ...activeRef(), voice: ui.currentVoice }; }
@@ -216,10 +215,12 @@
   function doInput(mIdx, tick, pitches, ctx = activeCtx()) {
     const dur = { ...ui.curDur };
     let inserted = null;
+    const endPos = advancePos(C.state.score, mIdx, tick, C.durValue(dur));
     C.mutate(pitches ? "음표 입력" : "쉼표 입력", (score) => {
+      // Keep a writable cursor after the final onset, including exact bar endings.
+      ensureMeasureCount(score, endPos.mIdx + 1);
       C.setActiveStaff(score, ctx.partIdx, ctx.staffIdx);
       inserted = C.inputAt(score, mIdx, tick, dur, pitches, { ...ctx, voice: ui.currentVoice });
-      if (inserted && pitches && pitches.length) mirrorLinkedTab(score, ctx, mIdx, tick, dur, pitches, inserted);
     });
     ui.lastInsertedId = inserted;
     if (pitches && pitches.length) {
@@ -235,17 +236,9 @@
     flashHint(pitches ? null : "쉼표를 입력했어요");
   }
 
-  function mirrorLinkedTab(score, ctx, mIdx, tick, dur, pitches, insertedId) {
-    const ref = C.staffRef(score, ctx);
-    if (ref.part.instrument !== "guitar" || !ref.staff.linkedStaffId) return;
-    const allRefs = C.staffRefs(score);
-    const linked = allRefs.find(r => r.staff.id === ref.staff.linkedStaffId);
-    const primary = insertedId && C.findEvent(score, insertedId);
-    if (primary) C.applyTabToEvent(primary.ev, ref.part);
-    if (!linked) return;
-    const linkedId = C.inputAt(score, mIdx, tick, dur, pitches, { partIdx: linked.partIdx, staffIdx: linked.staffIdx, voice: ui.currentVoice });
-    const linkedFound = linkedId && C.findEvent(score, linkedId);
-    if (linkedFound) C.applyTabToEvent(linkedFound.ev, linked.part);
+  function mirrorLinkedTab(score) {
+    // Linked notation is derived centrally for every mutation, not just note entry.
+    C.syncLinkedTab?.(score);
   }
 
   function inputDrum(drumId) {
@@ -257,7 +250,9 @@
     if (!ui.inputMode) setInputMode(true);
     const pos = cursorPos();
     let inserted = null;
+    const endPos = advancePos(C.state.score, pos.mIdx, pos.tick, C.durValue(ui.curDur));
     C.mutate("드럼 입력", (score) => {
+      ensureMeasureCount(score, endPos.mIdx + 1);
       C.setActiveStaff(score, ref.partIdx, ref.staffIdx);
       inserted = C.addDrumNote(score, pos.mIdx, pos.tick, drumId, { ...ui.curDur }, { ...ref, voice: ui.currentVoice });
     });
@@ -283,17 +278,26 @@
     if (!navigator.requestMIDIAccess) {
       btn.disabled = true;
       sel.innerHTML = `<option>Web MIDI 없음</option>`;
-      return;
+      return false;
     }
+    if (midiAccess) return true;
+    btn.disabled = true;
     try {
-      midiAccess = await navigator.requestMIDIAccess();
+      // This function is only called by the MIDI button's explicit user action.
+      midiAccess = await navigator.requestMIDIAccess({ sysex: false });
       refreshMidiDevices();
       midiAccess.onstatechange = refreshMidiDevices;
+      return true;
     } catch (err) {
-      btn.disabled = true;
-      sel.innerHTML = `<option>MIDI 권한 필요</option>`;
+      sel.innerHTML = `<option>MIDI 권한 필요 — MIDI 버튼으로 다시 시도</option>`;
+      toast("MIDI 권한을 허용한 뒤 MIDI 버튼으로 다시 시도하세요");
+      return false;
+    } finally {
+      // A denied request must remain retryable from inside the app.
+      btn.disabled = false;
     }
   }
+
   function refreshMidiDevices() {
     const sel = $("#midi-select");
     if (!sel || !midiAccess) return;
@@ -301,12 +305,14 @@
     sel.replaceChildren();
     for (const input of inputs) sel.add(new Option(input.name || "MIDI 입력", input.id));
     if (!inputs.length) sel.add(new Option("장치 없음", ""));
+    if (midiInput && !inputs.some(input => input.id === midiInput.id)) { midiInput.onmidimessage = null; midiInput = null; }
     if (inputs.length && !midiInput) connectMidiInput(inputs[0].id);
+    if (midiInput) sel.value = midiInput.id;
   }
   function connectMidiInput(id) {
     if (midiInput) midiInput.onmidimessage = null;
     midiInput = midiAccess ? midiAccess.inputs.get(id) : null;
-    if (midiInput) midiInput.onmidimessage = onMidiMessage;
+    if (midiInput) midiInput.onmidimessage = handleMidiMessage;
   }
   function onMidiMessage(e) {
     if (!ui.midiEnabled) return;
@@ -353,13 +359,12 @@
       }
     }
     const endPos = advancePos(score, pos.mIdx, pos.tick, C.durValue(dur));
-    const needed = measureCountForEnd(score, endPos);
+    const needed = endPos.mIdx + 1;
     let inserted = null;
     C.mutate(pitches ? "스피디 입력" : "스피디 쉼표", (s2) => {
       ensureMeasureCount(s2, needed);
       C.setActiveStaff(s2, ctx.partIdx, ctx.staffIdx);
       inserted = C.inputAt(s2, pos.mIdx, pos.tick, dur, pitches, ctx);
-      if (inserted && pitches && pitches.length) mirrorLinkedTab(s2, ctx, pos.mIdx, pos.tick, dur, pitches, inserted);
     });
     ui.lastInsertedId = inserted;
     ui.curDur = { ...dur };
@@ -456,36 +461,25 @@
   }
 
   /* ---------------- 입력 모드 ---------------- */
+  function handleMidiMessage(msg) {
+    if (!ui.midiEnabled) return;
+    const [status, note, vel] = msg.data;
+    const cmd = status & 0xF0;
+    if (ui.speedy) {
+      if (cmd === 0x90 && vel > 0) setSpeedyHeld(note, true, null, 0.3);
+      else if (cmd === 0x80 || (cmd === 0x90 && vel === 0)) setSpeedyHeld(note, false);
+    } else onMidiMessage(msg);
+  }
+
   function initSpeedyMidi() {
-    if (speedyMidiStarted || !navigator.requestMIDIAccess) return;
-    speedyMidiStarted = true;
-
-    function wireInputs(access) {
-      let count = 0;
-      for (const input of access.inputs.values()) {
-        count++;
-        input.onmidimessage = (msg) => {
-          const [status, note, vel] = msg.data;
-          const cmd = status & 0xF0;
-          if (ui.speedy) {
-            if (cmd === 0x90 && vel > 0) setSpeedyHeld(note, true, null, 0.3);
-            else if (cmd === 0x80 || (cmd === 0x90 && vel === 0)) setSpeedyHeld(note, false);
-          } else if (ui.midiEnabled && input === midiInput) {
-            onMidiMessage(msg);
-          }
-        };
-      }
-      if (count && !speedyMidiToastShown) {
-        speedyMidiToastShown = true;
-        toast("MIDI 건반 연결됨 — 건반 누른 채 숫자 키");
-      }
+    // Entering speedy mode never requests a device permission. Users opt in
+    // through the MIDI button, which also serves standard note entry.
+    if (!midiAccess) return;
+    refreshMidiDevices();
+    if (midiInput && !speedyMidiToastShown) {
+      speedyMidiToastShown = true;
+      toast("MIDI 건반 연결됨 — 건반 누른 채 숫자 키");
     }
-
-    Promise.resolve(midiAccess || navigator.requestMIDIAccess({ sysex: false })).then((access) => {
-      midiAccess = access;
-      wireInputs(access);
-      access.onstatechange = () => wireInputs(access);
-    }).catch(() => { /* 미지원/권한 거부 환경에서는 조용히 지나간다. */ });
   }
 
   function toggleSpeedy(on) {
@@ -747,8 +741,12 @@
         if (nx) { select(nx.ev.id, { silent: true }); editLyric(nx.ev.id); }
       }
     };
+    let composing = false;
+    input.oncompositionstart = () => { composing = true; };
+    input.oncompositionend = () => { composing = false; };
     input.onkeydown = (e) => {
       e.stopPropagation();
+      if (composing || e.isComposing || e.keyCode === 229) return;
       if (e.key === "Enter" || e.key === " " && input.value.trim()) {
         if (e.key === " ") e.preventDefault();
         commit(e.key === " " || e.key === "Enter");
@@ -826,8 +824,12 @@
       update();
       if (dir) moveAfter(dir);
     };
+    let composing = false;
+    input.oncompositionstart = () => { composing = true; };
+    input.oncompositionend = () => { composing = false; };
     input.onkeydown = (e) => {
       e.stopPropagation();
+      if (composing || e.isComposing || e.keyCode === 229) return;
       if (e.key === "Enter") {
         e.preventDefault(); commit(1);
       } else if (e.key === " ") {

@@ -5,6 +5,16 @@
   "scripts": {
     "check": "node tests/check.mjs",
     "test": "node tests/run-node.mjs",
-    "serve": "node tests/serve.mjs"
+    "serve": "node tests/serve.mjs",
+    "build": "node tests/prepare-release.mjs",
+    "release:check": "node tests/prepare-release.mjs --check",
+    "test:browser": "node tests/run-browser.mjs",
+    "format": "prettier --write tests/prepare-release.mjs tests/release-build.test.mjs .github/workflows/ci.yml package.json .prettierrc.json",
+    "format:check": "prettier --check tests/prepare-release.mjs tests/release-build.test.mjs .github/workflows/ci.yml package.json .prettierrc.json",
+    "dev": "node tests/serve.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.65.0",
+    "prettier": "3.10.1"
   }
 }

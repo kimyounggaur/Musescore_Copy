@@ -178,9 +178,9 @@ vendor/           고정 버전 외부 라이브러리·라이선스·해시
 
 ## 개발·검증
 
-`npm run check`, `npm test`는 빌드나 패키지 설치 없이 Node에서 실행합니다. 브라우저 회귀는 `tests/browser.html`, 추가 UI/PWA/클라우드 검증은 `tests/verify-*.mjs`와 `tests/ui-v3.test.mjs`에 있습니다. Playwright는 선택 개발 도구이며 실행 시 `PLAYWRIGHT_MODULE`로 설치 경로를 지정할 수 있습니다.
+`npm run check`, `npm test`는 Node에서 실행합니다. 브라우저 검사는 `npm ci`, `npx playwright install chromium`, `npm run serve` 후 별도 터미널에서 `npm run test:browser`를 실행합니다. 기본 브라우저는 Playwright Chromium이며 `PLAYWRIGHT_CHANNEL` 또는 `PLAYWRIGHT_EXECUTABLE_PATH`로 다른 설치를 선택할 수 있습니다. 이미 설치된 Playwright는 `PLAYWRIGHT_MODULE`로 지정할 수 있습니다. GitHub Actions가 push와 pull request마다 구문·Node 회귀·릴리스·서식 검사와 Chromium UI 회귀를 실행합니다. `npm run format`은 배포 도구와 CI 파일에 Prettier를 적용합니다. 기존 코드 전체의 재정렬은 별도 작업으로 남겨 변경 검토를 방해하지 않습니다.
 
-배포 전 `node tests/gen-readme-keys.mjs`와 `node tests/prepare-release.mjs`를 실행하세요. 앱 셸 파일 변경 시 `js/version.js`와 `sw.js`의 버전을 함께 올려야 합니다. 사용자가 업데이트를 선택하기 전에는 기존 셸을 유지합니다. 버전 없는 JS에 장기 immutable 캐시를 적용하지 않습니다.
+배포 전 `node tests/gen-readme-keys.mjs`와 `npm run build`를 실행하세요. 빌드는 앱과 설명서의 실제 파일 내용으로 해시 버전을 계산하여 `js/version.js`, `sw.js`, `precache-manifest.json`을 함께 생성합니다. 버전 숫자를 수동으로 올릴 필요가 없고 같은 입력은 같은 버전을 만듭니다. `npm run release:check`는 생성물이 현재 내용과 일치하는지 확인합니다. Vercel 빌드에서도 자동 실행합니다. 설명서와 삽화는 첫 설치 때 미리 받지 않고 열 때 받아 캐시합니다. 사용자가 업데이트를 선택하기 전에는 기존 셸을 유지합니다. 버전 없는 JS에 장기 immutable 캐시를 적용하지 않습니다.
 
 `js/config.js`에는 Project URL과 publishable/anon 공개 키만 들어갑니다. `service_role`, `sb_secret_` 또는 DB 비밀번호는 넣지 않습니다. 다른 프로젝트로 옮길 때는 Supabase SQL/설정과 Vercel CSP의 허용 도메인을 함께 확인하세요.
 
@@ -195,3 +195,7 @@ vendor/           고정 버전 외부 라이브러리·라이선스·해시
 - ~~템포/리허설/스태프 텍스트~~ ✅ 완료 (Step 4-6 — 선택 위치 마킹, 렌더링, 템포맵 재생/MIDI, MusicXML direction 내보내기·가져오기)
 - ~~페이지 설정·브레이크·속성 패널·내비게이터/타임라인~~ ✅ 완료 (Step 8-1, 8-2, 9-1, 9-2 — 레이아웃 설정, 시스템/페이지/섹션 브레이크, 컨텍스트 속성 편집, 마디 밀도 타임라인)
 - ~~스피디 입력(숫자 1타 입력)~~ ✅ 완료 (Q 토글, 크로스헤어, 숫자 입력, 화면 피아노/Web MIDI 홀드 입력)
+
+## 외부 자료와 운영 주소
+
+Bravura 글꼴, smplr, Supabase JS와 음원의 제작자·라이선스는 [외부 자료 출처](docs/THIRD_PARTY_NOTICES.md)에 정리했습니다. 표시 이름은 ScoreForge이며, 기존 회원·설치 앱·공유 링크와 로컬 악보 보호를 위해 저장소/배포 주소는 이번 수정에서 유지합니다. 전용 Supabase 프로젝트로의 이전은 회원·악보 이전 검증을 마친 후 별도 수행해야 합니다.

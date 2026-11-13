@@ -60,3 +60,25 @@ test('cleanUrls redirected HTML can be returned to an offline navigation', async
   assert.equal(result.headers.get('Content-Security-Policy'), "default-src 'self'");
   assert.equal(await result.text(), '<h1>Offline</h1>');
 });
+test('manual pages load on demand and remain available from the current shell cache', async () => {
+  const { context, stores } = serviceWorker();
+  context.manualRequest = new Request('https://scoreforge.test/manual/scoreforge_user_manual.html');
+  context.downloads = 0;
+  vm.runInContext('fetch = async () => { downloads++; return new Response("manual content"); }', context);
+  const first = await vm.runInContext('shellResponse(manualRequest)', context);
+  assert.equal(await first.text(), 'manual content');
+  const second = await vm.runInContext('shellResponse(manualRequest)', context);
+  assert.equal(await second.text(), 'manual content');
+  assert.equal(context.downloads, 1);
+  const files = JSON.parse(readFileSync('precache-manifest.json', 'utf8'));
+  assert.equal(files.some(file => file.startsWith('manual/')), false);
+  assert.ok([...stores.keys()].some(key => key.startsWith('scoreforge-shell-')));
+});
+test('installed file launch has one owner and update waits for save completion', () => {
+  const pwa = readFileSync('js/pwa.js', 'utf8');
+  const ui = readFileSync('js/ui-v3.js', 'utf8');
+  assert.equal((pwa.match(/launchQueue\.setConsumer/g) || []).length, 1);
+  assert.equal((ui.match(/launchQueue\.setConsumer/g) || []).length, 0);
+  assert.match(pwa, /await SF\.io\.loadScoreFile/);
+  assert.match(pwa, /await SF\.io\.saveJSON/);
+});

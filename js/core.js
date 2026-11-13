@@ -238,18 +238,18 @@ window.SF = window.SF || {};
     const slash = ascii.split("/");
     const head = slash[0];
     const bassText = slash.length > 1 ? slash.slice(1).join("/") : "";
-    const m = head.match(/^([A-Ga-g])([#b]?)(.*)$/);
+    const m = head.match(/^([A-Ga-g])((?:#{1,2}|b{1,2})?)(.*)$/);
     if (!m) return { raw: original, root: null, rootAlter: 0, quality: "", bass: null, bassAlter: 0, normalized: original };
     const root = m[1].toUpperCase();
-    const rootAlter = m[2] === "#" ? 1 : m[2] === "b" ? -1 : 0;
+    const rootAlter = m[2].startsWith("#") ? m[2].length : -m[2].length;
     const qualityRaw = m[3] || "";
     const quality = CHORD_QUALITY_ALIASES[qualityRaw] ?? CHORD_QUALITY_ALIASES[qualityRaw.toLowerCase()] ?? qualityRaw;
     let bass = null, bassAlter = 0;
     if (bassText) {
-      const bm = bassText.match(/^([A-Ga-g])([#b]?)$/);
+      const bm = bassText.match(/^([A-Ga-g])((?:#{1,2}|b{1,2})?)$/);
       if (bm) {
         bass = bm[1].toUpperCase();
-        bassAlter = bm[2] === "#" ? 1 : bm[2] === "b" ? -1 : 0;
+        bassAlter = bm[2].startsWith("#") ? bm[2].length : -bm[2].length;
       }
     }
     const normalized = root + chordAlterText(rootAlter, false) + quality + (bass ? "/" + bass + chordAlterText(bassAlter, false) : "");
@@ -475,10 +475,27 @@ window.SF = window.SF || {};
     const parsed = typeof chord === "string" ? parseChordSymbol(chord) : chord;
     if (!parsed || !parsed.root) return null;
     const key = parsed.root + chordAlterText(parsed.rootAlter, false) + (parsed.quality || "");
-    const positions = FRETBOARD_LIBRARY[key] || FRETBOARD_LIBRARY[parsed.root + (parsed.quality || "")] || null;
-    if (!positions) return null;
-    return { strings: 6, frets: 4, firstFret: 1, positions: [...positions], fingers: [] };
+    const known = FRETBOARD_LIBRARY[key];
+    if (known) return { strings: 6, frets: 4, firstFret: 1, positions: [...known], fingers: [] };
+    // Movable E/A shapes cover major, minor and dominant/minor sevenths.
+    // Unknown qualities stay unavailable instead of showing the wrong chord.
+    const shapes = {
+      "": [[0, 2, 2, 1, 0, 0], ["x", 0, 2, 2, 2, 0]],
+      m: [[0, 2, 2, 0, 0, 0], ["x", 0, 2, 2, 1, 0]],
+      "7": [[0, 2, 0, 1, 0, 0], ["x", 0, 2, 0, 2, 0]],
+      m7: [[0, 2, 0, 0, 0, 0], ["x", 0, 2, 0, 1, 0]],
+      maj7: [[0, 2, 1, 1, 0, 0], ["x", 0, 2, 1, 2, 0]],
+    }[parsed.quality || ""];
+    if (!shapes) return null;
+    const pc = (STEP_SEMIS[STEP_EN.indexOf(parsed.root)] + parsed.rootAlter + 12) % 12;
+    const candidates = shapes.map((shape, i) => {
+      const shift = (pc - (i ? 9 : 4) + 12) % 12;
+      return { shift, positions: shape.map(fret => fret === "x" ? "x" : fret + shift) };
+    }).sort((a, b) => a.shift - b.shift);
+    const best = candidates[0];
+    return { strings: 6, frets: 4, firstFret: Math.max(1, best.shift), positions: best.positions, fingers: [] };
   }
+
   const SOUND_FLAGS = {
     pizzicato: { label: "pizz.", aliases: ["pizz.", "pizzicato"] },
     arco: { label: "arco", aliases: ["arco"] },
@@ -1473,7 +1490,7 @@ window.SF = window.SF || {};
 
   /* 앵커가 사라졌거나 순서가 뒤집힌 스패너 제거. 슬러는 양 끝이 음표여야 한다 */
   function normalizeSpanners(score) {
-    if (!score.spanners) { score.spanners = []; return; }
+    if (!score.spanners?.length) { score.spanners = []; return; }
     const order = eventOrderMap(score);
     score.spanners = score.spanners.filter(sp => {
       if (!order.has(sp.startId) || !order.has(sp.endId)) return false;
@@ -1735,8 +1752,9 @@ window.SF = window.SF || {};
 
   /* ---------------- 전체 조옮김 ---------------- */
   function transposeScore(score, semitones) {
+    if (!Number.isInteger(semitones) || Math.abs(semitones) > 48) throw new RangeError("Invalid transposition");
     if (!semitones) return;
-    // 새 조표: 5도권에서 7*semitones 이동 후 |fifths| 최소 후보 선택
+    const oldKey = score.keySig || 0;
     const transposeKey = key => {
       let f = key + 7 * semitones;
       while (f > 7) f -= 12;
@@ -1745,66 +1763,319 @@ window.SF = window.SF || {};
       if (f === -7 && key >= 0) f = 5;
       return f;
     };
-    score.keySig = transposeKey(score.keySig);
+    const newKey = transposeKey(oldKey);
+    // Preserve the interval's letter distance, including E#/Cb and double
+    // accidentals, instead of respelling every altered note independently.
+    const tonicStep = key => ((key * 4) % 7 + 7) % 7;
+    let diatonic = (tonicStep(newKey) - tonicStep(oldKey) + 7) % 7;
+    if (semitones < 0 && diatonic) diatonic -= 7;
+    diatonic += Math.trunc(semitones / 12) * 7;
+    const transposeSpelled = pitch => {
+      const midi = midiOf(pitch) + semitones;
+      if (midi < 0 || midi > 127) throw new RangeError("Transposition exceeds MIDI pitch range");
+      const target = absStep(pitch) + diatonic;
+      const step = ((target % 7) + 7) % 7, oct = Math.floor(target / 7);
+      const alter = midi - ((oct + 1) * 12 + STEP_SEMIS[step]);
+      return Math.abs(alter) <= 2 ? { step, oct, alter } : spellMidi(midi, newKey, semitones > 0 ? "sharp" : "flat");
+    };
+    const transposeChord = chord => {
+      const parsed = cloneChordSymbol(chord);
+      if (!parsed?.root) return parsed;
+      const move = (letter, alter) => transposeSpelled({ step: STEP_EN.indexOf(letter), alter, oct: 4 });
+      const root = move(parsed.root, parsed.rootAlter);
+      let text = STEP_EN[root.step] + chordAlterText(root.alter, false) + parsed.quality;
+      if (parsed.bass) {
+        const bass = move(parsed.bass, parsed.bassAlter);
+        text += "/" + STEP_EN[bass.step] + chordAlterText(bass.alter, false);
+      }
+      return parseChordSymbol(text);
+    };
+    score.keySig = newKey;
     for (const ref of staffRefs(score)) for (const measure of ref.measures)
       if (measure.keySig != null) measure.keySig = transposeKey(measure.keySig);
     edited(score);
-    for (const ref of staffRefs(score))
-      for (const [m, measure] of ref.measures.entries())
-      for (const { ev } of measureEntries(measure, { score, includeSilent: true })) {
+    for (const ref of staffRefs(score)) {
+      if (ref.staffType === "tab" && ref.staff.linkedStaffId) continue;
+      for (const measure of ref.measures) for (const { ev } of measureEntries(measure, { score, includeSilent: true })) {
         if (ev.type === "note" && !isPercussionRef(ref)) {
-          ev.notes = ev.notes.map(n => {
-            const p = spellMidi(midiOf(n) + semitones, keySigAt(score, m), semitones > 0 ? "sharp" : "flat");
-            return { ...n, ...p };
-          });
-          for (const grace of ev.graceBefore || []) grace.notes = grace.notes.map(n => ({ ...n, ...transposePitch(n, semitones, keySigAt(score, m)) }));
+          ev.notes = ev.notes.map(n => ({ ...n, ...transposeSpelled(n) }));
+          for (const grace of ev.graceBefore || []) grace.notes = grace.notes.map(n => ({ ...n, ...transposeSpelled(n) }));
+          if (ev.tab) applyTabToEvent(ev, ref.part);
+        }
+        if (ev.chordSymbol) {
+          ev.chordSymbol = transposeChord(ev.chordSymbol);
+          if (ev.fretboard) {
+            const diagram = getDefaultFretboard(ev.chordSymbol);
+            if (diagram) ev.fretboard = diagram; else delete ev.fretboard;
+          }
         }
       }
+    }
+    syncLinkedTab(score);
     normalizeTies(score);
   }
 
-  /* ---------------- 직렬화 ---------------- */
+  // Linked TAB is a derived view. Only the standard staff is written to disk.
+  // At transaction boundaries a TAB-only edit is folded back into that source.
+  function linkedTabBaseline(score) {
+    const baseline = new Map();
+    for (const part of score.parts || []) for (const tab of part.staves || []) {
+      const source = tab.staffType === "tab" && part.staves.find(st => st.id === (tab.derivedFrom || tab.linkedStaffId) && st.staffType !== "tab");
+      if (source) baseline.set(tab.id, { source: JSON.stringify(source.measures), tab: JSON.stringify(tab.measures) });
+    }
+    return baseline;
+  }
+  function syncLinkedTab(score, previous) {
+    ensureParts(score);
+    let changed = false;
+    for (const part of score.parts) for (const tab of part.staves) {
+      const source = tab.staffType === "tab" && part.staves.find(st => st.id === (tab.derivedFrom || tab.linkedStaffId) && st.staffType !== "tab");
+      if (!source) continue;
+      const prior = previous?.get?.(tab.id);
+      if (prior && prior.source === JSON.stringify(source.measures) && prior.tab !== JSON.stringify(tab.measures)) {
+        source.measures = tab.measures.map(mm => {
+          const out = cloneData(mm);
+          out.voices = mm.voices.map(list => list.map(ev => {
+            const next = cloneData(ev);
+            next.id = ev.__linkedSourceId || ev.id;
+            delete next.__linkedSourceId;
+            if (next.type === "note" && next.tab) applyTabToEvent(next, part);
+            return next;
+          }));
+          return out;
+        });
+      }
+      tab.derivedFrom = source.id;
+      const derived = source.measures.map((mm, m) => {
+        const out = cloneData(mm);
+        delete out.clef;
+        out.voices = mm.voices.map(list => list.map(ev => {
+          const next = cloneData(ev);
+          next.id = ev.id + "-tab-" + tab.id;
+          Object.defineProperty(next, "__linkedSourceId", { value: ev.id, enumerable: false });
+          if (next.type === "note") applyTabToEvent(next, part);
+          return next;
+        }));
+        ensureMeasureVoices(out, score, m);
+        return out;
+      });
+      if (JSON.stringify(tab.measures) !== JSON.stringify(derived)) { tab.measures = derived; changed = true; }
+    }
+    if (changed) { invalidate(score); ensureParts(score); }
+    return score;
+  }
+
+  function deleteEvents(score, ids) {
+    const selected = new Set(ids), touched = [];
+    if (!selected.size) return 0;
+    let count = 0;
+    for (const ref of staffRefs(score)) for (const [m, mm] of ref.measures.entries()) {
+      for (let v = 0; v < VOICE_COUNT; v++) {
+        let changed = false;
+        mm.voices[v] = mm.voices[v].map(ev => {
+          if (!selected.has(ev.id)) return ev;
+          changed = true; count++;
+          return { id: ev.id, type: "rest", dur: cloneData(ev.dur), notes: [], voice: v + 1 };
+        });
+        if (changed) touched.push({ ref, m, voice: v + 1 });
+      }
+    }
+    invalidate(score);
+    for (const { ref, m, voice } of touched) consolidateRests(score, m, { ...ref, voice });
+    normalizeTies(score); normalizeSpanners(score);
+    return count;
+  }
+
+  /* ---------------- 입력 검증과 직렬화 ---------------- */
+  function validateScoreData(score) {
+    const fail = message => { throw new RangeError("악보를 열 수 없습니다: " + message); };
+    if (!score || typeof score !== "object" || Array.isArray(score)) fail("악보 데이터가 아닙니다");
+    const number = (value, min, max, label, integer = false) => {
+      if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max || (integer && !Number.isSafeInteger(value))) fail(label + " 값이 올바르지 않습니다");
+    };
+    // Bound depth, collections and strings before allocating model objects.
+    let nodes = 0;
+    const walk = (value, depth = 0) => {
+      if (++nodes > 1500000 || depth > 32) fail("악보가 너무 복잡합니다");
+      if (typeof value === "string" && value.length > 20000) fail("텍스트가 너무 깁니다");
+      if (typeof value === "number" && !Number.isFinite(value)) fail("유한한 숫자가 필요합니다");
+      if (value && typeof value === "object") for (const [key, child] of Object.entries(value)) {
+        if (["__proto__", "prototype", "constructor"].includes(key)) fail("허용되지 않는 데이터 속성입니다");
+        walk(child, depth + 1);
+      }
+    };
+    walk(score);
+    if (score.format && !["scoreforge-1", "scoreforge-2"].includes(score.format)) fail("지원하지 않는 저장 형식입니다");
+    const allowed = (value, list, label) => { if (value != null && !list.includes(value)) fail(label + " 값을 지원하지 않습니다"); };
+    const text = (value, limit, label) => { if (value != null && (typeof value !== "string" || value.length > limit)) fail(label + " 텍스트가 올바르지 않거나 너무 깁니다"); };
+    if (score.meta) { text(score.meta.title, 2000, "제목"); text(score.meta.composer, 2000, "작곡가"); }
+    const time = (ts, label) => {
+      try { validTimeSig(ts); } catch { fail(label + " 박자표가 올바르지 않습니다"); }
+    };
+    if (score.timeSig != null) time(score.timeSig, "기본");
+    if (score.keySig != null) number(score.keySig, -7, 7, "조표", true);
+    if (score.tempo != null) number(score.tempo, 20, 400, "템포");
+    if (score.clef != null && !CLEFS[score.clef]) fail("음자리표를 지원하지 않습니다");
+    const pitch = p => {
+      if (!p || typeof p !== "object") fail("음높이가 없습니다");
+      number(p.step, 0, 6, "음이름", true); number(p.alter, -2, 2, "임시표", true); number(p.oct, -1, 9, "옥타브", true);
+      number(midiOf(p), 0, 127, "음높이", true);
+    };
+    const duration = dur => {
+      if (!dur || typeof dur !== "object") fail("음길이가 없습니다");
+      number(dur.n, 1, 1048576, "음길이 분자", true); number(dur.d, 1, 1048576, "음길이 분모", true);
+      number(dur.dots ?? 0, 0, 2, "점음표", true);
+      if (dur.tuplet) {
+        number(dur.tuplet.actual, 2, 64, "잇단음표", true); number(dur.tuplet.normal, 1, 64, "잇단음표 기준", true);
+      }
+      try { return durValue(dur); } catch { fail("음길이 계산 범위를 넘었습니다"); }
+    };
+    const parts = score.parts;
+    if (parts != null && (!Array.isArray(parts) || parts.length > 64)) fail("파트 목록이 올바르지 않습니다");
+    const staffs = parts?.length ? parts.flatMap(part => {
+      if (!part || !Array.isArray(part.staves) || !part.staves.length || part.staves.length > 16) fail("보표 목록이 올바르지 않습니다");
+      return part.staves;
+    }) : [{ measures: score.measures }];
+    const canonical = staffs.find(st => Array.isArray(st.measures) && st.measures.length)?.measures;
+    if (!canonical || canonical.length > 10000) fail("마디 목록이 없거나 너무 큽니다");
+    let ts = score.timeSig || { num: 4, den: 4 };
+    const lengths = canonical.map((mm, m) => {
+      if (!mm || typeof mm !== "object") fail((m + 1) + "마디가 올바르지 않습니다");
+      if (mm.timeSig != null) { time(mm.timeSig, (m + 1) + "마디"); ts = mm.timeSig; }
+      const value = m === 0 && mm.pickup != null ? mm.pickup : mm.length;
+      if (value == null) return F(ts.num, ts.den);
+      try { const len = positiveFraction(value); if (len.gt(F(64))) fail("마디 길이가 너무 큽니다"); return len; } catch { fail("마디 길이가 올바르지 않습니다"); }
+    });
+    const ids = new Set();
+    for (const staff of staffs) {
+      if (!staff || typeof staff !== "object") fail("보표가 올바르지 않습니다");
+      if (staff.clef != null && !CLEFS[staff.clef]) fail("음자리표를 지원하지 않습니다");
+      if (staff.staffType != null && !["standard", "tab", "percussion"].includes(staff.staffType)) fail("보표 종류를 지원하지 않습니다");
+      if (staff.derivedFrom && staff.measures == null) {
+        const owner = parts?.find(part => part.staves.includes(staff));
+        if (staff.staffType !== "tab" || !owner?.staves.some(st => st.id === staff.derivedFrom && st.staffType !== "tab")) fail("연결 TAB 원본 보표가 없습니다");
+        continue;
+      }
+      if (!Array.isArray(staff.measures) || staff.measures.length !== canonical.length) fail("보표의 마디 수가 다릅니다");
+      for (const [m, mm] of staff.measures.entries()) {
+        if (!mm || typeof mm !== "object") fail("마디가 올바르지 않습니다");
+        if (mm.timeSig != null) time(mm.timeSig, (m + 1) + "마디");
+        if (mm.keySig != null) number(mm.keySig, -7, 7, "마디 조표", true);
+        if (mm.clef != null && !CLEFS[mm.clef]) fail("마디 음자리표를 지원하지 않습니다");
+        allowed(mm.breakType, ["system", "page", "section", ""], "마디 나눔");
+        if (mm.jump) allowed(mm.jump.type, JUMP_TYPES, "반복 이동");
+        allowed(mm.marker, MARKERS, "반복 표식");
+        const voices = Array.isArray(mm.voices) ? mm.voices : [mm.events];
+        if (voices.length > VOICE_COUNT || !voices.length) fail("성부 목록이 올바르지 않습니다");
+        for (const events of voices) {
+          if (events == null || (Array.isArray(events) && !events.length)) continue;
+          if (!Array.isArray(events) || events.length > 10000) fail("음표 목록이 올바르지 않습니다");
+          let sum = F(0);
+          for (const ev of events) {
+            if (!ev || !["note", "rest"].includes(ev.type)) fail("음표 종류를 지원하지 않습니다");
+            if (typeof ev.id !== "string" || !ev.id || ev.id.length > 200 || ids.has(ev.id)) fail("음표 ID가 없거나 중복됩니다");
+            ids.add(ev.id);
+            sum = sum.add(duration(ev.dur));
+            if (ev.tempo != null) number(ev.tempo, 20, 400, "음표 템포");
+            allowed(ev.stemDirection, ["auto", "up", "down"], "기둥 방향");
+            allowed(ev.notehead, ["normal", "x", "diamond", "circle-x"], "음표 머리");
+            allowed(ev.ornament, ORNAMENTS, "꾸밈음");
+            allowed(ev.soundFlag, Object.keys(SOUND_FLAGS), "연주 주법");
+            allowed(ev.dynamic, ["", "pppp", "ppp", "pp", "p", "mp", "mf", "f", "ff", "fff", "ffff", "sfz", "sfp", "fp", "rfz"], "셈여림");
+            if (ev.artics && (!Array.isArray(ev.artics) || ev.artics.some(art => !["staccato", "tenuto", "accent", "marcato", "fermata"].includes(art)))) fail("아티큘레이션을 지원하지 않습니다");
+            text(ev.lyric, 4000, "가사"); text(ev.staffText, 4000, "보표 글자"); text(ev.rehearsal, 200, "연습 기호");
+            if (ev.lyrics) {
+              if (!Array.isArray(ev.lyrics) || ev.lyrics.length > 8) fail("가사 절 목록이 올바르지 않습니다");
+              for (const lyric of ev.lyrics) {
+                text(lyric?.text, 4000, "가사");
+                number(lyric?.verse ?? 1, 1, 8, "가사 절", true);
+                allowed(lyric?.syllabic, ["single", "begin", "middle", "end"], "가사 음절");
+              }
+            }
+            if (ev.graceBefore && (!Array.isArray(ev.graceBefore) || ev.graceBefore.length > 128)) fail("꾸밈음 목록이 올바르지 않습니다");
+            if (ev.type === "note" && (!Array.isArray(ev.notes) || !ev.notes.length || ev.notes.length > 128)) fail("음표의 음높이가 없습니다");
+            for (const n of ev.notes || []) pitch(n);
+            for (const grace of ev.graceBefore || []) {
+              if (!grace || !Array.isArray(grace.notes) || !grace.notes.length) fail("꾸밈음의 음높이가 없습니다");
+              if (grace.dur) duration(grace.dur);
+              grace.notes.forEach(pitch);
+            }
+          }
+          if (!sum.eq(lengths[m])) fail((m + 1) + "마디의 음길이 합이 박자와 다릅니다");
+        }
+      }
+    }
+    return score;
+  }
+  const COMPUTED_EVENT_KEYS = ["_accidentals", "_accs", "_acc", "_stemDir", "_layout", "_x", "_y", "_beam", "_bounds"];
+  function compactEvent(ev) {
+    const out = cloneData(ev);
+    const stripComputed = value => {
+      if (!value || typeof value !== "object") return;
+      for (const key of Object.keys(value)) {
+        if (key.startsWith("_") || COMPUTED_EVENT_KEYS.includes(key)) delete value[key];
+        else stripComputed(value[key]);
+      }
+    };
+    stripComputed(out);
+    delete out.voice;
+    if (out.lyrics?.some(l => l.verse === 1)) delete out.lyric;
+    return out;
+  }
+  function compactMeasure(mm) {
+    const out = {};
+    for (const [key, value] of Object.entries(mm)) if (!["events", "voices"].includes(key) && !key.startsWith("_")) out[key] = cloneData(value);
+    out.voices = mm.voices.map((list, v) => v > 0 && voiceIsEmpty(list) ? null : list.map(compactEvent));
+    while (out.voices.length > 1 && out.voices.at(-1) === null) out.voices.pop();
+    Object.defineProperty(out, "events", { configurable: true, enumerable: false, get() { return this.voices[0]; } });
+    return out;
+  }
   function toJSON(score) {
     ensureParts(score);
-    const out = cloneData(score);
-    // Serialized compatibility only: old applications read events, while the
-    // live model and structuredClone history contain voices just once per bar.
-    for (const part of out.parts) for (const staff of part.staves)
-      for (const mm of staff.measures) mm.events = mm.voices[0];
-    out.measures = out.parts[0].staves[0].measures;
+    syncLinkedTab(score);
+    const out = {};
+    for (const [key, value] of Object.entries(score)) if (!["parts", "measures", "__cache"].includes(key) && !key.startsWith("_")) out[key] = cloneData(value);
+    out.format = "scoreforge-2";
+    out.parts = score.parts.map(part => ({ ...cloneData({ ...part, staves: undefined }), staves: part.staves.map(staff => {
+      const outStaff = cloneData({ ...staff, measures: undefined });
+      const source = staff.staffType === "tab" && part.staves.find(st => st.id === staff.linkedStaffId && st.staffType !== "tab");
+      if (source) outStaff.derivedFrom = source.id;
+      else outStaff.measures = staff.measures.map(compactMeasure);
+      return outStaff;
+    }) }));
+    const legacyMeasures = out.parts[0].staves[0].measures;
+    Object.defineProperty(out, "measures", { configurable: true, enumerable: false, get() { return legacyMeasures; } });
     return out;
   }
   function fromJSON(obj) {
-    const score = JSON.parse(JSON.stringify(obj));
+    // Preserve the legacy public aliases when a caller intentionally removes
+    // parts from an in-memory toJSON result. On disk only canonical data exists.
+    const input = !obj?.parts?.length && obj?.measures ? { ...obj, measures: obj.measures } : obj;
+    const score = JSON.parse(JSON.stringify(input));
     delete score.__cache;
-    // Reserve imported IDs before migration allocates silent voices/parts.
+    validateScoreData(score);
+    score.timeSig ||= { num: 4, den: 4 }; score.keySig ??= 0; score.tempo ??= 100;
+    score.meta ||= { title: "새 악보", composer: "" };
     const reserveIds = value => {
       if (!value || typeof value !== "object") return;
-      if (typeof value.id === "string" && /^e\d+$/.test(value.id)) _idCounter = Math.max(_idCounter, Number(value.id.slice(1)) + 1);
+      if (typeof value.id === "string" && /^e\d+$/.test(value.id)) {
+        const id = Number(value.id.slice(1));
+        if (Number.isSafeInteger(id) && id < Number.MAX_SAFE_INTEGER) _idCounter = Math.max(_idCounter, id + 1);
+      }
       for (const child of Object.values(value)) if (child && typeof child === "object") reserveIds(child);
     };
     reserveIds(score);
     ensureParts(score);
-    // id 카운터 복구 + 구버전 파일 마이그레이션
-    let maxId = 0;
-    for (const ref of staffRefs(score))
-      for (const m of ref.measures) {
-        ensureMeasureVoices(m, score);
-        for (const { ev } of measureEntries(m, { score, includeSilent: true })) {
-          const n = parseInt(String(ev.id).replace(/\D/g, ""), 10);
-          if (!isNaN(n)) maxId = Math.max(maxId, n);
-          if (!ev.notes) ev.notes = [];
-          normalizeEventChordSymbol(ev);
-          normalizeEventLyrics(ev);
-          if (ev.graceBefore) ev.graceBefore = cloneGraceList(ev.graceBefore);
-          for (const g of ev.graceBefore || []) {
-            const gn = parseInt(String(g.id).replace(/\D/g, ""), 10);
-            if (!isNaN(gn)) maxId = Math.max(maxId, gn);
-          }
-        }
-        syncMeasureEvents(m);
+    syncLinkedTab(score);
+    for (const ref of staffRefs(score)) for (const m of ref.measures) {
+      ensureMeasureVoices(m, score);
+      for (const { ev } of measureEntries(m, { score, includeSilent: true })) {
+        if (!ev.notes) ev.notes = [];
+        normalizeEventChordSymbol(ev); normalizeEventLyrics(ev);
+        if (ev.graceBefore) ev.graceBefore = cloneGraceList(ev.graceBefore);
       }
-    _idCounter = Math.max(_idCounter, maxId + 1);
+      syncMeasureEvents(m);
+    }
     if (!score.spanners) score.spanners = [];
     syncLegacyFields(score);
     normalizeSpanners(score);
@@ -1823,18 +2094,24 @@ window.SF = window.SF || {};
     lastAutosaveAt: 0,
     listeners: new Set(),
   };
-  const history = { undo: [], redo: [], max: 200 };
+  const history = { undo: [], redo: [], max: 200, budget: 16 * 1024 * 1024 };
   let contentVersion = 0, nextContentVersion = 0, savedVersion = 0, mutationDepth = 0;
 
   function onChange(fn) { state.listeners.add(fn); return () => state.listeners.delete(fn); }
-  function emit(type = "change", label = "") {
+  function emit(type = "change", label = "", opt = {}) {
     state.dirty = contentVersion !== savedVersion;
-    for (const fn of state.listeners) fn(state.score, { type, label, revision: state.revision, dirty: state.dirty });
+    for (const fn of state.listeners) fn(state.score, { type, label, revision: state.revision, dirty: state.dirty, layout: opt.layout !== false });
   }
   function bumpRevision() { state.rev = ++state.revision; }
   function snapshot(score) {
-    ensureParts(score);
-    return typeof structuredClone === "function" ? structuredClone(score) : cloneData(score);
+    return JSON.stringify(toJSON(score));
+  }
+  function restoreSnapshot(value) { return fromJSON(typeof value === "string" ? JSON.parse(value) : value); }
+  function trimHistory() {
+    let bytes = history.undo.reduce((sum, entry) => sum + entry.snapshot.length * 2, 0);
+    while (history.undo.length > 1 && (history.undo.length > history.max || bytes > history.budget)) {
+      bytes -= history.undo.shift().snapshot.length * 2;
+    }
   }
   function breakCoalescing() {
     const last = history.undo[history.undo.length - 1];
@@ -1863,7 +2140,7 @@ window.SF = window.SF || {};
   function mutate(label, fn, opt = {}) {
     if (state.readOnly) return false;
     if (mutationDepth) return fn(state.score);
-    const before = snapshot(state.score), previousVersion = contentVersion;
+    const before = snapshot(state.score), linkedBefore = linkedTabBaseline(state.score), previousVersion = contentVersion;
     const at = Date.now(), last = history.undo[history.undo.length - 1];
     const coalesced = opt.coalesce && last?.coalesce === opt.coalesce && !history.redo.length && at - last.at <= 1000;
     let result;
@@ -1873,18 +2150,19 @@ window.SF = window.SF || {};
       result = fn(state.score);
       invalidate(state.score);
       ensureParts(state.score);
+      syncLinkedTab(state.score, linkedBefore);
       normalizeSpanners(state.score);
     } catch (error) {
-      state.score = fromJSON(before);
+      state.score = restoreSnapshot(before);
       throw error;
     } finally { mutationDepth--; }
     if (coalesced) { last.label = label; last.at = at; }
     else history.undo.push({ label, snapshot: before, version: previousVersion, at, coalesce: opt.coalesce || null });
-    if (history.undo.length > history.max) history.undo.shift();
+    trimHistory();
     history.redo.length = 0;
     contentVersion = ++nextContentVersion;
     bumpRevision();
-    emit("mutate", label);
+    emit("mutate", label, opt);
     return result;
   }
   function undo() {
@@ -1892,7 +2170,7 @@ window.SF = window.SF || {};
     if (!history.undo.length) return false;
     const entry = history.undo.pop();
     history.redo.push({ label: entry.label, snapshot: snapshot(state.score), version: contentVersion, at: Date.now() });
-    state.score = fromJSON(entry.snapshot);
+    state.score = restoreSnapshot(entry.snapshot);
     contentVersion = entry.version;
     breakCoalescing(); bumpRevision();
     emit("undo", entry.label); return true;
@@ -1902,9 +2180,9 @@ window.SF = window.SF || {};
     if (!history.redo.length) return false;
     const entry = history.redo.pop();
     history.undo.push({ label: entry.label, snapshot: snapshot(state.score), version: contentVersion, at: Date.now(), coalesce: null });
-    state.score = fromJSON(entry.snapshot);
+    state.score = restoreSnapshot(entry.snapshot);
     contentVersion = entry.version;
-    bumpRevision();
+    trimHistory(); bumpRevision();
     emit("redo", entry.label); return true;
   }
   function canUndo() { return history.undo.length > 0; }
@@ -1912,6 +2190,10 @@ window.SF = window.SF || {};
   function undoLabel() { return history.undo[history.undo.length - 1]?.label || ""; }
   function redoLabel() { return history.redo[history.redo.length - 1]?.label || ""; }
   function resetHistory() { history.undo.length = 0; history.redo.length = 0; }
+  function historyInfo() {
+    return { undo: history.undo.length, redo: history.redo.length, budget: history.budget,
+      bytes: [...history.undo, ...history.redo].reduce((sum, entry) => sum + entry.snapshot.length * 2, 0) };
+  }
   function setScore(score, opt = {}) {
     state.score = fromJSON(score); resetHistory();
     contentVersion = ++nextContentVersion;
@@ -1945,8 +2227,8 @@ window.SF = window.SF || {};
     removeNoteFromChord, transposeNote, setNoteAccidental, toggleNoteTie,
     addGraceBefore, findGrace, cloneGraceList,
     invalidate, eventIndex, eventOrderMap, normalizeSpanners, slurCoverMap, addOttava, ottavaShiftAt,
-    rebar, transposeScore, toJSON, fromJSON,
+    rebar, transposeScore, syncLinkedTab, validateScoreData, deleteEvents, toJSON, fromJSON,
     state, mutate, undo, redo, canUndo, canRedo, undoLabel, redoLabel, resetHistory, setScore, onChange,
-    markSaved, markAutosaved, isAutosaved,
+    markSaved, markAutosaved, isAutosaved, historyInfo,
   };
 })(window.SF);

@@ -8,6 +8,10 @@
   const SUPABASE_URL_KEY = "scoreforge.supabase.url";
   const SUPABASE_KEY_KEY = "scoreforge.supabase.publishableKey";
   const AUTH_MODES = {
+    recovery: {
+      title: "비밀번호 재설정", submit: "새 비밀번호 저장",
+      message: "메일에서 확인한 계정의 새 비밀번호를 입력하세요.", showName: false,
+    },
     signup: {
       title: "회원가입",
       submit: "회원가입",
@@ -36,13 +40,18 @@
     authSub: null,
   };
 
+  function allowsConnectionOverride() {
+    return window.SF_ALLOW_CONNECTION_OVERRIDE === true && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location?.hostname || "");
+  }
   function readSupabaseConfig() {
     const embedded = window.SF_SUPABASE_CONFIG || {};
     let url = "";
     let publishableKey = "";
     try {
-      url = localStorage.getItem(SUPABASE_URL_KEY) || "";
-      publishableKey = localStorage.getItem(SUPABASE_KEY_KEY) || "";
+      if (allowsConnectionOverride()) {
+        url = localStorage.getItem(SUPABASE_URL_KEY) || "";
+        publishableKey = localStorage.getItem(SUPABASE_KEY_KEY) || "";
+      }
     } catch {}
     url = url || embedded.url || embedded.supabaseUrl || "";
     publishableKey = publishableKey || embedded.publishableKey || embedded.anonKey || embedded.key || "";
@@ -89,6 +98,7 @@
       });
       authState.configSig = sig;
       const { data } = authState.client.auth.onAuthStateChange((_event, session) => {
+        if (_event === "PASSWORD_RECOVERY") setTimeout(() => openAuthDialog("recovery"), 0);
         authState.session = session || null;
         if (!session || !session.user) {
           authState.profile = null;
@@ -130,6 +140,7 @@
   }
 
   async function saveSupabaseConfigFromDialog() {
+    if (!allowsConnectionOverride()) { setAuthMessage("연결 설정은 개발 환경에서만 변경할 수 있어요.", "error"); return false; }
     const url = ($("#supabase-url").value || "").trim().replace(/\/+$/, "");
     const publishableKey = ($("#supabase-key").value || "").trim();
     if (!url || !publishableKey) {
@@ -160,6 +171,7 @@
   }
 
   async function clearSupabaseConfig() {
+    if (!allowsConnectionOverride()) return false;
     const client = getSupabaseClient({ requireConfig: false });
     try {
       if (client) await client.auth.signOut();
@@ -275,8 +287,8 @@
     const logout = $("#btn-logout");
     if (signup) signup.hidden = signedIn;
     if (memberLogin) memberLogin.hidden = signedIn;
-    if (adminLogin) adminLogin.hidden = signedIn && admin;
-    if (adminPage) adminPage.classList.toggle("on", admin);
+    if (adminLogin) adminLogin.hidden = !admin;
+    if (adminPage) { adminPage.hidden = !admin; adminPage.classList.toggle("on", admin); }
     if (logout) logout.hidden = !signedIn;
     window.dispatchEvent(new CustomEvent("scoreforge:auth", { detail: { userId: authState.session?.user?.id || null } }));
     if (SF.cloud?.state.initialized) SF.cloud.onAuthChanged();
@@ -289,12 +301,14 @@
     $("#auth-title").textContent = meta.title;
     $("#auth-submit").textContent = meta.submit;
     $("#auth-display-name-row").style.display = meta.showName ? "grid" : "none";
-    $("#auth-password").autocomplete = meta.showName ? "new-password" : "current-password";
+    $("#auth-password").autocomplete = meta.showName || authState.mode === "recovery" ? "new-password" : "current-password";
+    $("#auth-email").closest("label").hidden = authState.mode === "recovery";
+    if ($("#btn-password-reset")) $("#btn-password-reset").hidden = authState.mode === "recovery";
     setAuthMessage(isSupabaseConfigured() ? meta.message : `${meta.message} 먼저 Supabase 연결 정보를 저장하세요.`);
     const dlg = $("#dlg-auth");
     if (!dlg.open) dlg.showModal();
     setTimeout(() => {
-      const target = isSupabaseConfigured() ? $("#auth-email") : $("#supabase-url");
+      const target = authState.mode === "recovery" ? $("#auth-password") : $("#auth-email");
       target && target.focus();
     }, 0);
   }
@@ -302,14 +316,11 @@
   async function handleAuthSubmit() {
     const mode = authState.mode;
     const meta = AUTH_MODES[mode] || AUTH_MODES.member;
-    if (!isSupabaseConfigured()) {
-      const saved = await saveSupabaseConfigFromDialog();
-      if (!saved) return;
-    }
+    if (!isSupabaseConfigured()) { setAuthMessage("계정 서비스가 아직 설정되지 않았습니다.", "error"); return; }
     const email = ($("#auth-email").value || "").trim();
     const password = $("#auth-password").value || "";
     const displayName = ($("#auth-display-name").value || "").trim();
-    if (!email || !password) {
+    if ((!email && mode !== "recovery") || !password) {
       setAuthMessage("이메일과 비밀번호를 입력하세요.", "error");
       return;
     }
@@ -320,10 +331,17 @@
     setAuthBusy(true);
     try {
       const client = getSupabaseClient();
+      if (mode === "recovery") {
+        const { error } = await client.auth.updateUser({ password });
+        if (error) throw error;
+        $("#dlg-auth").close();
+        toast("비밀번호를 변경했어요");
+        return;
+      }
       if (mode === "signup") {
         const options = { data: { display_name: displayName } };
         if (location.protocol === "http:" || location.protocol === "https:") {
-          options.emailRedirectTo = location.href.split("#")[0];
+          options.emailRedirectTo = authRedirectURL();
         }
         const { data, error } = await client.auth.signUp({ email, password, options });
         if (error) throw error;
@@ -473,7 +491,48 @@
     }
   }
 
+  function authRedirectURL() {
+    const target = new URL(location.href);
+    target.search = ""; target.hash = "";
+    return target.href;
+  }
+  async function requestPasswordReset(email = $("#auth-email")?.value.trim()) {
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setAuthMessage("재설정 메일을 받을 이메일을 입력하세요.", "error"); return false;
+    }
+    try {
+      const { error } = await getSupabaseClient().auth.resetPasswordForEmail(email, { redirectTo: authRedirectURL() });
+      if (error) throw error;
+      setAuthMessage("가입된 이메일이면 비밀번호 재설정 메일을 받을 수 있습니다. 받은 편지함을 확인하세요.", "ok");
+      return true;
+    } catch (error) { setAuthMessage(authErrorMessage(error), "error"); return false; }
+  }
+  function showAccountInfo(privacy = false) {
+    if (!privacy && !authState.session?.user) { openAuthDialog("member"); return; }
+    let dialog = $("#dlg-account-info");
+    if (!dialog) {
+      dialog = document.createElement("dialog"); dialog.id = "dlg-account-info";
+      dialog.innerHTML = `<div class="dlg-head"><h2>계정 · 개인정보 · 이용 안내</h2><form method="dialog"><button class="dlg-close" aria-label="닫기">✕</button></form></div><div class="dlg-body"><p>ScoreForge는 악보 편집·재생 도구입니다. 중요한 악보는 파일로도 보관해 주세요. 업로드한 악보의 권리는 작성자에게 있으며, 공유 시 필요한 권한을 확인해 주세요.</p><p>기기에는 자동 저장 악보, 화면 설정, 로그인 세션과 클라우드 저장 대기본이 보관됩니다. 로그인하면 이메일·표시 이름·회원 권한과 클라우드에 저장한 악보를 Supabase에서 처리합니다.</p><p>비공개 악보는 소유자와 운영 관리자에게 보입니다. 공개 공유 링크를 가진 사람은 해당 악보를 볼 수 있습니다. 공유를 끄면 링크 접근이 중지됩니다. 로그인 계정은 현재 Lesson Designer와 공유합니다.</p><p>악기 음원을 선택하면 외부 음원 제공처에 파일 요청이 전송될 수 있습니다. 파일 메뉴의 도움말에서 글꼴·음원 출처를 확인할 수 있습니다.</p><p>클라우드 악보는 내 악보 목록에서 직접 삭제할 수 있습니다. 공용 회원 계정 전체 탈퇴는 다른 앱의 자료에도 영향을 주므로, 계정 분리 전에는 운영자에게 요청해 주세요. 계정과 저장 악보의 자동 일괄 삭제는 아직 제공하지 않습니다.</p><p>데이터를 지우기 전 필요한 파일을 내려받으세요. 브라우저 사이트 데이터를 지우면 기기의 자동 저장본도 삭제됩니다. 비밀번호 재설정은 로그인 창에서 요청할 수 있습니다.</p><button id="account-open-scores" class="tbtn" type="button">내 클라우드 악보 관리</button></div>`;
+      document.body.append(dialog);
+      $("#account-open-scores").addEventListener("click", () => { dialog.close(); SF.cloud?.openList(); });
+    }
+    SF.ui.open(dialog);
+  }
+  function bindAccountControls() {
+    const config = $("#dlg-auth .auth-config");
+    if (config) config.hidden = !allowsConnectionOverride();
+    const reset = document.createElement("button");
+    reset.id = "btn-password-reset"; reset.type = "button"; reset.className = "tbtn"; reset.textContent = "비밀번호를 잊으셨나요?";
+    reset.addEventListener("click", () => requestPasswordReset());
+    $("#auth-submit").parentElement.prepend(reset);
+    document.addEventListener("click", event => {
+      const item = event.target.closest("[data-act='account-settings'], [data-act='privacy']");
+      if (item) showAccountInfo(item.dataset.act === "privacy");
+    });
+  }
+
   function bindAuth() {
+    bindAccountControls();
     $("#btn-signup").addEventListener("click", () => openAuthDialog("signup"));
     $("#btn-member-login").addEventListener("click", () => openAuthDialog("member"));
     $("#btn-admin-login").addEventListener("click", () => openAuthDialog("admin"));
@@ -508,5 +567,5 @@
       return JSON.parse(atob(encoded.padEnd(Math.ceil(encoded.length / 4) * 4, "="))).role === "anon";
     } catch { return false; }
   }
-  SF.auth = { state: authState, getClient: getSupabaseClient, openDialog: openAuthDialog, bindAuth, init: initSupabaseAuth, renderAdminPage, isPublicKey };
+  SF.auth = { state: authState, getClient: getSupabaseClient, openDialog: openAuthDialog, bindAuth, init: initSupabaseAuth, renderAdminPage, isPublicKey, readSupabaseConfig, allowsConnectionOverride, requestPasswordReset, authRedirectURL, showAccountInfo };
 })(window.SF);

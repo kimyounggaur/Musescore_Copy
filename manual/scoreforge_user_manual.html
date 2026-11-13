@@ -369,7 +369,7 @@
 
     <section id="input">
       <h2>3. 음표와 쉼표 입력</h2>
-      <p class="lead">ScoreForge는 보표 클릭, 키보드, 화면 피아노, MIDI, 드럼 패드, 스피디툴 입력을 지원합니다. 사용자의 작업 습관에 맞춰 골라 쓰면 됩니다.</p>
+      <p class="lead">ScoreForge는 보표 클릭, 키보드, 화면 피아노, MIDI, 드럼 패드, 스피디툴 입력을 지원합니다. 사용자의 작업 습관에 맞춰 골라 쓰면 됩니다. MIDI 건반을 사용할 때는 먼저 상단의 MIDI 버튼을 눌러 장치 접근을 허용합니다. 권한을 거절했어도 같은 버튼으로 다시 시도할 수 있습니다.</p>
       <div class="grid-2">
         <div>
           <h3>3-1. 마우스로 입력</h3>
@@ -404,7 +404,7 @@
         <tr><td>쉼표 입력</td><td><kbd>0</kbd></td><td>현재 커서 위치에 선택한 길이의 쉼표를 넣습니다.</td></tr>
         <tr><td>화음 쌓기</td><td><kbd>Shift</kbd>+<kbd>A</kbd>-<kbd>G</kbd></td><td>직전 음표에 음을 추가합니다.</td></tr>
         <tr><td>점음표</td><td><kbd>.</kbd></td><td>현재 음길이에 부점을 켜거나 끕니다.</td></tr>
-        <tr><td>잇단음표</td><td><kbd>Ctrl</kbd>+<kbd>3</kbd>-<kbd>9</kbd></td><td>선택한 음표 또는 쉼표를 n잇단으로 나눕니다.</td></tr>
+        <tr><td>잇단음표</td><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>2</kbd>–<kbd>9</kbd></td><td>선택한 음표 또는 쉼표를 n잇단으로 나눕니다.</td></tr>
       </table>
       <h3 id="speedy">3-3. 스피디툴(speedy tool)로 숫자 한 번 입력</h3>
       <p>스피디툴은 음높이를 크로스헤어로 먼저 정해두고, 숫자 키 한 번으로 해당 길이의 음표를 넣는 빠른 입력 방식입니다. 마우스를 덜 쓰고 리듬을 연속 입력할 때 특히 유용합니다.</p>
@@ -637,9 +637,9 @@
       </div>
       <h3>이동 방법</h3>
       <ul>
-        <li><kbd>F12</kbd>: 내비게이터 열기</li>
-        <li><kbd>F11</kbd>: 타임라인 열기</li>
-        <li><kbd>Ctrl</kbd>+<kbd>F</kbd> 또는 <kbd>Ctrl</kbd>+<kbd>G</kbd>: 마디 번호나 리허설 마크로 이동</li>
+        <li><kbd>Alt</kbd>+<kbd>N</kbd>: 내비게이터 열기</li>
+        <li><kbd>Alt</kbd>+<kbd>T</kbd>: 타임라인 열기</li>
+        <li><kbd>Alt</kbd>+<kbd>G</kbd>: 마디 번호나 리허설 마크로 이동</li>
         <li>리허설 마크 A로 이동하려면 <code>r:A</code>를 입력합니다.</li>
       </ul>
     </section>
@@ -700,12 +700,14 @@
         <tr><td><kbd>T</kbd></td><td>타이</td><td>같은 음높이의 다음 음과 붙입니다.</td></tr>
         <tr><td><kbd>Enter</kbd></td><td>스피디 화음 추가</td><td>크로스헤어 음높이를 현재 위치의 화음에 더합니다.</td></tr>
         <tr><td><kbd>S</kbd></td><td>이음줄</td><td>범위 선택 후 사용하면 좋습니다.</td></tr>
-        <tr><td><kbd>Ctrl</kbd>+<kbd>3</kbd>-<kbd>9</kbd></td><td>잇단음표</td><td>선택한 음표/쉼표를 n개로 나눕니다.</td></tr>
+        <tr><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>2</kbd>–<kbd>9</kbd></td><td>잇단음표</td><td>선택한 음표/쉼표를 n개로 나눕니다.</td></tr>
         <tr><td><kbd>Ctrl</kbd>+<kbd>C/V/X</kbd></td><td>복사/붙여넣기/잘라내기</td><td>범위 선택과 함께 쓰세요.</td></tr>
         <tr><td><kbd>Space</kbd></td><td>재생/일시정지</td><td>선택한 위치부터 재생합니다.</td></tr>
         <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>저장</td><td>JSON 파일을 내려받습니다.</td></tr>
-        <tr><td><kbd>F11</kbd>/<kbd>F12</kbd></td><td>타임라인/내비게이터</td><td>긴 악보에서 이동 속도를 높입니다.</td></tr>
-        <tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td>명령 팔레트</td><td>기능 이름으로 검색해 실행합니다.</td></tr>
+        <tr><td><kbd>Alt</kbd>+<kbd>L</kbd></td><td>선택 범위 반복 재생</td><td>선택한 구간을 반복합니다.</td></tr>
+        <tr><td><kbd>Alt</kbd>+<kbd>G</kbd></td><td>마디·리허설 이동</td><td>마디 번호 또는 리허설 마크로 이동합니다.</td></tr>
+        <tr><td><kbd>Alt</kbd>+<kbd>T</kbd>/<kbd>N</kbd></td><td>타임라인/내비게이터</td><td>긴 악보에서 이동 속도를 높입니다.</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd></td><td>명령 팔레트</td><td>기능 이름으로 검색해 실행합니다.</td></tr>
       </table>
       <figure>
         <img src="assets/04-command-palette.png" alt="명령 팔레트">

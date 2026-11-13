@@ -80,7 +80,7 @@
     }
     html += `<section class="prop-sec"><h3>기호/텍스트</h3><div class="prop-grid">
       <label>셈여림</label><select data-prop="dynamic">${dynOptions}</select>
-      <label>템포</label><input type="number" data-prop="tempo" min="30" max="280" value="${ev.tempo || ""}" placeholder="없음">
+      <label>템포</label><input type="number" data-prop="tempo" min="30" max="280" value="${Number.isFinite(ev.tempo) ? Math.max(30, Math.min(280, ev.tempo)) : ""}" placeholder="없음">
       <label>리허설</label><input type="text" data-prop="rehearsal" value="${htmlEsc(ev.rehearsal || "")}" maxlength="12">
       <label>스태프 텍스트</label><input type="text" data-prop="staffText" value="${htmlEsc(ev.staffText || "")}" maxlength="48">
       <label>코드</label><input type="text" data-prop="chordSymbol" value="${htmlEsc(ev.chordSymbol ? (ev.chordSymbol.normalized || ev.chordSymbol.raw || "") : "")}" maxlength="24">
@@ -344,7 +344,7 @@
       if (key === "volume") rec.volume = Math.max(0, Math.min(1.5, +value / 100));
       if (key === "pan") rec.pan = Math.max(-1, Math.min(1, +value / 100));
       score.playbackSettings.mixer[partId] = rec;
-    }, { coalesce: "mixer:" + partId + ":" + key });
+    }, { coalesce: "mixer:" + partId + ":" + key, layout: false });
     P.updateMixer(C.state.score);
     update();
   }
@@ -376,7 +376,12 @@
       .map(k => `<option value="${k}">${C.KEY_NAMES[k]}</option>`).join("");
     $("#set-key").value = String(score.keySig);
     $("#set-time").value = score.timeSig.num + "/" + score.timeSig.den;
-    $("#set-tempo").value = score.tempo;
+    $("#set-tempo").value = SF.uiV3?.tempoDisplay(score) ?? score.tempo;
+    $("#set-tempo").min = score.timeSig.den === 8 && score.timeSig.num >= 6 && score.timeSig.num % 3 === 0 ? 20 : 30;
+    $("#set-tempo").max = score.timeSig.den === 8 && score.timeSig.num >= 6 && score.timeSig.num % 3 === 0 ? 186.7 : 280;
+    $("#set-tempo").step = "0.1";
+    $("#set-tempo").dataset.time = score.timeSig.num + "/" + score.timeSig.den;
+    $("label[for='set-tempo']").textContent = score.timeSig.den === 8 && score.timeSig.num >= 6 && score.timeSig.num % 3 === 0 ? "빠르기 ♩.=" : "빠르기 ♩=";
     const layout = C.ensureLayout(score);
     $("#set-measures-system").value = layout.measuresPerSystem || "";
     $("#set-page-size").value = layout.pageSize || "A4";
@@ -392,7 +397,7 @@
 
   function bindSettings() {
     $("#btn-settings").addEventListener("click", openSettings);
-    $("#set-apply").addEventListener("click", (e) => {
+    $("#set-apply").addEventListener("click", async (e) => {
       e.preventDefault();
       const score = C.state.score;
       const [num, den] = $("#set-time").value.split("/").map(Number);
@@ -400,7 +405,25 @@
       const newKey = +$("#set-key").value;
       const newClef = $("#set-clef").value;
       const newEnsemble = $("#set-ensemble").value;
-      const newTempo = Math.max(30, Math.min(280, +$("#set-tempo").value || 100));
+      const ensembleChanged = newEnsemble !== "custom" && C.ensembleKey(score) !== newEnsemble;
+      if (ensembleChanged) {
+        // applyEnsemble preserves the first staff only, regardless of target size.
+        const removed = C.staffRefs(score).slice(1);
+        const lost = removed.map(ref => ({
+          name: ref.name,
+          notes: ref.measures.reduce((total, measure) => total + C.ensureMeasureVoices(measure, score).reduce((sum, events) => sum + events.filter(ev => ev.type === "note").length, 0), 0)
+        })).filter(ref => ref.notes);
+        if (lost.length && !await SF.ui.confirmDialog({
+          title: "편성 변경",
+          message: SF.t ? SF.t("review.ensembleLoss", { details: lost.map(ref => `${ref.name} (${SF.t("review.noteCount", { count: ref.notes })})`).join(", ") }) : `편성을 바꾸면 ${lost.map(ref => `${ref.name} (${ref.notes}개 음표·화음)`).join(", ")}의 내용이 지워집니다. 계속할까요?`,
+          confirmText: "편성 변경", danger: true
+        })) return;
+        // A modal wait must never apply settings to a score opened in the meantime.
+        if (C.state.score !== score) return;
+      }
+      const [displayNum, displayDen] = $("#set-tempo").dataset.time.split("/").map(Number);
+      const tempoScore = { timeSig: { num: displayNum, den: displayDen } };
+      const newTempo = Math.max(30, Math.min(280, SF.uiV3?.tempoFromDisplay(+$("#set-tempo").value || 100, tempoScore) ?? +$("#set-tempo").value));
       const measuresPerSystem = Math.max(0, Math.min(16, +$("#set-measures-system").value || 0));
       const pageSize = $("#set-page-size").value;
       const orientation = $("#set-orientation").value;
