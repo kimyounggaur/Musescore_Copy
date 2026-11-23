@@ -9,6 +9,9 @@
   const AUTO_KEY = "scoreforge.cloud.auto.v1";
   const QUEUE_KEY = "scoreforge.cloud.queue.v1";
   const META_KEYS = ["cloudId", "cloudUpdatedAt", "cloudOwner", "cloudProject"];
+  // 이 기기의 문서 식별자(SF.session이 붙인다). 클라우드 데이터에는 싣지 않지만 META_KEYS와 달리
+  // writeMetadata의 대체 경로가 지우면 안 되므로 따로 둔다.
+  const LOCAL_META_KEYS = ["docId"];
   const state = { initialized: false, autoSave: true, dirty: false, status: "", saving: false };
   const queue = new Map();
   const locale = () => SF.i18n?.getLanguage() === "en" ? "en-US" : "ko-KR";
@@ -43,7 +46,7 @@
   function snapshot(score) {
     const data = C.toJSON(score);
     data.meta = { ...data.meta };
-    for (const key of META_KEYS) delete data.meta[key];
+    for (const key of [...META_KEYS, ...LOCAL_META_KEYS]) delete data.meta[key];
     const json = JSON.stringify(data);
     if (new TextEncoder().encode(json).length >= 2000000) throw error("TOO_LARGE", "악보 데이터는 2MB 미만이어야 해요. 로컬 파일로 저장해 주세요.");
     return data;
@@ -290,7 +293,7 @@
         (!Array.isArray(data.parts) && !Array.isArray(data.measures))) throw error("INVALID_SCORE", "악보 데이터 형식이 올바르지 않아요.");
     const clean = JSON.parse(JSON.stringify(data));
     clean.meta = { ...clean.meta, title: titleOf(title) };
-    for (const key of META_KEYS) delete clean.meta[key];
+    for (const key of [...META_KEYS, ...LOCAL_META_KEYS]) delete clean.meta[key];
     snapshot(clean); // Enforce the client-side limit before normalizing.
     return C.fromJSON(clean);
   }
@@ -329,7 +332,7 @@
     if (sequence !== loadSequence) return null;
     if (!shared) await requireUser(score.meta.cloudOwner, score.meta.cloudProject);
     if (sequence !== loadSequence) return null;
-    if (!await installScore(score, shared, { reason: "클라우드 악보 열기", stale: () => sequence !== loadSequence })) return null;
+    if (!await installScore(score, shared, { reason: "클라우드 악보 열기", origin: "cloud", stale: () => sequence !== loadSequence })) return null;
     if (!shared) clearShareURL();
     return score;
   }
@@ -339,7 +342,7 @@
   async function makeLocalCopy() {
     const score = decode(snapshot(C.state.score), `${titleOf(C.state.score.meta.title)} 사본`);
     // 사본은 지금 내용을 그대로 담으므로 잃는 변경이 없다 — 저장 확인을 건너뛴다.
-    if (!await installScore(score, false, { reason: "로컬 사본 만들기", confirmed: true })) return null;
+    if (!await installScore(score, false, { reason: "로컬 사본 만들기", origin: "copy", confirmed: true })) return null;
     clearShareURL();
     if (SF.io && SF.io.autosave) SF.io.autosave(C.state.score);
     toast("로컬 사본을 만들었어요. 이제 편집할 수 있어요.");

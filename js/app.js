@@ -151,7 +151,7 @@
   function scheduleAutosave() {
     if (C.state.readOnly) return;
     IO.autosave(C.state.score, { onComplete(status) {
-      if (status.error) toast("자동 저장 공간이 부족해요. 파일 메뉴에서 악보를 저장해 주세요.");
+      if (status.error) toast(status.error.name === "QuotaExceededError" ? "자동 저장 공간이 부족해요. 파일 메뉴에서 악보를 저장해 주세요." : "자동 저장에 실패했어요. 파일 메뉴에서 악보를 저장해 주세요.");
       else { savedRevision = status.revision; $("#status-hint").textContent = "이 기기에 자동 저장했어요"; }
     } });
   }
@@ -561,6 +561,14 @@
   }
 
   /* ---------------- 상태바 ---------------- */
+  /** "마지막 파일 저장 시각" — 자동 저장은 이 브라우저에만 남는다는 것을 잊지 않게 한다(Safari는 7일 미사용 시 지울 수 있음). */
+  function refreshSavedLabel() {
+    const el = $("#status-saved");
+    if (!el) return;
+    const text = SF.session.savedLabel();
+    el.hidden = !text;
+    el.textContent = text ? (SF.i18n?.translate(text) ?? text) : "";
+  }
   function updateStatus() {
     const score = C.state.score;
     const el = $("#status-sel");
@@ -595,6 +603,7 @@
     text = SF.i18n?.translate(text) ?? text;
     el.textContent = text;
     $("#aria-live").textContent = text;
+    refreshSavedLabel();
 
     $("#status-hint").textContent = ui.speedy
       ? (ui.speedyHeld.size
@@ -638,7 +647,8 @@
       toast(`열 수 없어요: ${name}${err && err.message ? " — " + err.message : ""}`);
       return false;
     }
-    return SF.session.replaceScore(loaded, { name, report, readOnly: false, ...opts });
+    const origin = /\.json$/i.test(name || "") ? "file" : "import";
+    return SF.session.replaceScore(loaded, { name, report, readOnly: false, origin, ...opts });
   }
 
   function showImportReport(name, score, report) {
@@ -686,7 +696,7 @@
       const act = item.dataset.act;
       const score = C.state.score;
       if (act === "new") {
-        if (await SF.session.replaceScore(C.createScore({}), { reason: "새 악보 만들기", toast: false })) openSettings();
+        if (await SF.session.replaceScore(C.createScore({}), { reason: "새 악보 만들기", toast: false, origin: "new" })) openSettings();
       } else if (act === "open") {
         IO.openScoreDialog(handleLoadedScore);
       } else if (act === "save") {
@@ -709,7 +719,7 @@
         toast("유저 매뉴얼을 새 탭으로 열었어요");
       } else if (act.startsWith("demo-")) {
         const key = act.slice(5);
-        if (IO.DEMOS[key]) await SF.session.replaceScore(IO.DEMOS[key](), { reason: "데모 열기", toast: "데모 악보를 불러왔어요 — 스페이스로 재생해 보세요" });
+        if (IO.DEMOS[key]) await SF.session.replaceScore(IO.DEMOS[key](), { reason: "데모 열기", toast: "데모 악보를 불러왔어요 — 스페이스로 재생해 보세요", origin: "demo" });
       }
     });
   }
@@ -728,9 +738,9 @@
       btn.addEventListener("click", async () => {
         const k = btn.dataset.start;
         if (k === "blank") {
-          if (await SF.session.replaceScore(C.createScore({}), { reason: "새 악보 만들기", toast: false })) { $("#dlg-welcome").close(); openSettings(); }
+          if (await SF.session.replaceScore(C.createScore({}), { reason: "새 악보 만들기", toast: false, origin: "new" })) { $("#dlg-welcome").close(); openSettings(); }
         } else if (IO.DEMOS[k]) {
-          if (await SF.session.replaceScore(IO.DEMOS[k](), { reason: "데모 열기", toast: "스페이스 키로 재생해 보세요!" })) $("#dlg-welcome").close();
+          if (await SF.session.replaceScore(IO.DEMOS[k](), { reason: "데모 열기", toast: "스페이스 키로 재생해 보세요!", origin: "demo" })) $("#dlg-welcome").close();
         }
       });
     });
@@ -931,7 +941,9 @@
   }
 
   /* ---------------- 시작 ---------------- */
-  function start() {
+  async function start() {
+    // 저장소 열기·옛 자동 저장 이전·복원할 악보 고르기를 화면을 만드는 동안 먼저 시작한다.
+    const restoring = SF.session.restoreOnBoot().catch(() => null);
     applyTheme(loadTheme(), { silent: true });
     SF.palette.init();
     SF.ui.init();
@@ -953,15 +965,17 @@
     bindNavigationPanels();
     initMidi();
 
-    const saved = IO.loadAutosave();
+    const saved = await restoring;
     if (saved) {
       C.setScore(saved);
       toast("이전 작업을 자동으로 불러왔어요");
     } else {
-      C.setScore(IO.DEMOS.butterfly());
+      const demo = IO.DEMOS.butterfly();
+      SF.session.claim(demo, { origin: "demo" });   // 문서 ID만 붙인다 — 첫 편집 전에는 기록을 만들지 않는다
+      C.setScore(demo);
     }
     C.onChange((score, event) => {
-      if (["saved", "autosaved"].includes(event?.type)) { refreshToolbar(); return; }
+      if (["saved", "autosaved"].includes(event?.type)) { refreshToolbar(); refreshSavedLabel(); return; }
       changeRevision = C.state.revision; update();
       if (["mutate", "undo", "redo"].includes(event?.type)) scheduleAutosave();
       if (event?.type === "setScore") { clearTimeout(saveTimer); SF.cloud?.onScoreLoaded(score); }
