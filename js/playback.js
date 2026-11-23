@@ -125,6 +125,7 @@
   const loadTurns = new Map(); // kind → 그 kind의 마지막 로딩 Promise(같은 kind는 차례로 로딩)
   let smplrModule = null;
   let smplrPromise = null;
+  let smplrOverride = null; // 테스트가 넣은 smplr 대역(__setSmplrModuleForTest). 앱 코드는 쓰지 않는다
   let sampleStatus = { state: "idle", text: "샘플 대기", detail: "재생하면 smplr 실제 악기 샘플을 불러옵니다." };
   let onSampleStatus = null;
 
@@ -156,7 +157,14 @@
     if (onSampleStatus) onSampleStatus(sampleStatus);
   }
 
+  // 테스트용: 설정하면 vendor/smplr를 불러오는 import() 대신 이 모듈을 쓴다. null을 주면 원래대로 돌아간다.
+  // (이미 만든 악기·loader는 그대로 두므로, 바꾸기 전에 releaseUnused 등으로 정리하는 것은 테스트의 몫이다.)
+  function __setSmplrModuleForTest(mod) {
+    smplrOverride = mod && typeof mod === "object" ? mod : null;
+  }
+
   async function loadSmplrModule() {
+    if (smplrOverride) return smplrOverride;
     if (smplrModule) return smplrModule;
     if (!smplrPromise) {
       setSampleStatus("loading", "샘플 로딩", "smplr 라이브러리를 불러오는 중입니다.");
@@ -1039,5 +1047,6 @@
     getSampleStatus, setSampleStatusHandler, ensureSampleInstrument, buildPlaybackPlan,
     limitedStorage, // 테스트용: 동시 요청 제한 유틸
     releaseUnused, debugStats, getPianoQuality, setPianoQuality,
+    __setSmplrModuleForTest, // 테스트 전용
   };
 })(window.SF);
