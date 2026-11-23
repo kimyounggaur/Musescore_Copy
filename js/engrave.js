@@ -161,7 +161,7 @@
     FB[`rest${den}`] = { d };
   }
 
-  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;").replace(/>/g, "&gt;"); }
+  const esc = SF.html.esc;
   function safeColor(s) {
     const v = String(s || "").trim();
     return /^#[0-9a-fA-F]{6}$/.test(v) ? v : "";
