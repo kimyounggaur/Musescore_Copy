@@ -143,7 +143,7 @@ test('P6-3 375px: ⋯을 누르면 메뉴가 화면 안에 열리고 모든 컨�
   }
 });
 
-test('P6-3 더보기 안 컨트롤이 실제로 동작한다: 테마·언어(선택해도 메뉴는 열린 채)·빠르기·도움말·믹서', { skip, timeout: 120000 }, async () => {
+test('P6-3 더보기 안 컨트롤이 실제로 동작한다: 테마·언어(선택해도 메뉴는 열린 채)·빠르기·도움말, 믹서는 안내(🔒D3)', { skip, timeout: 120000 }, async () => {
   await withPage({ width: 375, height: 667 }, async page => {
     await page.click('#btn-more');
     await page.waitForFunction(() => document.querySelector('#more-menu').matches(':popover-open'));
@@ -177,8 +177,10 @@ test('P6-3 더보기 안 컨트롤이 실제로 동작한다: 테마·언어(선
     await page.click('#btn-more');
     await page.waitForFunction(() => document.querySelector('#more-menu').matches(':popover-open'));
     await page.click('#btn-mixer');
-    await page.waitForFunction(() => document.querySelector('#dlg-mixer').open);
-    assert.equal(await isOpen(page, 'more-menu'), false);
+    // 🔒D3(P6-4): 믹서 같은 고급 패널은 휴대폰 폭에서 열지 않고 안내만 띄운다. 버튼을 누르면 메뉴가 닫히는 것은 그대로다.
+    await page.waitForFunction(() => document.querySelector('#toast').classList.contains('show'));
+    assert.equal(await page.evaluate(() => document.querySelector('#dlg-mixer').open), false, '믹서 창은 열리지 않는다');
+    assert.equal(await isOpen(page, 'more-menu'), false, '버튼을 눌렀으니 메뉴는 닫힌다');
   });
 });
 

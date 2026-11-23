@@ -256,12 +256,23 @@
       return `<button class="timeline-cell" data-midx="${i}"><b>${i + 1}</b><span>${htmlEsc(marker || `${d.notes} notes`)}</span><i class="timeline-density" style="width:${width}%"></i></button>`;
     }).join("") + `</div>`;
   }
+  /* 🔒D3(보기·재생·간단한 수정): 믹서·타임라인·내비게이터 같은 고급 패널은 데스크톱 화면을 전제로 한다.
+   * 휴대폰 폭(상단바가 ⋯ 더보기로 접히는 500px 이하)에서는 열지 않고 "데스크톱에서 사용할 수 있어요"만 알린다.
+   * 버튼·F11·F12·명령 팔레트가 모두 아래 문 하나를 지난다. D3을 "전체"로 바꾸면 이 함수가 항상 false를 돌려주게 하면 된다. */
+  const PHONE_WIDTH = "(max-width:500px)";
+  function desktopOnly(message) {
+    if (typeof window.matchMedia !== "function" || !window.matchMedia(PHONE_WIDTH).matches) return false;
+    flashHint(message);
+    return true;
+  }
   function openNavigator() {
+    if (desktopOnly("내비게이터는 데스크톱에서 사용할 수 있어요")) return;
     renderNavigator();
     const dlg = $("#dlg-navigator");
     if (!dlg.open) dlg.showModal();
   }
   function openTimelinePanel() {
+    if (desktopOnly("타임라인은 데스크톱에서 사용할 수 있어요")) return;
     renderTimelinePanel();
     const dlg = $("#dlg-timeline");
     if (!dlg.open) dlg.showModal();
@@ -349,6 +360,7 @@
 
   function bindMixer() {
     $("#btn-mixer").addEventListener("click", () => {
+      if (desktopOnly("믹서는 데스크톱에서 사용할 수 있어요")) return;
       renderMixerRows();
       $("#dlg-mixer").showModal();
     });
