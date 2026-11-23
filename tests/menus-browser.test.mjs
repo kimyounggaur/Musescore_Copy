@@ -191,6 +191,47 @@ test('P6-1 바깥 누름·화면 크기 변경: 바깥을 누르면 닫히고, �
   });
 });
 
+// P6-1b: 메뉴가 "열리는 순간"부터 Esc·창 크기 변화를 처리한다.
+// 네이티브 Popover는 showPopover() 직후 beforetoggle(동기)을 지나 메뉴가 열리지만 toggle 이벤트는 한 박자(약 10~20ms) 늦게 온다.
+// 처리기(Esc 가로채기·resize 다시 놓기)를 toggle에서 붙이던 때는 그 틈에 들어온 Esc를 아무도 닫지 못했고(브라우저 기본 동작도 닫지 않았다)
+// 틈에 온 resize는 다시 놓이지 않았다 — 사람은 닿을 수 없는 틈이지만 자동 시험이 열자마자 Esc를 누르면 간헐 실패가 났다.
+// 틈을 우연에 맡기지 않으려고 같은 작업 안에서 열고 바로 이벤트를 보낸다(그동안 toggle 이벤트는 올 수 없다).
+for (const [menuId, buttonId] of [['file-menu', 'btn-file'], ['account-menu', 'btn-account'], ['more-menu', 'btn-more']]) {
+  test(`P6-1b 열리자마자 Esc: #${menuId} — toggle 이벤트가 오기 전에 들어온 Esc도 메뉴만 닫는다`, { skip, timeout: 120000 }, async () => {
+    await withPage({ width: 375, height: 667 }, async page => {
+      const r = await page.evaluate(([menuId, buttonId]) => {
+        const menu = document.getElementById(menuId), button = document.getElementById(buttonId);
+        SF.menus.open(menu); // showPopover() — beforetoggle까지 동기로 지나갔고, toggle 이벤트는 이 함수가 끝나야 올 수 있다
+        const opened = menu.matches(':popover-open');
+        const esc = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+        button.dispatchEvent(esc);
+        return { opened, stillOpen: menu.matches(':popover-open'), prevented: esc.defaultPrevented, expanded: button.getAttribute('aria-expanded') };
+      }, [menuId, buttonId]);
+      assert.equal(r.opened, true, '(전제) 열었고, 아직 toggle 이벤트는 오지 않았다');
+      assert.equal(r.stillOpen, false, '그 틈의 Esc가 메뉴를 닫는다');
+      assert.equal(r.prevented, true, '이 Esc는 메뉴를 닫는 데 쓰였으니 전역 단축키(재생 정지·선택 해제)로 번지지 않게 막는다');
+      assert.equal(r.expanded, 'false', '닫히면 aria-expanded도 false');
+    });
+  });
+}
+
+test('P6-1b 열리자마자 창 크기 변화: toggle 이벤트가 오기 전에 온 resize도 메뉴를 버튼 아래로 다시 놓는다', { skip, timeout: 120000 }, async () => {
+  await withPage({ width: 1200, height: 800 }, async page => {
+    const r = await page.evaluate(async () => {
+      const menu = document.getElementById('file-menu');
+      SF.menus.open(menu);
+      const placed = menu.style.top;
+      menu.style.top = '321px'; // 일부러 엉뚱한 자리에 옮겨 두고
+      window.dispatchEvent(new Event('resize')); // toggle 이벤트가 오기 전에 창 크기가 바뀌었다고 치면
+      await new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))); // resize 처리기는 다음 프레임에 위치를 다시 잡는다
+      return { placed, after: menu.style.top, open: menu.matches(':popover-open') };
+    });
+    assert.notEqual(r.placed, '', '(전제) 열 때 위치가 잡혔다');
+    assert.equal(r.after, r.placed, '틈에 온 resize도 위치를 다시 잡는다(버튼은 그대로이니 처음 자리로 돌아온다)');
+    assert.equal(r.open, true, '다시 놓였을 뿐 닫히지는 않는다');
+  });
+});
+
 for (const [width, height] of [[1200, 800], [375, 667]]) {
   test(`P6-1 Popover 미지원 흉내 ${width}×${height}: popover 속성을 걷어 내고 .open 경로로 같은 일을 한다`, { skip, timeout: 120000 }, async () => {
     await withPage({ width, height }, async page => {
