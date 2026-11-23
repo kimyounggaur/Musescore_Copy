@@ -216,7 +216,7 @@
       let cancel=false;input.addEventListener("keydown",event=>{event.stopPropagation();if(event.key==="Escape"){cancel=true;input.blur();}if(event.key==="Enter"){event.preventDefault();input.blur();}});
       input.addEventListener("blur",()=>{const value=input.value.trim();input.remove();if(!cancel&&value!==(A.C.state.score.meta[key]||""))commit("악보 제목·저작자",s=>{s.meta[key]=value;});},{once:true});
     });
-    if(window.launchQueue)window.launchQueue.setConsumer(async params=>{for(const handle of params.files||[]) {const file=await handle.getFile();A.setReadOnly(false);A.IO.loadScoreFile(file,A.handleLoadedScore);}});
+    if(window.launchQueue)window.launchQueue.setConsumer(async params=>{for(const handle of params.files||[]) {const file=await handle.getFile();A.IO.loadScoreFile(file,A.handleLoadedScore);}});
   }
   SF.uiV3={init,refresh,drawLoop,toggleLoop,seekToEvent,measureAction,ornament,ottava,contextMenu,loadSettingsExtras};
 })(window.SF);

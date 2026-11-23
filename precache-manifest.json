@@ -23,6 +23,7 @@
   "js/playback.js",
   "js/pwa.js",
   "js/safe-html.js",
+  "js/session.js",
   "js/ui-dialog.js",
   "js/ui-v3.js",
   "js/version.js",

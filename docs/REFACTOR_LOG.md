@@ -58,12 +58,39 @@
 | 2026-11-23 | P1-4 | refactor/p1-4-csp | 완료 | 운영 CSP 값은 샌드박스에서 확인 못 함(P0-3 미완료) | CSP script-src 'self'만, CDN 예비 경로 3곳 제거, audioio-v3 바꿔치기 단언 추가. SF_HEADERS=1에서 CSP 위반 0·폰트 OK·재생 호출 OK. npm test 114/113/1, ui-v3 13/13(1회는 기존 간헐 실패 #8) |
 | 2026-11-23 | P1-5 | refactor/p1-5-xss-e2e | 완료 | 없음 | 악성 파일 E2E(시나리오 2개) 통과. 취약 상태(수정 되돌림)에서는 2개 모두 실패함을 확인. tests/fixtures/make-xss-fixture.mjs로 파일 생성 |
 
+## 계획 기록 (⚠️ 단계 — 에이전트가 계획을 적고 스스로 승인)
+
+### P2-A 악보 교체 통로 단일화 (2026-11-23 승인)
+교체 경로 — 전부 `SF.session.replaceScore` 한 곳을 거치게 한다. 읽기 전용이거나 변경이 없으면 대화상자 없이 교체, 변경이 있으면 [파일로 저장하고 계속 / 저장하지 않고 계속 / 취소]. 저장소 보관(flush)은 2-B 전이라 지금은 항상 실패로 보고 3지선다로 간다.
+
+| # | 경로 | 지금 위치 | 바뀐 뒤 |
+|---|---|---|---|
+| 1 | 파일 열기 | app.js bindMenu `open` | `IO.openScoreDialog(handleLoadedScore)` — 확인 전에 읽기 전용을 풀던 선호출 삭제(F6) |
+| 2 | 끌어다 놓기 | app.js bindDragDrop | 〃 |
+| 3 | 앱 파일 실행 | pwa.js handleFileLaunch | `handleLoadedScore` 경유(코드 변경 없음). 읽기 전용 화면에서 실행하면 이제 편집 가능 상태로 열림(기존 버그 수정) |
+| 3′ | 앱 파일 실행(중복 소비자) | **ui-v3.js:219**(설계서 표에 없음) | `A.setReadOnly(false)` 선호출만 삭제 — `launchQueue` 소비자가 pwa.js와 ui-v3.js에 둘 다 있어 같은 보호를 적용 |
+| 4 | 새 악보 | app.js bindMenu `new` | 무조건 묻던 `confirmDialog` 삭제 → `replaceScore(createScore, { reason })`, 성공 시 `openSettings()` |
+| 5 | 데모(메뉴) | app.js bindMenu `demo-*` | `replaceScore(DEMOS[key](), { reason: "데모 열기", toast })` |
+| 6 | 클라우드 열기 | cloud.js openScore·installScore | 자체 확인·지문 비교 삭제, `installScore`가 `handleLoadedScore(…, { readOnly, reason })`를 기다림. `suppressChange` try/finally 유지 |
+| 7 | 로컬 사본 | cloud.js makeLocalCopy | `installScore` 반환값 확인. 사본은 현재 내용을 그대로 담으므로 `confirmed: true`(읽기 전용 화면이라 확인 불필요) |
+| 8 | 시작 화면 빈 악보 | app.js bindWelcome | `replaceScore`, 성공했을 때만 창 닫기·`openSettings()` |
+| 9 | 시작 화면 데모 | app.js bindWelcome | 〃 |
+
+- `installScore(score, opts)`(app.js): `setReadOnly` → `C.setScore` → 선택·커서·스피디 초기화 → `stopPlayback` → `update` → 보고서 또는 토스트(`opts.toast`가 문자열이면 그 문구, `false`면 없음). `SF.app`에 공개.
+- 기존 동작 보존 한 가지 추가: 클라우드 열기는 예전에 확인 뒤 `loadSequence`가 바뀌었는지 다시 봤다 → `replaceScore`의 `opts.stale`로 같은 검사를 유지(설계서에 없던 보강).
+- 대화상자: index.html에 `<dialog id="dlg-choice" class="app-prompt">`(제목·본문·버튼줄은 비워 두고 `textContent`로만 채움). 연속 호출은 줄 세움. Esc·바깥 클릭 = `"cancel"`. 기본 포커스는 데이터를 잃지 않는 "파일로 저장하고 계속".
+- i18n(`session` 그룹): 저장하지 않은 변경 사항 / 파일로 저장하고 계속 / 저장하지 않고 계속 / 다른 악보 열기 / 데모 열기 / 클라우드 악보 열기 / 본문 패턴 `{reason} 전에 현재 악보를 어떻게 할까요?`.
+- 테스트: tests/session.test.mjs(Node 7 + 구조 고정), tests/session-browser.test.mjs(경로별 취소·깨끗한 상태), cloud.test.mjs 하네스의 `handleLoadedScore` 스텁 교체(기대값 무변경), security-browser의 `handleLoadedScore` 호출을 `await`로(비동기가 된 반환값을 기다리게만 바꿈).
+- app.js 줄 수: 현재 1,015 → 예상 약 1,010(1,600 이하 유지).
+- 알려진 동작: 클라우드에 저장했어도 파일로 저장하기 전이면 `C.state.dirty`라서 묻는다. 2-B에서 보관(flush)이 생기면 사라진다.
+
 ## 릴리스 준비 기록
 (로컬에서 버전 올리기·검증까지만 했다. push·PR·병합·배포는 하지 않았다.)
 
 | 날짜 | 버전 | Phase 브랜치 | 포함 Step | 검증 | 상태 |
 |---|---|---|---|---|---|
 | 2026-11-23 | 3.0.2 | phase/p1-security | P1-1~P1-5 | check 21 · npm test 115/113/2 · 브라우저(SF_HEADERS=1) 16/16 · 오프라인 검증 통과(캐시 42개, CSP 위반 0) | 로컬 준비 완료 — push 대기 |
+| 2026-11-23 | P2-A | refactor/p2-a-replace-guard | 완료 | 교체 경로가 설계서 표(7개)+시작 화면 2개 외에 ui-v3.js:219의 중복 앱 파일 실행 소비자 1곳 더. 클라우드 열기에 stale 검사 유지(설계서에 없던 보강) | 9개 경로(+1) 모두 SF.session.replaceScore 경유. session.test 15 + session-browser 18 + cloud 3 추가. check 22 · npm test 136/131/0/5 · 브라우저(SF_HEADERS=1) 34/34 · 오프라인 검증 통과(캐시 43개). 가드를 끄면 Node 테스트 5개 실패 확인. app.js 999줄. 읽기 전용 화면에서 앱 파일 실행 시 이제 편집 가능 상태로 열림(기존 버그 수정). 관찰: 한글 제목 파일 저장 시 헤드리스 Chrome이 내려받기 이름을 'download'로 보고함(기존 동작, 이 Step에서 안 건드림 — 실제 Chrome 확인은 사람 몫) |
 
 ## 사람이 해야 할 일 (자동 진행에서 건너뜀)
 - [ ] P0-2 공유 동결: Supabase SQL Editor에서 공개 악보·문자열 템포 질의 2건 실행, **개수만** 이 파일에 기록. Phase 1 배포 전까지 새 공유 링크 만들지 않기.
@@ -72,3 +99,4 @@
 - [ ] **Phase 1 릴리스(3.0.2)**: `phase/p1-security`를 처음으로 push → PR → 곧바로 병합(공개~배포 간격 최소화). 배포 뒤 `curl.exe -sI https://musescore-copy.vercel.app/`로 CSP의 script-src가 'self'뿐인지, 앱 콘솔 오류 0, `SF.VERSION === "3.0.2"`, 기존 설치본에 업데이트 알림이 뜨는지 확인.
 - [ ] 배포 확인 뒤 `.git/info/exclude`에서 설계서 줄을 지우고 `docs/scoreforge-refactor-design.md`를 커밋.
 - [ ] 외부 공유 재개 공지.
+- [ ] (P2-A) 실제 Chrome에서 한글 제목 악보를 파일로 저장했을 때 파일 이름이 `제목.scoreforge.json`으로 나오는지 확인. 헤드리스 Chrome에서는 내려받기 이름이 `download`로 보고됨(앱 코드는 `a.download`에 정상 이름을 넣고 있어 헤드리스 한정 현상으로 보임).

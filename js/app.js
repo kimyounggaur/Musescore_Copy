@@ -619,22 +619,26 @@
 
   /* ---------------- Supabase 인증 ---------------- */
 
-  /* ---------------- 파일 열기 공통 처리 (메뉴·드래그&드롭) ---------------- */
-  function handleLoadedScore(loaded, name, err, report) {
-    if (!loaded) {
-      toast(`열 수 없어요: ${name}${err && err.message ? " — " + err.message : ""}`);
-      return;
-    }
-    C.setScore(loaded);
+  /* ---------------- 악보 교체 (열기·드롭·앱 파일 실행·새 악보·데모·클라우드) ---------------- */
+  /** 악보를 실제로 갈아 끼운다. 직접 부르지 말고 SF.session.replaceScore를 거친다(저장 확인·순서 보장).
+   * opts: readOnly, name, report(가져오기 보고서), toast(문구 / false=표시 안 함) */
+  function installScore(score, opts = {}) {
+    setReadOnly(!!opts.readOnly);
+    C.setScore(score);
     ui.selection = null; ui.selAnchor = null; ui.cursorId = null; ui.lastPitch = null;
     ui.speedy = false; ui.speedyStep = null; clearSpeedyHeld();
     stopPlayback();
     update();
-    if (report && report.length) {
-      showImportReport(name, loaded, report);
-    } else {
-      toast(`"${loaded.meta.title || name}" 불러왔어요`);
+    if (opts.report && opts.report.length) showImportReport(opts.name, score, opts.report);
+    else if (opts.toast !== false) toast(opts.toast || `"${score.meta.title || opts.name}" 불러왔어요`);
+  }
+  /** 파일·클라우드에서 읽은 결과를 받는다. 실패는 알리고, 성공은 교체 통로로 보낸다(교체 여부를 Promise로 돌려줌). */
+  function handleLoadedScore(loaded, name, err, report, opts = {}) {
+    if (!loaded) {
+      toast(`열 수 없어요: ${name}${err && err.message ? " — " + err.message : ""}`);
+      return false;
     }
+    return SF.session.replaceScore(loaded, { name, report, readOnly: false, ...opts });
   }
 
   function showImportReport(name, score, report) {
@@ -663,7 +667,7 @@
         toast("악보 파일(.json/.musicxml/.mxl/.mid)을 끌어다 놓아주세요");
         return;
       }
-      IO.loadScoreFile(file, (...args) => { if (args[0]) setReadOnly(false); handleLoadedScore(...args); });
+      IO.loadScoreFile(file, handleLoadedScore);
     });
   }
 
@@ -682,15 +686,9 @@
       const act = item.dataset.act;
       const score = C.state.score;
       if (act === "new") {
-        if (!await SF.ui.confirmDialog({ title: "새 악보", message: "새 악보를 만들까요? 현재 작업을 보관하려면 파일로 저장해 주세요.", confirmText: "새 악보 만들기", danger: true })) return;
-        setReadOnly(false);
-        C.setScore(C.createScore({}));
-        ui.selection = null; ui.cursorId = null; ui.lastPitch = null;
-        ui.speedy = false; ui.speedyStep = null; clearSpeedyHeld();
-        stopPlayback(); update();
-        openSettings();
+        if (await SF.session.replaceScore(C.createScore({}), { reason: "새 악보 만들기", toast: false })) openSettings();
       } else if (act === "open") {
-        IO.openScoreDialog((...args) => { if (args[0]) setReadOnly(false); handleLoadedScore(...args); });
+        IO.openScoreDialog(handleLoadedScore);
       } else if (act === "save") {
         saveScore();
       } else if (act === "musicxml") {
@@ -711,14 +709,7 @@
         toast("유저 매뉴얼을 새 탭으로 열었어요");
       } else if (act.startsWith("demo-")) {
         const key = act.slice(5);
-        if (IO.DEMOS[key]) {
-          setReadOnly(false);
-          C.setScore(IO.DEMOS[key]());
-          ui.selection = null; ui.cursorId = null;
-          ui.speedy = false; ui.speedyStep = null; clearSpeedyHeld();
-          stopPlayback(); update();
-          toast("데모 악보를 불러왔어요 — 스페이스로 재생해 보세요");
-        }
+        if (IO.DEMOS[key]) await SF.session.replaceScore(IO.DEMOS[key](), { reason: "데모 열기", toast: "데모 악보를 불러왔어요 — 스페이스로 재생해 보세요" });
       }
     });
   }
@@ -734,20 +725,13 @@
       localStorage.setItem("scoreforge.welcomed", "1");
     });
     $$("#dlg-welcome [data-start]").forEach(btn => {
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", async () => {
         const k = btn.dataset.start;
         if (k === "blank") {
-          C.setScore(C.createScore({}));
-          $("#dlg-welcome").close();
-          openSettings();
+          if (await SF.session.replaceScore(C.createScore({}), { reason: "새 악보 만들기", toast: false })) { $("#dlg-welcome").close(); openSettings(); }
         } else if (IO.DEMOS[k]) {
-          C.setScore(IO.DEMOS[k]());
-          $("#dlg-welcome").close();
-          update();
-          toast("스페이스 키로 재생해 보세요!");
+          if (await SF.session.replaceScore(IO.DEMOS[k](), { reason: "데모 열기", toast: "스페이스 키로 재생해 보세요!" })) $("#dlg-welcome").close();
         }
-        ui.selection = null; ui.cursorId = null;
-        update();
       });
     });
   }
@@ -997,7 +981,7 @@
     E.loadFont(() => update({ force: true })); // Bravura 로드되면 다시 그림
   }
 
-  const api = { C, E, P, IO, Fraction, ui, $, $$, getLayoutCache: () => layoutCache, loadTheme, saveTheme, themeLabel, applyTheme, relayout, repaint, refreshChrome, update, scheduleAutosave, saveScore, setReadOnly, refreshCursor, applyZoom, svgPoint, select, selectedEvent, selectedIds, rangeNoteEnds, targetEvent, buildTimeline, startPlayback, playFromSelection, autoScroll, togglePlay, stopPlayback, buildToolbar, refreshToolbar, updateStatus, durName2, toast, flashHint, handleLoadedScore, showImportReport, bindDragDrop, bindMenu, maybeShowWelcome, bindWelcome, moveSelection, afterHistory, bindThemePicker, bindButtons, start };
+  const api = { C, E, P, IO, Fraction, ui, $, $$, getLayoutCache: () => layoutCache, loadTheme, saveTheme, themeLabel, applyTheme, relayout, repaint, refreshChrome, update, scheduleAutosave, saveScore, setReadOnly, refreshCursor, applyZoom, svgPoint, select, selectedEvent, selectedIds, rangeNoteEnds, targetEvent, buildTimeline, startPlayback, playFromSelection, autoScroll, togglePlay, stopPlayback, buildToolbar, refreshToolbar, updateStatus, durName2, toast, flashHint, handleLoadedScore, installScore, showImportReport, bindDragDrop, bindMenu, maybeShowWelcome, bindWelcome, moveSelection, afterHistory, bindThemePicker, bindButtons, start };
   for (const module of [SF.input, SF.editing, SF.panels, SF.keymap]) Object.assign(api, module.create(api));
   const { activeRef, activeCtx, firstEventIdForVoice, setCurrentVoice, setActiveStaff, effectiveAlter, pitchFromStep, nearestOctave, findEventAtTick, advancePos, measureCountForEnd, ensureMeasureCount, clonePlain, cloneDurForPaste, selectionItems, copySelection, decoratePastedEvent, pasteClipboard, doInput, mirrorLinkedTab, inputDrum, inputMidiPitches, initMidi, refreshMidiDevices, connectMidiInput, onMidiMessage, pitchForStepLabel, previewSpeedyStep, doSpeedyInput, toggleSpeedyDot, addSpeedyChordTone, speedyDeleteAt, clearSpeedyHeld, setSpeedyHeld, cursorPos, initSpeedyMidi, toggleSpeedy, setInputMode, inputLetter, onCanvasMove, onCanvasClick, clampStep, onPointerDown, onPointerMove, onPointerUp, editLyric, editChordSymbol, buildPiano, setDuration, canDot, toggleDot, applyAccidental, transposeSelection, deleteSelection, repitchSelection, toggleTie, applyArticulation, applyDynamic, toggleSlur, toggleHairpin, applyTuplet, applyGraceBefore, toggleNotation, markerTarget, selectedMeasureRange, applyStartRepeat, applyEndRepeat, applyRepeatCount, applyVolta, applyChordSymbol, applyTempoMark, nextRehearsalMark, applyRehearsalMark, applyStaffText, htmlEsc, checked, selectedPropIds, firstSelectedRef, renderPropertiesPanel, mutateSelectedEvents, applyPropertyInput, applyMeasureBreak, bindProperties, refreshOpenOverlays, scrollToMeasure, renderNavigator, measureDensity, renderTimelinePanel, openNavigator, openTimelinePanel, gotoQuery, bindNavigationPanels, r1, mixerRecord, renderMixerRows, updateMixerValue, bindMixer, openSettings, bindSettings, bindKeys, bindShortcutOverlay, bindCommandPalette, openCommandPalette, closeShortcutOverlay, isShortcutOverlayOpen } = api;
   for (const method of ["undo", "redo"]) {
@@ -1009,7 +993,7 @@
     if (C.state.readOnly) { toast("읽기 전용 악보예요. 사본을 만들어 편집하세요."); return; }
     return coreMutate(label, fn, opts);
   };
-  SF.app = { ui, update, relayout, repaint, refreshChrome, toast, handleLoadedScore, setReadOnly,
+  SF.app = { ui, update, relayout, repaint, refreshChrome, toast, handleLoadedScore, installScore, setReadOnly,
     actions: api, registerCommand: command => SF.keymap.registerCommand(command), auth: SF.auth?.state };
   document.addEventListener("DOMContentLoaded", start);
 })(window.SF);

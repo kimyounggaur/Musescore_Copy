@@ -313,27 +313,23 @@
     if (!row) throw error("NOT_FOUND", "공유가 중지되었거나 삭제된 악보예요.");
     return decode(row.data, row.title);
   }
-  async function installScore(score, readOnly) {
+  /** 악보를 바꿔 끼운다. 저장 확인은 SF.session이 맡으며, 교체했으면 true(취소·밀림이면 false). */
+  async function installScore(score, readOnly, opts = {}) {
     if (!SF.app.setReadOnly || !SF.app.handleLoadedScore) throw error("INTEGRATION_REQUIRED", "악보 열기 연결이 준비되지 않았어요.");
     suppressChange = true;
     try {
-      SF.app.setReadOnly(readOnly);
-      SF.app.handleLoadedScore(score, score.meta.title, null, []);
-      SF.app.setReadOnly(readOnly);
-      onScoreLoaded(C.state.score);
+      const ok = await SF.app.handleLoadedScore(score, score.meta.title, null, [], { readOnly, ...opts });
+      if (ok) onScoreLoaded(C.state.score);
+      return ok;
     } finally { suppressChange = false; }
   }
   async function openScore(id, shared = false) {
-    const sequence = ++loadSequence, before = fingerprint(C.state.score);
+    const sequence = ++loadSequence;
     const score = shared ? await loadShared(id) : await load(id);
-    if (sequence !== loadSequence) return null;
-    if (!isReadOnly() && (state.dirty || fingerprint(C.state.score) !== before)) {
-      if (!await confirm("현재 악보의 변경 사항을 남겨 두려면 먼저 저장해 주세요. 선택한 악보를 열까요?", { title: "악보 열기", confirmLabel: "열기" })) return null;
-    }
     if (sequence !== loadSequence) return null;
     if (!shared) await requireUser(score.meta.cloudOwner, score.meta.cloudProject);
     if (sequence !== loadSequence) return null;
-    await installScore(score, shared);
+    if (!await installScore(score, shared, { reason: "클라우드 악보 열기", stale: () => sequence !== loadSequence })) return null;
     if (!shared) clearShareURL();
     return score;
   }
@@ -342,7 +338,8 @@
   }
   async function makeLocalCopy() {
     const score = decode(snapshot(C.state.score), `${titleOf(C.state.score.meta.title)} 사본`);
-    await installScore(score, false);
+    // 사본은 지금 내용을 그대로 담으므로 잃는 변경이 없다 — 저장 확인을 건너뛴다.
+    if (!await installScore(score, false, { reason: "로컬 사본 만들기", confirmed: true })) return null;
     clearShareURL();
     if (SF.io && SF.io.autosave) SF.io.autosave(C.state.score);
     toast("로컬 사본을 만들었어요. 이제 편집할 수 있어요.");

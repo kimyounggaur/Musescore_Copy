@@ -946,6 +946,17 @@
     midiInput | MIDI 입력 | MIDI input
     frequentInput | 자주 쓰는 입력 | Frequent input tools
   `);
+  group("session", `
+    unsavedTitle | 저장하지 않은 변경 사항 | Unsaved changes
+    saveAndContinue | 파일로 저장하고 계속 | Save to a file and continue
+    discardAndContinue | 저장하지 않고 계속 | Continue without saving
+    openAnother | 다른 악보 열기 | Open another score
+    openDemo | 데모 열기 | Open a demo score
+    openCloud | 클라우드 악보 열기 | Open a cloud score
+    makeCopy | 로컬 사본 만들기 | Make a local copy
+  `);
+  STRINGS.ko["session.beforeReplace"] = "{reason} 전에 현재 악보를 어떻게 할까요?";
+  STRINGS.en["session.beforeReplace"] = "What should happen to the current score before you continue? ({reason})";
   STRINGS.ko["toast.openErrorDetail"] = "열 수 없어요: {name} — {error}";
   STRINGS.en["toast.openErrorDetail"] = "Cannot open: {name} — {error}";
   group("a11y", `
@@ -1024,6 +1035,7 @@
   pattern("toast.rehearsal", /^리허설 ([\s\S]+)$/, ["text"]);
   pattern("toast.theme", /^(Dark|Light|Pretty|Cute)(?: UI)?로 전환했어요$/, ["theme"]);
   pattern("toast.openError", /^열 수 없어요: ([\s\S]*)$/, ["name"]);
+  pattern("session.beforeReplace", /^([\s\S]+) 전에 현재 악보를 어떻게 할까요\?$/, ["reason"], ["reason"]);
   pattern("status.selected", /^(\d+)개 선택$/, ["count"]);
   pattern("status.selectionHint", /^(\d+)개 선택 — Ctrl\+C\/V=복사\/붙여넣기 · S=이음줄 · < >=쐐기$/, ["count"]);
   pattern("hint.held", /^건반 (\d+)개 누름 — 숫자로 입력 · 1~8=입력 · 0=쉼표 · Esc=종료$/, ["count"]);
