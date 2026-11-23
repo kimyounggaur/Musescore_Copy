@@ -1,11 +1,13 @@
 import { createRequire } from 'node:module';
 import { mkdir, writeFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
+import { launchOptions, pageOptions, preparePage } from './browser-launch.mjs';
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
-const context = await browser.newContext();
+const browser = await chromium.launch(launchOptions());
+const context = await browser.newContext(pageOptions());
 const page = await context.newPage();
+await preparePage(page);
 const errors = [], csp = [];
 page.on('pageerror', e => errors.push(e.message));
 page.on('console', m => { if (/violat|Content Security Policy/i.test(m.text())) csp.push(m.text()); });
