@@ -121,6 +121,8 @@
   const live = new Set(); // 정지 시 끊을 노드들
   const sampleInstruments = new Map();
   const partBuses = new Map();
+  const loaders = new Map();   // kind → SampleLoader(Splendid 계열). 같은 URL의 디코딩 버퍼를 인스턴스끼리 공유
+  const loadTurns = new Map(); // kind → 그 kind의 마지막 로딩 Promise(같은 kind는 차례로 로딩)
   let smplrModule = null;
   let smplrPromise = null;
   let sampleStatus = { state: "idle", text: "샘플 대기", detail: "재생하면 smplr 실제 악기 샘플을 불러옵니다." };
@@ -171,16 +173,73 @@
     return SAMPLE_MAP[instrument] ? instrument : "piano";
   }
 
+  /* 샘플 요청을 동시에 max개까지만 보낸다(백로그 #3: 수백 개를 한꺼번에 요청해 화면이 멈추던 문제).
+   * 슬롯은 응답 본문을 다 읽었을 때 돌려준다 — 헤더만 받고 돌려주면 본문 수신이 겹쳐 제한이 무의미해진다.
+   * 본문을 읽지 않을 응답(200이 아님)과 요청 실패는 바로 돌려주고, 본문을 읽지 않고 붙잡고 있는 경우에도
+   * holdMs 뒤에는 돌려준다(슬롯이 새면 샘플 로딩 전체가 멈추므로). smplr가 응답에서 쓰는 것은 status와 본문 읽기뿐이다. */
+  function limitedStorage(max = 4, fetchImpl = url => fetch(url), holdMs = 30000) {
+    let active = 0;
+    const waiting = [];
+    function pump() {
+      while (active < max && waiting.length) {
+        const { url, ok, fail } = waiting.shift();
+        active++;
+        let held = true, timer = null;
+        const release = () => {
+          if (!held) return;
+          held = false; clearTimeout(timer); active--; pump();
+        };
+        let request;
+        try { request = Promise.resolve(fetchImpl(url)); } catch (err) { request = Promise.reject(err); }
+        request.then(res => {
+          if (!res || res.status !== 200) { release(); ok(res); return; }
+          timer = setTimeout(release, holdMs);
+          const read = name => () => {
+            let body;
+            try { body = res[name](); } catch (err) { release(); throw err; }
+            Promise.resolve(body).then(release, release);
+            return body;
+          };
+          ok({ status: res.status, ok: res.ok, headers: res.headers, arrayBuffer: read("arrayBuffer"), text: read("text"), json: read("json") });
+        }, err => { release(); fail(err); });
+      }
+    }
+    return {
+      fetch: url => new Promise((ok, fail) => { waiting.push({ url, ok, fail }); pump(); }),
+      stats: () => ({ active, waiting: waiting.length, max }),
+    };
+  }
+  const storage = limitedStorage();
+
+  // 같은 kind의 파트가 loader를 나눠 쓴다. 디코딩된 버퍼가 URL별로 loader 캐시에 하나만 남는다.
+  function loaderFor(mod, kind) {
+    if (typeof mod.SampleLoader !== "function") return null;
+    if (!loaders.has(kind)) loaders.set(kind, mod.SampleLoader(ctx, { storage }));
+    return loaders.get(kind);
+  }
+
+  // loader를 나눠 쓰는 kind는 한 번에 하나씩 로딩한다. 동시에 시작하면 캐시에 아직 없는 같은 URL을 인스턴스마다
+  // 따로 받아 디코딩해 공유의 이점이 사라진다(실제 smplr로 확인: 동시에 시작하면 452회, 차례로 시작하면 226회 디코딩).
+  function inTurn(kind, work) {
+    const run = (loadTurns.get(kind) || Promise.resolve()).then(work);
+    loadTurns.set(kind, run.catch(() => {}));
+    return run;
+  }
+
   function createSampleInstrument(mod, key, partId) {
-    const spec = SAMPLE_MAP[sampleKey(key)];
+    const kind = sampleKey(key), spec = SAMPLE_MAP[kind];
     const opts = {
       destination: partBus(partId).input,
       volume: spec.volume || 96,
+      storage,
       onLoadProgress: ({ loaded, total }) => {
         setSampleStatus("loading", `${loaded}/${total}`, `${spec.label} 샘플을 불러오는 중입니다.`);
       },
     };
-    if (spec.kind === "splendid" && mod.SplendidGrandPiano) return mod.SplendidGrandPiano(ctx, opts);
+    if (spec.kind === "splendid" && mod.SplendidGrandPiano) {
+      const loader = loaderFor(mod, kind);
+      return mod.SplendidGrandPiano(ctx, loader ? { ...opts, loader } : opts);
+    }
     if (mod.Soundfont) return mod.Soundfont(ctx, { ...opts, instrument: spec.instrument });
     throw new Error("smplr Soundfont factory is unavailable");
   }
@@ -194,9 +253,13 @@
     const rec = { instrument: null, ready: false, failed: false, promise: null };
     rec.promise = (async () => {
       const mod = await loadSmplrModule();
-      const inst = createSampleInstrument(mod, instrument, partId);
-      rec.instrument = inst;
-      await (inst.ready || inst.load || Promise.resolve(inst));
+      const kind = sampleKey(instrument);
+      const build = async () => {
+        const inst = createSampleInstrument(mod, instrument, partId);
+        rec.instrument = inst;
+        await (inst.ready || inst.load || Promise.resolve(inst));
+      };
+      await (SAMPLE_MAP[kind].kind === "splendid" ? inTurn(kind, build) : build());
       rec.ready = true;
       setSampleStatus("ready", "샘플 준비", `${(SAMPLE_MAP[sampleKey(instrument)] || SAMPLE_MAP.piano).label} 샘플 음원 준비 완료`);
       return rec;
@@ -900,5 +963,6 @@
     play, stop, previewNote, pausePos, player, compile, exportMidi,
     setRate, setLoop, seek, updateMixer, partBuses, buildTempoMap,
     getSampleStatus, setSampleStatusHandler, ensureSampleInstrument, buildPlaybackPlan,
+    limitedStorage, // 테스트용: 동시 요청 제한 유틸
   };
 })(window.SF);
