@@ -9,7 +9,7 @@
     if (Date.now() - lastReported < 2000) return;
     lastReported = Date.now();
     try {
-      SF.app?.toast("문제가 생겼어요. 마지막 자동 저장본을 확인해 주세요.");
+      SF.app?.toast("문제가 생겼어요. 최근 작업에서 확인해 주세요.");
     } catch { /* Error reporting must not cause another application error. */ }
   }
   window.addEventListener("error", event => { if (event.error) report(event.error); });

@@ -898,7 +898,7 @@
     import | 가져오기 | Import
     selectTrack | 트랙을 하나 이상 선택하세요. | Select at least one track.
     customEnsemble | 현재 사용자 편성 | Current custom ensemble
-    errorRecovery | 문제가 생겼어요. 마지막 자동 저장본을 확인해 주세요. | Something went wrong. Check the last auto-saved copy.
+    errorRecovery | 문제가 생겼어요. 최근 작업에서 확인해 주세요. | Something went wrong. Check Recent work.
   `);
   group("import", `
     durationPreserved | 표기와 duration이 다른 음길이는 duration을 보존했어요 | Preserved durations that differ from the written note values
@@ -1002,6 +1002,15 @@
     resumed | 이 탭에서 편집을 시작했어요 | Editing started in this tab
     copyMade | 사본을 만들었어요. 이제 편집할 수 있어요. | Copy created. You can edit it now.
   `);
+  group("boot", `
+    problem | 저장된 악보를 여는 중 문제가 생겨 안전하게 시작했어요. 최근 작업에서 원본을 내려받을 수 있어요. | We hit a problem opening the saved score, so we started safely. You can download the original from Recent work.
+    safeTitle | 지난번에 여는 중 문제가 있었어요 | There was a problem opening a score last time
+    safeMessage | 지난번에 ‘{title}’을(를) 여는 중 문제가 있었어요. 어떻게 할까요? | There was a problem opening “{title}” last time. What would you like to do?
+    openAnyway | 그래도 열기 | Open anyway
+    startNew | 새 악보로 시작 | Start a new score
+    badge | 열 때 문제가 있었어요 | Had a problem opening
+    badgeWhy | 원본은 그대로 보관돼 있어요. 파일로 내려받아 확인해 보세요. | The original is kept as it was. Download it as a file to check it.
+  `);
   STRINGS.ko["session.beforeReplace"] = "{reason} 전에 현재 악보를 어떻게 할까요?";
   STRINGS.en["session.beforeReplace"] = "What should happen to the current score before you continue? ({reason})";
   STRINGS.ko["toast.openErrorDetail"] = "열 수 없어요: {name} — {error}";
@@ -1083,6 +1092,7 @@
   pattern("toast.theme", /^(Dark|Light|Pretty|Cute)(?: UI)?로 전환했어요$/, ["theme"]);
   pattern("toast.openError", /^열 수 없어요: ([\s\S]*)$/, ["name"]);
   pattern("session.beforeReplace", /^([\s\S]+) 전에 현재 악보를 어떻게 할까요\?$/, ["reason"], ["reason"]);
+  pattern("boot.safeMessage", /^지난번에 ‘([\s\S]*)’을\(를\) 여는 중 문제가 있었어요\. 어떻게 할까요\?$/, ["title"]);
   pattern("session.fileSaved", /^마지막 파일 저장 ([\s\S]+)$/, ["time"]);
   pattern("recent.measures", /^(\d+)마디$/, ["count"]);
   pattern("recent.usage", /^사용 중 ([\s\S]+?) \/ 약 ([\s\S]+)$/, ["used", "quota"]);
