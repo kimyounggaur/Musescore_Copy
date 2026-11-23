@@ -308,6 +308,7 @@ CLAUDE.md 금지 항목 점검
 | 2026-11-23 | 3.1.1 | phase/p3-ci | P3-1·3-2·3-3·3-5·3-6 (3-4는 사람) | check 27 · npm test 269/249/0/20 skip · CI 명령 재현(tests/*.test.mjs 전체, SF_HEADERS=1) 328/328 · 오프라인 검증 통과(캐시 48개, CSP 위반 0) · verify-deploy 통과 | 로컬 준비 완료 — push 대기(3.0.2 → 3.1.0 → 3.1.1 순서로 배포, ⏳ 2건은 GitHub에서 확인) |
 | 2026-11-23 | 3.2.0 | phase/p4-playback-memory | P4-1~P4-4 | check 27 · npm test 320/297/0/23 skip · CI 명령 재현(tests/*.test.mjs 전체, SF_HEADERS=1) 379/379 · 오프라인 검증 통과(캐시 48개, CSP 위반 0) · verify-deploy 통과 | 로컬 준비 완료 — push 대기(3.0.2 → 3.1.0 → 3.1.1 → 3.2.0 순서로 배포, ⏳ 메모리·Long Task 측정과 소리 확인은 사람이) |
 | 2026-11-23 | 3.3.0 | phase/p5-stems-render | P5-A1·A2·B1·B2 (+R-1 검토 중 브라우저 테스트 1건) | check 27 · npm test 351/324/0/27 skip · CI 명령 재현(tests/*.test.mjs 전체, SF_HEADERS=1) 410/410 · 오프라인 검증 통과(캐시 48개, CSP 위반 0) · verify-deploy 통과 | 로컬 준비 완료 — push 대기(3.0.2 → 3.1.0 → 3.1.1 → 3.2.0 → 3.3.0 순서로 배포, ⏳ 기준 이미지 재생성과 기둥·클릭·내보내기 화면 확인은 사람이) |
+| 2026-11-23 | 3.4.0 | phase/p6-narrow-screen | P6-1~P6-4 (+R-2 중 발견한 메뉴 처리기 틈 P6-1b) | check 28 · npm test 419/349/0/70 skip · CI 명령 재현(tests/*.test.mjs 전체, SF_HEADERS=1) 478/478 · 오프라인 검증 통과(캐시 49개, CSP 위반 0) · verify-deploy 통과 | 로컬 준비 완료 — push 대기(3.0.2 → 3.1.0 → 3.1.1 → 3.2.0 → 3.3.0 → 3.4.0 순서로 배포, ⏳ 실제 휴대폰에서 파일 메뉴·계정 메뉴·⋯ 더보기·안내 문구 확인은 사람이 — (P6-4)) |
 
 ## 사람이 해야 할 일 (자동 진행에서 건너뜀)
 - [ ] P0-2 공유 동결: Supabase SQL Editor에서 공개 악보·문자열 템포 질의 2건 실행, **개수만** 이 파일에 기록. Phase 1 배포 전까지 새 공유 링크 만들지 않기.

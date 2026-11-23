@@ -1,3 +1,3 @@
 "use strict";
 window.SF = window.SF || {};
-window.SF.VERSION = "3.3.0";
+window.SF.VERSION = "3.4.0";
