@@ -85,9 +85,9 @@ test('limitedStorage: 본문을 읽지 않고 붙잡고 있어도 holdMs 뒤에�
   assert.equal(storage.stats().active, 0);
 });
 
-test('같은 종류(피아노) 파트 2개는 loader 하나를 나눠 쓰고, 파트별 버스는 따로 쓴다', async () => {
+test('같은 종류(고음질 피아노) 파트 2개는 loader 하나를 나눠 쓰고, 파트별 버스는 따로 쓴다', async () => {
   const { mod, made, loaders } = fakeSmplr();
-  const { playback: P } = loadPlayback({ sampleModule: mod });
+  const { playback: P } = loadPlayback({ sampleModule: mod, hq: true });
   const [a, b] = await Promise.all([P.ensureSampleInstrument('piano', 'a'), P.ensureSampleInstrument('piano', 'b')]);
   assert.ok(a.ready && b.ready);
   assert.equal(made.length, 2, '악기 인스턴스는 파트마다 만든다');
@@ -102,7 +102,7 @@ test('같은 종류(피아노) 파트 2개는 loader 하나를 나눠 쓰고, �
 
 test('Soundfont 악기는 loader를 받지 않지만 같은 제한된 storage를 쓴다', async () => {
   const { mod, made, loaders } = fakeSmplr();
-  const { playback: P } = loadPlayback({ sampleModule: mod });
+  const { playback: P } = loadPlayback({ sampleModule: mod, hq: true });
   await Promise.all([P.ensureSampleInstrument('piano', 'p'), P.ensureSampleInstrument('strings', 's'), P.ensureSampleInstrument('flute', 'f')]);
   const fonts = made.filter(m => m.kind === 'soundfont');
   assert.equal(fonts.length, 2);
@@ -114,7 +114,7 @@ test('Soundfont 악기는 loader를 받지 않지만 같은 제한된 storage를
 
 test('smplr 모듈에 SampleLoader가 없어도(구버전) 악기는 만들어진다', async () => {
   const { mod, made } = fakeSmplr({ withLoader: false });
-  const { playback: P } = loadPlayback({ sampleModule: mod });
+  const { playback: P } = loadPlayback({ sampleModule: mod, hq: true });
   const rec = await P.ensureSampleInstrument('piano', 'a');
   assert.ok(rec.ready && !rec.failed);
   assert.equal(made[0].opts.loader, undefined);
@@ -124,7 +124,7 @@ test('smplr 모듈에 SampleLoader가 없어도(구버전) 악기는 만들어�
 test('같은 종류는 차례로 로딩한다 — 앞 악기가 준비된 뒤에 다음 악기를 만든다(다른 종류는 기다리지 않는다)', async () => {
   const gates = { splendid: [], soundfont: [] };
   const { mod, made } = fakeSmplr({ makeReady: (_index, kind) => new Promise(resolve => { gates[kind].push(resolve); }) });
-  const { playback: P } = loadPlayback({ sampleModule: mod });
+  const { playback: P } = loadPlayback({ sampleModule: mod, hq: true });
   const first = P.ensureSampleInstrument('piano', 'a'), second = P.ensureSampleInstrument('piano', 'b'), other = P.ensureSampleInstrument('strings', 's');
   await tick(5);
   assert.equal(made.filter(m => m.kind === 'splendid').length, 1, '두 번째 피아노는 아직 만들지 않는다');
@@ -140,7 +140,7 @@ test('같은 종류는 차례로 로딩한다 — 앞 악기가 준비된 뒤에
 
 test('앞 악기 로딩이 실패해도 같은 종류의 다음 악기는 이어서 로딩한다', async () => {
   const { mod } = fakeSmplr({ makeReady: index => index === 0 ? Promise.reject(new Error('boom')) : Promise.resolve() });
-  const { playback: P, logs } = loadPlayback({ sampleModule: mod });
+  const { playback: P, logs } = loadPlayback({ sampleModule: mod, hq: true });
   const [a, b] = await Promise.all([P.ensureSampleInstrument('piano', 'a'), P.ensureSampleInstrument('piano', 'b')]);
   assert.ok(a.failed && !a.ready);
   assert.ok(b.ready && !b.failed, '실패한 앞 악기가 뒤 악기를 막지 않는다');
@@ -155,26 +155,26 @@ test('악기가 달라도 샘플 요청은 하나의 제한(동시에 4개)을 �
     SplendidGrandPiano: (_ctx, opts) => ({ ready: fetchAll(opts.storage, 'piano', 8), start() {}, stop() {}, dispose() {} }),
     Soundfont: (_ctx, opts) => ({ ready: fetchAll(opts.storage, opts.instrument, 8), start() {}, stop() {}, dispose() {} }),
   };
-  const { playback: P } = loadPlayback({ sampleModule: mod, fetch });
+  const { playback: P } = loadPlayback({ sampleModule: mod, fetch, hq: true });
   await Promise.all([P.ensureSampleInstrument('piano', 'p'), P.ensureSampleInstrument('strings', 's'), P.ensureSampleInstrument('flute', 'f')]);
   assert.equal(log.done, 24);
   assert.equal(log.max, 4, '악기가 셋이어도 동시에 4개를 넘지 않는다');
 });
 
-test('실제 smplr: 같은 피아노 파트 2개를 동시에 준비해도 샘플은 한 번만 내려받고 디코딩한다', async () => {
+test('실제 smplr: 같은 고음질 피아노 파트 2개를 동시에 준비해도 샘플은 한 번만 내려받고 디코딩한다', async () => {
   const fetched = [];
   const fakeFetch = async url => { fetched.push(url); return { status: 200, ok: true, headers: {}, arrayBuffer: async () => new ArrayBuffer(8) }; };
   const canPlay = globalThis.document.createElement; // 벤더가 오디오 형식을 고를 때 document.createElement('audio')를 쓴다
   globalThis.document.createElement = () => ({ canPlayType: () => 'probably' });
   try {
-    const solo = loadPlayback({ sampleModule: realSmplr, fetch: fakeFetch });
+    const solo = loadPlayback({ sampleModule: realSmplr, fetch: fakeFetch, hq: true });
     await solo.playback.ensureSampleInstrument('piano', 'solo');
     const single = { fetched: fetched.length, decoded: solo.stats.decodes };
     assert.ok(single.decoded > 100, `피아노 샘플이 많아야 이 검사가 의미 있다(${single.decoded}개)`);
     assert.equal(single.fetched, single.decoded);
 
     fetched.length = 0;
-    const duo = loadPlayback({ sampleModule: realSmplr, fetch: fakeFetch });
+    const duo = loadPlayback({ sampleModule: realSmplr, fetch: fakeFetch, hq: true });
     const [a, b] = await Promise.all([duo.playback.ensureSampleInstrument('piano', 'p1'), duo.playback.ensureSampleInstrument('piano', 'p2')]);
     assert.ok(a.ready && b.ready);
     assert.equal(fetched.length, single.fetched, '두 번째 파트가 같은 샘플을 다시 내려받지 않는다');

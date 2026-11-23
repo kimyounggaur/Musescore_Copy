@@ -375,6 +375,7 @@
     $("#set-key").value = String(score.keySig);
     $("#set-time").value = score.timeSig.num + "/" + score.timeSig.den;
     $("#set-tempo").value = score.tempo;
+    $("#set-piano-quality").value = P.getPianoQuality();
     const layout = C.ensureLayout(score);
     $("#set-measures-system").value = layout.measuresPerSystem || "";
     $("#set-page-size").value = layout.pageSize || "A4";
@@ -432,6 +433,12 @@
       stopPlayback();
       $("#dlg-settings").close();
       update();
+    });
+    // 이 기기의 설정이라 '적용'을 기다리지 않고 바로 저장한다(악보에는 들어가지 않음). 곡 도중에 음원이 바뀌지 않게 재생은 멈춘다.
+    $("#set-piano-quality").addEventListener("change", () => {
+      stopPlayback();
+      const quality = P.setPianoQuality($("#set-piano-quality").value);
+      toast(quality === "hq" ? "고음질 피아노(약 19MB)를 쓰도록 바꿨어요. 다음 재생부터 적용돼요" : "기본 피아노로 바꿨어요. 다음 재생부터 적용돼요");
     });
     $("#set-add-measures").addEventListener("click", (e) => {
       e.preventDefault();

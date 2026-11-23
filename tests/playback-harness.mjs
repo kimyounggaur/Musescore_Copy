@@ -8,8 +8,15 @@ import { SF } from './shim.mjs';
 const parameter = () => ({ value: 0, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {}, setTargetAtTime() {}, cancelScheduledValues() {} });
 const node = () => ({ gain: parameter(), pan: parameter(), frequency: parameter(), Q: parameter(), detune: parameter(), connect(other) { return other; }, disconnect() {}, start() {}, stop() {} });
 
-export function loadPlayback({ sampleModule, fetch } = {}) {
+// hq: 피아노 음질 설정을 '고음질'로 시작한다(기본은 가벼운 Soundfont 피아노). store: localStorage 초기값. blockedStorage: 저장소가 막힌 브라우저.
+export const PIANO_QUALITY_KEY = 'scoreforge.audio.pianoQuality';
+export function loadPlayback({ sampleModule, fetch, hq = false, store = {}, blockedStorage = false } = {}) {
   const stats = { decodes: 0, contexts: 0 }, logs = [];
+  const data = new Map(Object.entries({ ...(hq ? { [PIANO_QUALITY_KEY]: 'hq' } : {}), ...store }));
+  const blocked = () => { throw new Error('storage blocked'); };
+  const localStorage = blockedStorage
+    ? { getItem: blocked, setItem: blocked, removeItem: blocked }
+    : { getItem: key => (data.has(key) ? data.get(key) : null), setItem: (key, value) => { data.set(key, String(value)); }, removeItem: key => { data.delete(key); } };
   class AudioContext {
     constructor() { stats.contexts++; this.currentTime = 0; this.state = 'running'; this.sampleRate = 48000; this.destination = node(); }
     createGain() { return node(); } createStereoPanner() { return node(); } createBiquadFilter() { return node(); }
@@ -21,14 +28,14 @@ export function loadPlayback({ sampleModule, fetch } = {}) {
   const context = vm.createContext({
     SF: { core: SF.core, Fraction: SF.Fraction }, AudioContext, console: { ...console, warn: (...args) => logs.push(args) }, setTimeout, clearTimeout,
     setInterval() { return 1; }, clearInterval() {}, requestAnimationFrame: () => 1, cancelAnimationFrame() {},
-    fetch, __sampleModule: async () => sampleModule,
+    fetch, localStorage, TextEncoder, __sampleModule: async () => sampleModule,
   });
   context.window = context;
   const original = readFileSync(new URL('../js/playback.js', import.meta.url), 'utf8');
   const source = original.replace('import("../vendor/smplr/index.mjs")', 'window.__sampleModule()');
   if (source === original) throw new Error('smplr import 바꿔치기 실패 — playback.js의 import 문을 확인');
   vm.runInContext(source, context);
-  return { playback: context.SF.playback, context, stats, logs };
+  return { playback: context.SF.playback, context, stats, logs, data };
 }
 
 // 가짜 smplr 모듈: 만들어진 악기와 로더를 기록한다. makeReady(만든 순서, kind)로 악기별 ready Promise를 바꿀 수 있다.

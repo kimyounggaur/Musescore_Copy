@@ -10,9 +10,10 @@ const C = SF.core;
 const tick = (ms = 0) => new Promise(resolve => setTimeout(resolve, ms));
 const json = value => JSON.stringify(value);
 const scoreOf = (...parts) => ({ parts: parts.map(([id, instrument]) => ({ id, instrument })) });
-function boot(options) {
+// 피아노 loader(Splendid) 수명을 검사하는 테스트가 많아 기본을 고음질 피아노로 시작한다. hq: false면 기본 음질(Soundfont 피아노).
+function boot({ hq = true, ...options } = {}) {
   const smplr = fakeSmplr(options);
-  const loaded = loadPlayback({ sampleModule: smplr.mod });
+  const loaded = loadPlayback({ sampleModule: smplr.mod, hq });
   const ensure = (instrument, partId) => loaded.playback.ensureSampleInstrument(instrument, partId);
   // 파트의 버스로 그 파트의 악기 인스턴스를 찾는다(만들어진 순서는 종류마다 다를 수 있다)
   const instrumentOf = partId => smplr.made.find(inst => inst.opts.destination === loaded.playback.partBuses.get(partId)?.input);
