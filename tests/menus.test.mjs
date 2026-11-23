@@ -91,3 +91,40 @@ test('P6-1 연결: cloud.js가 메뉴에 넣는 항목도 role="menuitem" 버튼
   const cloud = read('js/cloud.js');
   assert.match(cloud, /role.{0,6}menuitem/);
 });
+
+// ───────── P6-2 계정 메뉴 ─────────
+test('P6-2 API: SF.menus는 open·dock도 내놓는다', () => {
+  assert.equal(typeof menus.open, 'function');
+  assert.equal(typeof menus.dock, 'function');
+});
+
+test('P6-2 마크업: 계정 버튼(#btn-account)은 aria-label·popovertarget을 갖고, #account-menu는 popover이며 처음에는 비어 있다', () => {
+  const button = html.match(/<button id="btn-account"[^>]*>/)[0];
+  assert.match(button, /aria-label="계정 메뉴"/);
+  assert.match(button, /popovertarget="account-menu"/);
+  const menu = html.match(/<div id="account-menu"[^>]*>/)[0];
+  assert.match(menu, /\spopover[\s>=]/);
+  assert.match(menu, /class="menu"/);
+  assert.match(html, /<div id="account-menu"[^>]*>\s*<\/div>/, '.authbar는 좁은 화면일 때만 menus.js가 옮겨 넣는다 — 마크업에서는 비어 있다');
+});
+
+test('P6-2 마크업: .authbar는 상단바 직계로 계정 버튼 앞에 있고(넓은 화면 배치 유지) role="group"이다', () => {
+  const header = html.match(/<header class="topbar">([\s\S]*?)<\/header>/)[1];
+  const authbar = header.indexOf('<div class="authbar"'), account = header.indexOf('id="btn-account"'), file = header.indexOf('id="btn-file"');
+  assert.ok(authbar > 0 && authbar < account && account < file, '언어 선택 → .authbar → 계정 버튼 → 파일 메뉴 순서');
+  assert.match(header.match(/<div class="authbar"[^>]*>/)[0], /role="group"/);
+  for (const id of ['auth-status', 'btn-signup', 'btn-member-login', 'btn-admin-login', 'btn-admin-page', 'btn-logout']) assert.match(header, new RegExp(`id="${id}"`), id);
+});
+
+test('P6-2 연결: app.js가 .authbar를 500px 이하에서 계정 메뉴로 옮긴다', () => {
+  const app = read('js/app.js');
+  assert.match(app, /SF\.menus\.setup\(\{ button: "#btn-account"/);
+  assert.match(app, /SF\.menus\.dock\(\{[^}]*"\(max-width:\s*500px\)"/);
+});
+
+test('P6-2 CSS: 500px 이하에서 .authbar를 통째로 숨기던 규칙이 없고, 계정 버튼은 넓은 화면에서 숨긴다', () => {
+  const css = read('css/style.css');
+  assert.equal(/\.topbar\s+\.authbar\s*\{[^}]*display:\s*none/.test(css), false, '로그인 버튼이 사라지던 규칙(F-모바일)');
+  assert.match(css, /\.account-wrap\s*\{\s*display:\s*none/);
+  assert.match(css, /@media \(max-width:\s*500px\)[^{]*\{[^]*\.account-wrap\s*\{\s*display:\s*block/);
+});

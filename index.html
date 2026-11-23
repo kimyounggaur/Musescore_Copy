@@ -28,13 +28,19 @@
   </label>
   <select id="language-select" class="tsel compact" aria-label="언어 / Language"><option value="ko">KO</option><option value="en">EN</option></select>
 
-  <div class="authbar" aria-label="회원 메뉴">
+  <div class="authbar" role="group" aria-label="회원 메뉴">
     <span id="auth-status" class="auth-status" title="Supabase 로그인 상태">Supabase 미설정</span>
     <button id="btn-signup" class="tbtn auth-btn" title="Supabase 회원가입">회원가입</button>
     <button id="btn-member-login" class="tbtn auth-btn" title="회원 로그인">회원 로그인</button>
     <button id="btn-admin-login" class="tbtn auth-btn" title="관리자 로그인">관리자 로그인</button>
     <button id="btn-admin-page" class="tbtn auth-btn" title="관리자 페이지">관리자 페이지</button>
     <button id="btn-logout" class="tbtn auth-btn" title="로그아웃" hidden>로그아웃</button>
+  </div>
+
+  <!-- 좁은 화면(≤500px)에서는 위 회원 메뉴(.authbar)가 이 안으로 옮겨 온다(js/menus.js dock). 넓은 화면에서는 보이지 않는다. -->
+  <div class="menu-wrap account-wrap">
+    <button id="btn-account" class="tbtn" title="계정" aria-label="계정 메뉴" popovertarget="account-menu" aria-expanded="false" aria-controls="account-menu">👤</button>
+    <div id="account-menu" class="menu" popover role="group" aria-label="계정"></div>
   </div>
 
   <div class="menu-wrap">

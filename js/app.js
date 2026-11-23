@@ -698,6 +698,9 @@
     const menu = $("#file-menu");
     // 열기·닫기·위치·키보드·바깥 누름은 menus.js가 맡는다. 항목을 누르면 menus.js가 먼저 메뉴를 닫고, 아래 동작이 이어진다.
     SF.menus.setup({ button: $("#btn-file"), menu });
+    // 좁은 화면(≤500px)에서는 회원 메뉴(.authbar)를 👤 계정 메뉴 안으로 옮긴다. 노드를 옮길 뿐이라 auth.js의 이벤트 연결은 그대로다.
+    SF.menus.setup({ button: "#btn-account", menu: "#account-menu", items: "button" });
+    SF.menus.dock({ node: ".topbar > .authbar", target: "#account-menu", media: "(max-width:500px)" });
     menu.addEventListener("click", async (e) => {
       const item = e.target.closest("[data-act]");
       if (!item) return;

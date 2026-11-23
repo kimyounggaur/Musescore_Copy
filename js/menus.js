@@ -8,7 +8,10 @@
  * 위치는 CSS anchor positioning에 기대지 않고 placement()로 계산한다 — 지원 범위가 아직 고르지 않다.
  *
  * 메뉴 마크업 규칙: 버튼은 popovertarget·aria-haspopup, 메뉴는 popover·role="menu",
- * 항목은 <button type="button" role="menuitem">. (Popover를 모르는 브라우저에서는 setup이 popover·popovertarget을 걷어 낸다.) */
+ * 항목은 <button type="button" role="menuitem">. (Popover를 모르는 브라우저에서는 setup이 popover·popovertarget을 걷어 낸다.)
+ * role="menu"가 아닌 꾸러미(계정 메뉴처럼 상태 글자와 버튼이 섞인 것)는 items 선택자로 키보드 이동 대상을 알려 준다.
+ *
+ * dock(P6-2): 좁은 화면에서 어떤 노드(회원 메뉴 .authbar)를 메뉴 안으로 옮겼다가 넓어지면 제자리로 되돌린다. */
 "use strict";
 (function (SF) {
   const MARGIN = 8;        // 화면 가장자리에서 띄우는 간격(px)
@@ -34,7 +37,8 @@
 
   const resolve = target => typeof target === "string" ? document.querySelector(target) : target;
 
-  // options: { button, menu } — 요소 또는 선택자. 제어 객체 { open, close, isOpen, place }를 돌려준다.
+  // options: { button, menu, items? } — 요소 또는 선택자. items는 ↑↓로 오갈 항목의 선택자(기본: role이 menuitem인 것).
+  // 제어 객체 { open, close, isOpen, place }를 돌려준다.
   function setup(options) {
     const button = resolve(options.button), menu = resolve(options.menu);
     if (!button || !menu) return null;
@@ -50,13 +54,14 @@
       menu.removeAttribute("popover");
       button.removeAttribute("popovertarget");
     }
-    button.setAttribute("aria-haspopup", "menu");
+    if (menu.getAttribute("role") === "menu") button.setAttribute("aria-haspopup", "menu");
     button.setAttribute("aria-expanded", "false");
     if (menu.id) button.setAttribute("aria-controls", menu.id);
 
     const isOpen = () => native ? menu.matches(":popover-open") : menu.classList.contains("open");
     const setExpanded = open => button.setAttribute("aria-expanded", String(open));
-    const items = () => [...menu.querySelectorAll(ITEM)].filter(el => !el.disabled && el.getClientRects().length > 0);
+    const itemSelector = options.items || ITEM;
+    const items = () => [...menu.querySelectorAll(itemSelector)].filter(el => !el.disabled && el.getClientRects().length > 0);
 
     // 메뉴가 원래 차지하는 너비(내용의 폭, max-width까지)를 잰다. 닫혀 있어도 잴 수 있게 잠깐 보이지 않게 펼치고,
     // left를 0으로 둔다 — 그래야 지금 놓인 자리 오른쪽의 남은 폭에 눌린 너비가 아니라 본래 너비가 나온다(화면에는 그려지지 않는다).
@@ -186,9 +191,32 @@
   function closeOthers(except) {
     for (const [menu, controller] of controllers) if (menu !== except && controller.isOpen()) controller.close({ restoreFocus: false });
   }
+  function open(target, opts) { const controller = controllers.get(resolve(target)); if (controller) controller.open(opts); }
   function close(target, opts) { const controller = controllers.get(resolve(target)); if (controller) controller.close(opts); }
   function closeAll(opts) { for (const controller of controllers.values()) controller.close(opts); }
   function isOpen(target) { const controller = controllers.get(resolve(target)); return !!controller && controller.isOpen(); }
 
-  SF.menus = { supported, placement, setup, close, closeAll, isOpen };
+  // options: { node, target, media } — media(CSS 미디어 쿼리)가 맞는 동안 node를 target 안으로 옮기고, 아니면 원래 자리로 되돌린다.
+  // 원래 자리는 주석 노드로 표시해 둔다. 노드를 옮길 뿐이라 id와 이벤트 연결이 그대로다(auth.js처럼 id로 찾아 붙인 코드도 계속 동작).
+  // target이 열려 있으면 먼저 닫는다(내용이 바뀌므로).
+  function dock(options) {
+    const node = resolve(options.node), target = resolve(options.target);
+    if (!node || !target || !node.parentNode || typeof window.matchMedia !== "function") return null;
+    const marker = document.createComment("dock home: " + (node.id || node.className));
+    node.parentNode.insertBefore(marker, node);
+    const query = window.matchMedia(options.media);
+    function apply() {
+      if (query.matches) {
+        if (node.parentNode !== target) target.append(node); // 좁아질 때 target은 비어 있고 닫혀 있다
+      } else if (marker.nextSibling !== node) {
+        close(target, { restoreFocus: false }); // 열린 채로 넓어지면 내용이 빠지기 전에 먼저 닫는다
+        marker.parentNode.insertBefore(node, marker.nextSibling);
+      }
+    }
+    if (query.addEventListener) query.addEventListener("change", apply); else query.addListener(apply); // 구형 Safari
+    apply();
+    return { apply, query, marker };
+  }
+
+  SF.menus = { supported, placement, setup, open, close, closeAll, isOpen, dock };
 })(window.SF = window.SF || {});
