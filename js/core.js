@@ -1763,6 +1763,30 @@ window.SF = window.SF || {};
     normalizeTies(score);
   }
 
+  /** 불러온 이벤트의 단순 값 정리(심층 방어). 템포는 반올림하지 않는다 — 가져온 소수 템포 보존 */
+  function finiteNumber(value) {
+    if (typeof value === "number") return Number.isFinite(value) ? value : null;
+    if (typeof value === "string" && value.trim() !== "") { const n = Number(value); return Number.isFinite(n) ? n : null; }
+    return null;                                   // null·불리언·객체·빈 문자열은 숫자로 보지 않는다
+  }
+  function sanitizeEventScalars(ev) {
+    if (ev.tempo !== undefined) {
+      const t = finiteNumber(ev.tempo);
+      if (t === null) delete ev.tempo; else ev.tempo = Math.min(999, Math.max(10, t));
+    }
+    for (const [key, max] of [["rehearsal", 12], ["staffText", 48]]) {     // 패널 입력 제한과 같은 길이
+      if (ev[key] === undefined) continue;
+      const text = ev[key] === null ? "" : String(ev[key]).slice(0, max);
+      if (text) ev[key] = text; else delete ev[key];
+    }
+    if (ev.color !== undefined && !(typeof ev.color === "string" && /^#[0-9a-fA-F]{6}$/.test(ev.color))) delete ev.color;
+    for (const key of ["offsetX", "offsetY", "velocityOffset"]) {
+      if (ev[key] === undefined) continue;
+      const n = finiteNumber(ev[key]);
+      if (n === null) delete ev[key]; else ev[key] = n;
+    }
+  }
+
   /* ---------------- 직렬화 ---------------- */
   function toJSON(score) {
     ensureParts(score);
@@ -1796,6 +1820,7 @@ window.SF = window.SF || {};
           if (!ev.notes) ev.notes = [];
           normalizeEventChordSymbol(ev);
           normalizeEventLyrics(ev);
+          sanitizeEventScalars(ev);
           if (ev.graceBefore) ev.graceBefore = cloneGraceList(ev.graceBefore);
           for (const g of ev.graceBefore || []) {
             const gn = parseInt(String(g.id).replace(/\D/g, ""), 10);
