@@ -194,3 +194,32 @@ test('P6-3 번역: 더보기·계정 메뉴 문구에 영어가 있다', () => {
   assert.match(i18n, /more \| 더보기 \| More/);
   assert.match(i18n, /accountMenu \| 계정 메뉴 \| Account menu/);
 });
+
+// ---- P6-4(🔒D3: 보기·재생·간단한 수정) — 휴대폰 폭에서 고급 패널은 안내만 ----
+test('P6-4 연결: 믹서·타임라인·내비게이터는 열기 전에 desktopOnly()를 지나고, 경계는 500px이다(버튼·F11·F12가 같은 문 하나를 쓴다)', () => {
+  const panels = read('js/panels.js');
+  assert.match(panels, /const PHONE_WIDTH = "\(max-width:500px\)";/);
+  assert.match(panels, /function desktopOnly\(message\) \{\s*if \(typeof window\.matchMedia !== "function" \|\| !window\.matchMedia\(PHONE_WIDTH\)\.matches\) return false;\s*flashHint\(message\);\s*return true;\s*\}/);
+  // 창을 열거나 그리기 전에 막는다(막은 뒤에는 showModal·render가 돌지 않는다)
+  assert.match(panels, /function openNavigator\(\) \{\s*if \(desktopOnly\("내비게이터는 데스크톱에서 사용할 수 있어요"\)\) return;\s*renderNavigator\(\);/);
+  assert.match(panels, /function openTimelinePanel\(\) \{\s*if \(desktopOnly\("타임라인은 데스크톱에서 사용할 수 있어요"\)\) return;\s*renderTimelinePanel\(\);/);
+  assert.match(panels, /\$\("#btn-mixer"\)\.addEventListener\("click", \(\) => \{\s*if \(desktopOnly\("믹서는 데스크톱에서 사용할 수 있어요"\)\) return;\s*renderMixerRows\(\);/);
+  // F11·F12·명령 팔레트는 이 두 함수를 그대로 부른다(키맵이 따로 창을 열지 않는다)
+  const keymap = read('js/keymap.js');
+  assert.match(keymap, /\["navigator", "내비게이터", \["F12"\], "openNavigator"\]/);
+  assert.match(keymap, /\["timeline", "타임라인", \["F11"\], "openTimelinePanel"\]/);
+  assert.equal(/dlg-(navigator|timeline|mixer)/.test(keymap), false, '키맵은 패널 창을 직접 열지 않는다');
+});
+
+test('P6-4 번역: 세 안내 문구에 영어가 있고, 코드에 쓴 한국어 문구와 글자 그대로 같다', () => {
+  const i18n = read('js/i18n.js'), panels = read('js/panels.js');
+  const entries = [
+    ['desktopMixer', '믹서는 데스크톱에서 사용할 수 있어요', 'The mixer is available on desktop'],
+    ['desktopTimeline', '타임라인은 데스크톱에서 사용할 수 있어요', 'The timeline is available on desktop'],
+    ['desktopNavigator', '내비게이터는 데스크톱에서 사용할 수 있어요', 'The navigator is available on desktop'],
+  ];
+  for (const [key, ko, en] of entries) {
+    assert.ok(i18n.includes(`${key} | ${ko} | ${en}`), `${key} 사전 항목`);
+    assert.ok(panels.includes(`desktopOnly("${ko}")`), `${key}: panels.js가 같은 문구로 안내한다`);
+  }
+});
