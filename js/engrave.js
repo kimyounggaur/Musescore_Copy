@@ -531,6 +531,9 @@
           const mm = SL.measures[mIdx] || { events: [C.fullRest(score, mIdx)] };
           const MS = { ...SL, clef: clefAt(SL, mIdx), mIdx };
           const SM = { ...group, idx: mIdx, x0: x, x1: x + mW, events: [], staff: MS, prefixW: M.prefixW, scale };
+          // 기둥 방향 규칙: 이 보표·이 마디에 "내용 있는" 성부가 둘 이상일 때만 성부 규칙(1·3성부 위 / 2·4성부 아래),
+          // 하나뿐이면 음높이로 정한다(표준 조판). 쉼표뿐인 성부는 세지 않는다.
+          SM.multiVoice = C.ensureMeasureVoices(mm, score, mIdx).filter(list => !C.voiceIsEmpty(list)).length > 1;
           const entries = C.measureEntries(mm, { score, activeVoice: opts.activeVoice });
           if (group.collapsed || entries.length === 1 && entries[0].ev.full) {
             const ent = entries[0];
@@ -548,6 +551,7 @@
             });
           }
           for (const le of SM.events) {
+            le.multiVoice = SM.multiVoice;
             out.eventsById.set(le.id, le);
             M.events.push(le);
           }
@@ -1153,11 +1157,20 @@
     const avg = notes.reduce((a, n) => a + C.absStep(n), 0) / notes.length;
     return avg < mid ? "up" : "down";
   }
-  function stemDirForVoice(score, notes, S, voice) {
+  // multiVoice=false(그 마디에 내용 있는 성부가 하나뿐)이면 음높이로, true이면 성부 규칙으로.
+  // 기본값 true: 이 값을 넘기지 않는 호출부(드럼 등)는 예전 동작 그대로다.
+  function stemDirForVoice(score, notes, S, voice, multiVoice = true) {
     voice = C.normalizeVoice(voice || 1);
+    if (!multiVoice) return stemDirForStaff(score, notes, S);
     if (voice === 1 || voice === 3) return "up";
     if (voice === 2 || voice === 4) return "down";
     return stemDirForStaff(score, notes, S);
+  }
+  /* 타이·슬러가 "스템 반대쪽"을 고를 때의 기준 방향.
+     renderNote가 실제로 그린 방향(le.stemDir)을 우선한다 — 빔 묶음 안의 음은 묶음 전체의 방향을 따르고,
+     손으로 고른 방향도 반영되기 때문이다. 기록이 없는 이벤트(드럼·TAB·쉼표)는 성부 규칙을 그대로 쓴다. */
+  function drawnStemDir(score, le) {
+    return le.stemDir || stemDirForVoice(score, le.ev.notes, le.staff, le.voice);
   }
   function drumY(S, ev) {
     const spec = C.drumSpec(ev.drumId);
@@ -1195,7 +1208,8 @@
     let s = renderGraceBefore(score, S, le);
     const kind = headKind(ev.dur);
     const manualStem = ev.stemDirection && ev.stemDirection !== "auto" ? ev.stemDirection : null;
-    const dir = stem ? stem.dir : (manualStem || stemDirForVoice(score, ev.notes, S, le.voice || ev.voice || 1));
+    const dir = stem ? stem.dir : (manualStem || stemDirForVoice(score, ev.notes, S, le.voice || ev.voice || 1, le.multiVoice));
+    le.stemDir = dir; // 실제로 그린 기둥 방향(테스트, 그리고 타이·슬러가 반대쪽을 고를 때 쓴다)
     const sorted = ev.notes.slice().sort((a, b) => C.absStep(a) - C.absStep(b)); // 낮은 음부터
     const headScale = S.style?.noteheadScale || 1;
     const stemX = stem?.x ?? le.x + (dir === "up" ? 4.8 : -4.8) * headScale;
@@ -1404,7 +1418,10 @@
     // 방향: 전체 음의 평균
     const all = [];
     for (const le of items) for (const n of le.ev.notes) all.push(n);
-    const dir = rn.voice ? stemDirForVoice(score, all, S, rn.voice) : stemDirForStaff(score, all, S);
+    // 표준 보표만 음높이 규칙을 쓴다. 드럼·TAB 빔은 예전처럼 성부 규칙(모든 묶음 위)을 유지한다.
+    // 음높이 판정에는 묶음 첫 음의 보표(옥타바 이동 반영)를 쓴다.
+    const pitched = S.staffType !== "tab" && !items[0].ev.drumId;
+    const dir = rn.voice ? stemDirForVoice(score, all, pitched ? items[0].staff : S, rn.voice, pitched ? items[0].multiVoice : true) : stemDirForStaff(score, all, S);
 
     const xs = items.map(le => le.x + (dir === "up" ? 1 : -1) * (S.staffType === "tab" ? 7 : le.ev.drumId ? 4.8 : 4.8 * (S.style?.noteheadScale || 1)));
     // 각 이벤트의 극단 머리 y(스템 방향 쪽)
@@ -1486,7 +1503,7 @@
           for (const n of tied) {
             const target = le2.ev.notes?.find(nn => nn.step === n.step && nn.oct === n.oct && nn.alter === n.alter);
             if (!target) continue;
-            const dir = stemDirForVoice(score, ev.notes, le1.staff, entry.voice); // 타이는 스템 반대쪽
+            const dir = drawnStemDir(score, le1); // 타이는 스템 반대쪽
             const curveDown = dir === "up";
             if (le1.sys === le2.sys) {
               if (pageIndex == null || le1.page === pageIndex) s += tiePath(le1.x + 7, le2.x - 7, yForStep(le1.staff, score, C.absStep(n)), curveDown, L.style, yForStep(le2.staff, score, C.absStep(target)));
@@ -1539,7 +1556,7 @@
 
   /* 슬러: 스템 반대쪽(혼합이면 위), 3차 베지어 + 사이 음표 회피 */
   function renderSlur(score, L, le1, le2, pageIndex) {
-    const d1 = stemDirForVoice(score, le1.ev.notes, le1.staff, le1.voice), d2 = stemDirForVoice(score, le2.ev.notes, le2.staff, le2.voice);
+    const d1 = drawnStemDir(score, le1), d2 = drawnStemDir(score, le2);
     const polyphonic = le1.sys.measures.some(m => m.events.some(le => le.globalIdx === le1.globalIdx && le.voice !== le1.voice && le.ev.type === "note"));
     const above = polyphonic ? d1 === "up" : !(d1 === "up" && d2 === "up");
     const segs = spannerSegments(le1, le2, L);
@@ -1568,7 +1585,7 @@
         const steps = le.ev.notes.map(C.absStep);
         const ext = above ? Math.max(...steps) : Math.min(...steps);
         let headY = yForStep(le.staff, score, ext);
-        const sd = stemDirForVoice(score, le.ev.notes, le.staff || seg.staff, le.voice);
+        const sd = drawnStemDir(score, le);
         if (above && sd === "up") headY -= 3.2 * SP;       // 스템 끝까지 회피
         if (!above && sd === "down") headY += 3.2 * SP;
         headY += (above ? -1 : 1) * (le.ev.artics?.length || 0) * SP;
