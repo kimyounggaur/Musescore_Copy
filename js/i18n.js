@@ -991,6 +991,17 @@
     reasonOpen | 최근 작업 열기 | Open from Recent work
     reasonUndo | 이전 악보로 되돌리기 | Go back to the previous score
   `);
+  group("lock", `
+    editingElsewhere | 다른 탭에서 편집 중인 악보예요 | This score is being edited in another tab
+    copyToEdit | 사본으로 편집 | Edit a copy
+    nowAvailable | 이제 편집할 수 있어요 | You can edit this score now
+    startEditing | 편집 시작 | Start editing
+    stillLocked | 아직 다른 탭에서 편집 중이에요 | It is still being edited in another tab
+    resumeFailed | 최신 내용을 불러오지 못했어요. 사본으로 편집해 보세요 | Could not load the latest version. Try editing a copy instead
+    copyFailed | 사본을 만들지 못했어요 | Could not make a copy
+    resumed | 이 탭에서 편집을 시작했어요 | Editing started in this tab
+    copyMade | 사본을 만들었어요. 이제 편집할 수 있어요. | Copy created. You can edit it now.
+  `);
   STRINGS.ko["session.beforeReplace"] = "{reason} 전에 현재 악보를 어떻게 할까요?";
   STRINGS.en["session.beforeReplace"] = "What should happen to the current score before you continue? ({reason})";
   STRINGS.ko["toast.openErrorDetail"] = "열 수 없어요: {name} — {error}";

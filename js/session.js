@@ -2,7 +2,9 @@
  * ① 열기·끌어다 놓기·앱 파일 실행·새 악보·데모·클라우드·사본이 모두 replaceScore를 거친다(P2-A).
  *    변경이 있는 악보를 묻지도 않고 갈아 끼우지 않고, 연속 요청은 순서대로 처리한다.
  * ② 악보마다 문서 ID(meta.docId)를 붙여 IndexedDB에 따로 자동 저장한다(P2-B).
- *    기록은 첫 편집 때 만들고, 부팅 때 이 탭이 보던 악보를 되살린다. 옛 localStorage 자동 저장은 한 번 옮기되 원본은 지우지 않는다. */
+ *    기록은 첫 편집 때 만들고, 부팅 때 이 탭이 보던 악보를 되살린다. 옛 localStorage 자동 저장은 한 번 옮기되 원본은 지우지 않는다.
+ * ③ 열려 있는 악보마다 SF.lock의 편집 잠금을 하나 쥔다(P2-D). 다른 탭이 이미 편집 중인 악보는 읽기 전용으로 열고,
+ *    풀리면 알려 준다. 사용자가 [편집 시작]을 누르면 보관된 최신 내용을 다시 읽어 와서 연다(오래된 화면 내용으로 편집하지 않는다). */
 "use strict";
 (function (SF) {
   const C = SF.core;
@@ -16,6 +18,8 @@
   const SAFE_ID = /^[A-Za-z0-9:_.-]{1,120}$/;
   const ORIGINS = new Set(["new", "demo", "file", "import", "cloud", "copy", "legacy"]);
   const KEPT = "이전 악보는 최근 작업에 보관했어요";
+  const COPY_MADE = "사본을 만들었어요. 이제 편집할 수 있어요.";
+  const IDENTITY_KEYS = ["docId", "cloudId", "cloudUpdatedAt", "cloudOwner", "cloudProject"];   // 사본에는 붙이지 않는 식별 필드(cloud.js META_KEYS + docId)
 
   const store = () => SF.store;                  // 테스트에서 바꿔 끼울 수 있게 부를 때마다 읽는다
   const validId = id => typeof id === "string" && SAFE_ID.test(id);
@@ -54,7 +58,7 @@
    * info: origin, docId(이어서 열 때), record(이미 있는 기록 — createdAt·origin·fileSavedAt을 이어받음) */
   function claim(score, info = {}) {
     const origin = ORIGINS.has(info.origin) ? info.origin : "new";
-    const id = pickId(score, origin, info.docId);
+    const id = validId(info.picked) ? info.picked : pickId(score, origin, info.docId);   // picked: 잠금을 잡느라 미리 정한 ID
     if (!score.meta) score.meta = {};
     score.meta.docId = id;
     const record = info.record || null;
@@ -70,6 +74,50 @@
     if (score?.meta) delete score.meta.docId;
     active = { id: "", origin: "new", createdAt: 0, fileSavedAt: 0, known: true };
     writeTabId("");
+  }
+
+  /* ---------------- 탭 간 편집 잠금(P2-D) ---------------- */
+  // docId: 이 탭이 보는 문서(공유 보기처럼 문서가 없으면 ""), handle: 이 탭이 쥔 잠금(읽기 전용이면 null),
+  // locked: 다른 탭이 편집 중이라 읽기 전용으로 열었음, available: 그 탭이 놓아서 이제 편집을 시작할 수 있음.
+  let lock = { docId: "", handle: null, locked: false, available: false, stopWatch: null };
+  const lockListeners = new Set();
+  const lockState = () => ({ docId: lock.docId, locked: lock.locked, available: lock.available });
+  function onLock(fn) { lockListeners.add(fn); return () => lockListeners.delete(fn); }
+  function emitLock() {
+    const state = lockState();
+    for (const fn of [...lockListeners]) { try { fn(state); } catch { /* 화면 쪽 오류가 열기·저장을 막지 않게 */ } }
+  }
+  /** 이 탭의 잠금 상태를 바꾼다. 읽기 전용(다른 탭이 편집 중)이면 풀리는 때를 지켜본다. */
+  function setLock(next) {
+    lock.stopWatch?.();
+    lock = { docId: "", handle: null, locked: false, available: false, stopWatch: null, ...next };
+    if (lock.locked && lock.docId && SF.lock?.watch) {
+      lock.stopWatch = SF.lock.watch(lock.docId, () => { lock.stopWatch = null; lock.available = true; emitLock(); });
+    }
+    emitLock();
+  }
+  const drop = handle => { try { handle?.release(); } catch { /* 이미 놓았다 */ } };
+  /** 문서 잠금을 잡는다. locked=true면 다른 탭이 쥐고 있다. 잠금 모듈이 없거나 오류가 나면 막지 않고 연다. */
+  async function lockDoc(id, options) {
+    if (!SF.lock?.acquire) return { handle: null, locked: false };
+    try { const handle = await SF.lock.acquire(id, options); return { handle, locked: !handle }; } catch { return { handle: null, locked: false }; }
+  }
+  /** claim + 잠금. 교체 통로를 거치지 않고 악보를 여는 곳(부팅 때 데모)이 쓴다. */
+  async function adopt(score, info = {}) {
+    const origin = ORIGINS.has(info.origin) ? info.origin : "new";
+    const id = pickId(score, origin, info.docId);
+    const got = await lockDoc(id);
+    claim(score, { ...info, picked: id });
+    setLock({ docId: id, handle: got.handle, locked: got.locked });
+    return { id, locked: got.locked };
+  }
+
+  // 보관 목록이 바뀌었음을 다른 탭에 알린다(최근 작업 창이 열려 있으면 새로 그린다). 편집 중에는 1초에 한 번만.
+  let announceTimer = 0, announcedAt = 0;
+  function announceDocs(docId) {
+    const send = () => { announceTimer = 0; announcedAt = Date.now(); SF.lock?.notify?.("docs-changed", { docId }); };
+    const wait = 1000 - (Date.now() - announcedAt);
+    if (wait <= 0) send(); else if (!announceTimer) announceTimer = setTimeout(send, wait);
   }
 
   /* ---------------- 쓰기: io.js의 자동 저장 writer ---------------- */
@@ -108,16 +156,27 @@
       measures: Array.isArray(data.measures) ? data.measures.length : 0, bytes: sizeOf(json), schema: SCHEMA, data,
     };
     const run = async () => {
-      if (!info.known) {
-        const old = await s.loadDoc(id).catch(() => null);
-        if (old) { info.createdAt = old.createdAt || 0; info.origin = old.origin || info.origin; info.fileSavedAt = old.fileSavedAt || 0; }
-        info.known = true;
+      // 교체 통로를 거치지 않고 들어온 악보(setScore 직접 호출)는 쓰기 전에 잠금부터 잡는다 — 다른 탭의 문서를 덮어쓰지 않게.
+      let temporary = null;
+      if (lock.docId !== id && SF.lock?.acquire) {
+        const got = await lockDoc(id);
+        if (got.locked) throw new Error("다른 탭이 편집 중인 악보라 자동 저장하지 않았어요");   // 저장 실패로 알린다(덮어쓰지 않는다)
+        if (C.state.score?.meta?.docId === id) { const old = lock.handle; setLock({ docId: id, handle: got.handle, locked: false }); if (old && old !== got.handle) drop(old); }
+        else temporary = got.handle;               // 그새 다른 악보로 바뀌었다 — 쓰는 동안만 쥐고 놓는다
       }
-      if (!info.createdAt) info.createdAt = savedAt;
-      await s.saveDoc({ ...body, createdAt: info.createdAt, origin: info.origin, fileSavedAt: info.fileSavedAt || 0 });
-      await s.kvSet("lastDocId", id).catch(() => {});
-      if (active.id === id) writeTabId(id);
-      requestPersistence();
+      try {
+        if (!info.known) {
+          const old = await s.loadDoc(id).catch(() => null);
+          if (old) { info.createdAt = old.createdAt || 0; info.origin = old.origin || info.origin; info.fileSavedAt = old.fileSavedAt || 0; }
+          info.known = true;
+        }
+        if (!info.createdAt) info.createdAt = savedAt;
+        await s.saveDoc({ ...body, createdAt: info.createdAt, origin: info.origin, fileSavedAt: info.fileSavedAt || 0 });
+        await s.kvSet("lastDocId", id).catch(() => {});
+        if (active.id === id) writeTabId(id);
+        requestPersistence();
+        announceDocs(id);
+      } finally { drop(temporary); }
     };
     const result = writes.then(run, run);       // 저장 순서를 요청 순서와 같게 지킨다
     writes = result.catch(() => {});
@@ -181,7 +240,8 @@
   }
 
   /** 시작 악보를 고른다: 이 탭의 문서 → 마지막으로 편집한 문서 → 가장 최근 문서 → 없으면 null(데모는 호출한 쪽이 연다).
-   * 읽을 수 없는 기록은 건너뛴다. 돌려주는 악보는 이미 이 탭의 현재 문서로 등록돼 있다. */
+   * 읽을 수 없는 기록은 건너뛴다. 돌려주는 악보는 이미 이 탭의 현재 문서로 등록돼 있다.
+   * 다른 탭이 편집 중인 문서는 건너뛴다 — 다만 이 탭이 보던 문서(새로고침 전)라면 읽기 전용으로 되살린다(lockState().locked로 확인). */
   async function restoreOnBoot() {
     const s = store();
     try { await s?.open(); } catch { /* 열기 실패는 아래에서 처리 */ }
@@ -190,19 +250,25 @@
     }
     try {
       await migrateLegacyAutosave();
-      const ids = [readTabId(), await s.kvGet("lastDocId").catch(() => null), ...(await s.listDocs()).slice(0, 8).map(doc => doc.id)];
       const tried = new Set();
-      for (const id of ids) {
-        if (!validId(id) || tried.has(id)) continue;
+      const attempt = async (id, mine) => {
+        if (!validId(id) || tried.has(id)) return null;
         tried.add(id);
         const doc = await s.loadDoc(id).catch(() => null);
-        if (!doc?.data) continue;
-        try {
-          const score = C.fromJSON(doc.data);
-          claim(score, { origin: doc.origin, docId: doc.id, record: doc });
-          return score;
-        } catch { /* 깨진 기록은 건너뛴다 */ }
-      }
+        if (!doc?.data) return null;
+        let score;
+        try { score = C.fromJSON(doc.data); } catch { return null; }   // 깨진 기록은 건너뛴다
+        // 새로고침 직후에는 옛 페이지의 잠금이 풀리길 잠깐 기다린다(자기 자신에게 막히지 않게).
+        const got = await lockDoc(id, mine ? { retries: 4 } : undefined);
+        if (got.locked && !mine) return null;
+        claim(score, { origin: doc.origin, docId: doc.id, record: doc });
+        setLock({ docId: id, handle: got.handle, locked: got.locked });
+        return score;
+      };
+      let found = await attempt(readTabId(), true);
+      if (!found) found = await attempt(await s.kvGet("lastDocId").catch(() => null), false);
+      if (!found) for (const doc of (await s.listDocs()).slice(0, 8)) { found = await attempt(doc.id, false); if (found) break; }
+      if (found) return found;
       // 이전하지 못한 예전 자동 저장이 남아 있으면 그대로 보여 준다(원본은 건드리지 않았고, 첫 편집 때 다시 문서로 옮겨 쓴다).
       if (!(await s.kvGet("migrated.v1").catch(() => null))) {
         const legacy = SF.io.loadAutosave?.();
@@ -280,8 +346,19 @@
       if (!chosen || opts.stale?.()) return false;
       const before = active;
       const previous = kept ? activeId() : "";    // 보관한 직전 문서 — 토스트 [되돌리기]가 다시 연다
-      if (chosen.readOnly) release(chosen.score); else claim(chosen.score, chosen.info);
-      try { SF.app.installScore(chosen.score, opts); } catch (error) { active = before; writeTabId(before.id); throw error; }
+      // 문서 ID를 먼저 정해 편집 잠금을 잡는다. 다른 탭이 편집 중이면 읽기 전용으로 연다(공유 보기는 문서가 없어 잠그지 않는다).
+      let id = "", got = { handle: null, locked: false };
+      if (!chosen.readOnly) {
+        id = pickId(chosen.score, chosen.info.origin, chosen.info.docId);
+        got = await lockDoc(id);
+        if (opts.stale?.()) { if (got.handle && got.handle !== lock.handle) drop(got.handle); return false; }
+      }
+      if (chosen.readOnly) release(chosen.score); else claim(chosen.score, { ...chosen.info, picked: id });
+      try { SF.app.installScore(chosen.score, got.locked ? { ...opts, readOnly: true } : opts); }
+      catch (error) { active = before; writeTabId(before.id); if (got.handle && got.handle !== lock.handle) drop(got.handle); throw error; }
+      const old = lock.handle;
+      setLock({ docId: id, handle: got.handle, locked: got.locked });
+      if (old && old !== got.handle) drop(old);   // 새 악보가 자리 잡은 뒤에야 이전 악보의 잠금을 놓는다
       if (kept) {
         const back = previous && previous !== activeId() ? { action: { label: "되돌리기", run: () => undo(previous) } } : undefined;
         SF.app.toast?.(KEPT, back);
@@ -312,11 +389,43 @@
     return outcome;
   }
 
+  /** 읽기 전용으로 열어 둔 악보의 편집을 시작한다. 화면에 있던 오래된 내용이 아니라 보관된 최신 내용을 다시 읽어 와서 연다.
+   * 결과: "resumed"(이제 이 탭에서 편집) | "locked"(그새 다른 탭이 다시 잡았다 — 최신 내용 그대로 읽기 전용) | "none"(열린 문서 없음) |
+   *       "missing" · "unreadable"(보관 기록 문제) | "canceled" */
+  async function resume() {
+    const id = lock.docId;
+    if (!id || !lock.locked) return "none";
+    const outcome = await openDoc(id, { reason: "편집 시작", toast: false });
+    if (outcome !== "opened") return outcome;
+    return lock.locked ? "locked" : "resumed";
+  }
+
+  /** 다른 탭이 편집 중인 악보를 새 문서(사본)로 만들어 이 탭에서 편집한다. 화면의 내용이 아니라 보관된 최신 내용에서 복사한다.
+   * 사본에는 문서 ID·클라우드 연결을 붙이지 않는다. 성공하면 true. */
+  async function copyForEditing() {
+    const id = lock.docId, s = store();
+    let source = null;
+    if (id && s) {
+      try { await s.open(); const doc = s.usable ? await s.loadDoc(id) : null; if (doc?.data) source = C.fromJSON(doc.data); } catch { /* 화면의 내용으로 대신한다 */ }
+    }
+    if (!source) { try { source = C.fromJSON(C.toJSON(C.state.score)); } catch { return false; } }
+    for (const key of IDENTITY_KEYS) delete source.meta[key];
+    const base = String(source.meta.title ?? "").trim() || "제목 없음";
+    source.meta.title = `${base}${SF.i18n?.lang === "en" ? " (copy)" : " 사본"}`;
+    const opened = await replaceScore(source, { reason: "사본으로 편집", origin: "copy", toast: false });
+    if (opened && !lock.locked) {
+      SF.io?.autosave?.(C.state.score);            // 사본도 곧 최근 작업에 올라가도록 바로 저장을 예약한다
+      SF.app.toast?.(COPY_MADE);
+    }
+    return opened && !lock.locked;
+  }
+
   SF.io?.setAutosaveWriter?.(persist);
   // 파일로 저장(io.saveJSON → markSaved)이 끝나면 어느 경로든 시각을 남긴다.
   C.onChange?.((score, event) => { if (event?.type === "saved") noteFileSaved(); });
   SF.session = {
     replaceScore, openDoc, guard, flushActive,
-    activeId, claim, restoreOnBoot, migrateLegacyAutosave, persist, noteFileSaved, savedLabel,
+    activeId, claim, adopt, restoreOnBoot, migrateLegacyAutosave, persist, noteFileSaved, savedLabel,
+    lockState, onLock, resume, copyForEditing,
   };
 })(window.SF);

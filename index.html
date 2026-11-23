@@ -143,6 +143,15 @@
   <button class="drum-btn" data-drum="high-tom" title="High tom">High Tom</button>
 </div>
 
+<!-- ═══════════ 다른 탭이 편집 중인 악보 안내(js/lock-ui.js) ═══════════ -->
+<div id="lock-banner" class="lock-banner" role="status" aria-live="polite" hidden>
+  <span id="lock-text" class="lock-text"></span>
+  <span class="lock-actions">
+    <button type="button" id="lock-resume" class="tbtn" hidden>편집 시작</button>
+    <button type="button" id="lock-copy" class="tbtn">사본으로 편집</button>
+  </span>
+</div>
+
 <!-- ═══════════ 작업 영역 ═══════════ -->
 <div id="workspace">
   <main id="canvas">
@@ -482,7 +491,9 @@ where email = 'admin@example.com';</pre>
 <script src="js/io.js"></script>
 <script src="js/ui-dialog.js"></script>
 <script src="js/store.js"></script>
+<script src="js/lock.js"></script>
 <script src="js/session.js"></script>
+<script src="js/lock-ui.js"></script>
 <script src="js/recent.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/cloud.js"></script>

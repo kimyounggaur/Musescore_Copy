@@ -18,6 +18,8 @@
   "js/input.js",
   "js/io.js",
   "js/keymap.js",
+  "js/lock-ui.js",
+  "js/lock.js",
   "js/palette.js",
   "js/panels.js",
   "js/playback.js",

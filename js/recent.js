@@ -38,9 +38,9 @@
     try { return new Intl.DateTimeFormat(locale, options).format(date); } catch { return date.toLocaleString(); }
   }
 
-  /** 다른 탭이 편집 중인 문서 ID 모음(2-D가 SF.lock.heldElsewhere를 채운다). 없으면 빈 집합. */
-  async function lockedElsewhere() {
-    try { return new Set((await SF.lock?.heldElsewhere?.()) || []); } catch { return new Set(); }
+  /** 다른 탭이 편집 중인 문서 ID 모음(SF.lock). 잠금 목록을 못 읽는 브라우저는 보이는 문서마다 다른 탭에 물어본다. 없으면 빈 집합. */
+  async function lockedElsewhere(ids) {
+    try { return new Set((await SF.lock?.heldElsewhere?.(ids)) || []); } catch { return new Set(); }
   }
 
   function button(label, className, onClick, doc, extra = {}) {
@@ -98,7 +98,7 @@
     const store = SF.store;
     let docs = [], usable = false;
     try { await store?.open(); usable = Boolean(store?.usable); if (usable) docs = await store.listDocs(); } catch { usable = false; }
-    const elsewhere = usable ? await lockedElsewhere() : new Set();
+    const elsewhere = usable ? await lockedElsewhere(docs.map(doc => doc.id)) : new Set();
     if (mine !== token) return;
     const current = SF.session?.activeId?.() || "";
     list.replaceChildren(...docs.map(doc => row(doc, current, elsewhere)));
@@ -109,11 +109,35 @@
     showUsage();
   }
 
+  /* 창이 열려 있는 동안 다른 탭의 변화(저장·편집 시작·편집 끝)를 따라간다. */
+  let stopLive = null, liveTimer = 0;
+  function refreshSoon() {
+    clearTimeout(liveTimer);
+    liveTimer = setTimeout(async () => {
+      if (!$("#dlg-recent")?.open) return;
+      // 새로 그려도 키보드 초점이 사라지지 않게, 초점이 있던 행의 같은 버튼으로 돌려놓는다.
+      const active = document.activeElement, row = active?.closest?.("#rc-list .rc-row");
+      const where = row ? { id: row.dataset.id, kind: [...active.classList].find(name => /^rc-(open|download|delete)$/.test(name)) } : null;
+      await render();
+      if (where?.kind) {
+        const target = [...document.querySelectorAll(`#rc-list .rc-row .${where.kind}`)].find(node => node.closest(".rc-row")?.dataset.id === where.id);
+        if (target && !target.disabled) target.focus();
+      }
+    }, 250);
+  }
+  function watchChanges(dialog) {
+    stopLive?.();
+    const offs = [SF.lock?.onMessage?.("docs-changed", refreshSoon), SF.lock?.onMessage?.("doc-closed", refreshSoon), SF.session?.onLock?.(refreshSoon)].filter(Boolean);
+    stopLive = () => { for (const off of offs) off(); clearTimeout(liveTimer); stopLive = null; };
+    dialog.addEventListener("close", () => stopLive?.(), { once: true });
+  }
+
   async function open(options = {}) {
     const dialog = $("#dlg-recent");
     if (!dialog) return;
     $("#rc-warn").hidden = !options.quota;
     if (!dialog.open) SF.ui.open(dialog);
+    watchChanges(dialog);
     await render();
   }
 
@@ -154,7 +178,7 @@
     });
     if (!sure) return;
     if (doc.id === (SF.session?.activeId?.() || "")) return;    // 묻는 사이 이 악보로 바뀌었다면 지우지 않는다
-    try { await SF.store.deleteDoc(doc.id); } catch { toast("기록을 지우지 못했어요"); }
+    try { await SF.store.deleteDoc(doc.id); SF.lock?.notify?.("docs-changed", { docId: doc.id }); } catch { toast("기록을 지우지 못했어요"); }
     await render();
     ($("#rc-list button:not([disabled])") || $("#dlg-recent .dlg-close"))?.focus();
   }
