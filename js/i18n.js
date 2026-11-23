@@ -206,6 +206,9 @@
     systemGap | 시스템 간격 | System spacing
     staffGap | 보표 간격 | Staff spacing
     beamThickness | 빔 두께 | Beam thickness
+    pianoQuality | 피아노 음질 | Piano sound quality
+    pianoQualityHigh | 고음질(약 19MB) | High quality (about 19 MB)
+    pianoQualityHint | 이 기기에만 저장돼요. 악보에는 들어가지 않고, 다음 재생부터 적용돼요. | Saved on this device only, not in the score. Applies from the next playback.
     measures | 마디 | Measures
     addFour | ＋ 마디 4개 추가 | ＋ Add four measures
     deleteLast | － 마지막 마디 삭제 | － Delete last measure
@@ -403,6 +406,8 @@
   `);
   group("toast", `
     saved | 악보 파일을 내려받았어요 | Score file downloaded
+    pianoHigh | 고음질 피아노(약 19MB)를 쓰도록 바꿨어요. 다음 재생부터 적용돼요 | Switched to the high-quality piano (about 19 MB). It applies from the next playback
+    pianoBasic | 기본 피아노로 바꿨어요. 다음 재생부터 적용돼요 | Switched to the standard piano. It applies from the next playback
     autosaved | 이 기기에 자동 저장했어요 | Saved automatically on this device
     storageFull | 자동 저장 공간이 부족해요. 파일 메뉴에서 악보를 저장해 주세요. | Auto-save storage is full. Save your score from the File menu.
     musicxml | MusicXML로 내보냈어요 — MuseScore에서 열 수 있어요 | Exported MusicXML — open it in MuseScore

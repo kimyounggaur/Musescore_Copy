@@ -128,8 +128,11 @@
   let sampleStatus = { state: "idle", text: "샘플 대기", detail: "재생하면 smplr 실제 악기 샘플을 불러옵니다." };
   let onSampleStatus = null;
 
+  // 피아노는 두 가지다(결정 D2-A): 기본은 가벼운 Soundfont 피아노, 설정에서 고르면 큰 Splendid 피아노(약 19MB)를 쓴다.
+  // 악기 이름은 악보 데이터에 계속 "piano"로 저장되고, 어느 음원을 쓸지는 sampleKey가 이 기기의 설정으로 정한다.
   const SAMPLE_MAP = {
-    piano: { kind: "splendid", label: "Splendid Grand Piano", volume: 98 },
+    piano: { kind: "soundfont", instrument: "acoustic_grand_piano", label: "Grand Piano", volume: 96 },
+    pianoHQ: { kind: "splendid", label: "Splendid Grand Piano", volume: 98 },
     epiano: { kind: "soundfont", instrument: "electric_piano_1", label: "Electric Piano", volume: 96 },
     musicbox: { kind: "soundfont", instrument: "music_box", label: "Music Box", volume: 104 },
     organ: { kind: "soundfont", instrument: "church_organ", label: "Church Organ", volume: 94 },
@@ -169,8 +172,32 @@
     return smplrPromise;
   }
 
+  const PIANO_QUALITY_KEY = "scoreforge.audio.pianoQuality"; // "basic"(기본) | "hq"(고음질). 이 기기에만 저장하고 악보에는 넣지 않는다
+  let pianoQuality = readPianoQuality();
+
+  function readPianoQuality() {
+    try { return localStorage.getItem(PIANO_QUALITY_KEY) === "hq" ? "hq" : "basic"; } catch (err) { return "basic"; }
+  }
+
   function sampleKey(instrument) {
-    return SAMPLE_MAP[instrument] ? instrument : "piano";
+    const key = SAMPLE_MAP[instrument] ? instrument : "piano";
+    return key === "piano" && pianoQuality === "hq" ? "pianoHQ" : key;
+  }
+
+  function getPianoQuality() {
+    return pianoQuality;
+  }
+
+  /* 피아노 음질을 바꾼다. 재생 중이면 재생을 멈추고(곡 도중에 음원이 바뀌지 않게), 이전 음질의 인스턴스를 내린다.
+   * 새 음원은 다음 재생 준비 때 불러온다. */
+  function setPianoQuality(quality) {
+    const next = quality === "hq" ? "hq" : "basic";
+    if (next === pianoQuality) return pianoQuality;
+    if (player.playing || player.loading) stop(true);
+    pianoQuality = next;
+    try { localStorage.setItem(PIANO_QUALITY_KEY, next); } catch (err) { /* 저장 못 해도 이번 접속 동안은 적용 */ }
+    releaseUnused();
+    return pianoQuality;
   }
 
   /* 샘플 요청을 동시에 max개까지만 보낸다(백로그 #3: 수백 개를 한꺼번에 요청해 화면이 멈추던 문제).
@@ -1011,6 +1038,6 @@
     setRate, setLoop, seek, updateMixer, partBuses, buildTempoMap,
     getSampleStatus, setSampleStatusHandler, ensureSampleInstrument, buildPlaybackPlan,
     limitedStorage, // 테스트용: 동시 요청 제한 유틸
-    releaseUnused, debugStats,
+    releaseUnused, debugStats, getPianoQuality, setPianoQuality,
   };
 })(window.SF);
