@@ -245,6 +245,29 @@ CLAUDE.md 금지 항목 점검
 전체 검증: npm run check 27개 OK · npm test 320건(297 통과·0 실패·23 건너뜀) · CI 명령 재현(tests/*.test.mjs 전체, SF_HEADERS=1, SF_BLOCK_SAMPLES=1, --test-concurrency=1) 379/379 · 오프라인 검증 48파일·CSP 위반 0·오류 0 · verify-deploy 통과.
 판정: ❌ 없음, ⏳ 2건(실제 브라우저에서 사람이 재야 하는 측정) → 로컬 릴리스 준비는 가능, **병합 전에 사람이 ⏳ 두 건과 소리 확인 항목((P4-1)~(P4-3))을 확인**한다.
 
+### Phase 5 기둥 방향·편집 반응성 검토 (2026-11-23, phase/p5-stems-render)
+범위: P5-A1·A2·B1·B2(phase/p4-playback-memory 이후 커밋 8개 + 검토 중 추가한 테스트 1개). 코드는 고치지 않고 점검만 했다. 검토 중 DoD ②를 실제 브라우저의 내보내기 경로로 한 번에 증명하는 테스트가 없어 **테스트만** 추가했다(tests/export-hits-browser.test.mjs, 코드 변경 없음).
+
+| # | Phase 5 DoD | 결과 | 증거 |
+|---|---|---|---|
+| 1 | 기둥 테스트 5종 통과, 기준 이미지 갱신 | ✅ 테스트 / ⏳ 기준 이미지 | tests/engrave-v3.test.mjs:251·259·266·282·293 ①~⑤(높은 음 아래·낮은 음 위·2성부는 성부 규칙·높은 8분음표 빔은 아래·사람이 고른 방향 존중) + 보표별 성부 수·쉼표뿐인 성부·경계·옥타바 빔·빔 안 타이/슬러·드럼/TAB 불변 등 12건 / 변이 검사 20건 전부 잡힘. 기준 이미지 4장(tests/baseline/*.png)은 **사람이 Edge로 재생성**해야 한다(자동 테스트는 이 그림을 읽지 않음). `--png-only` 옵션은 tests/capture-baseline.mjs, 테스트는 tests/capture-baseline.test.mjs. 사람 확인 (P5-A1)·(P5-A2) |
+| 2 | relayout 후처리 0회, 내보내기 SVG에 `note-hit` 0개 | ✅ | js/app.js:88 후처리 삭제(주석 한 줄만 남음; 정적 테스트 tests/engrave-hits.test.mjs:87) · js/engrave.js:604·610·667 `emitHits`(`!opts.export`, finally로 복원)·:1200 `noteHit` · tests/engrave-hits.test.mjs 10건(:60 내보내기 0개·:71 예외 뒤 복원·:77 캐시·:93 `E.render` 호출 위치 정적 감사) · **실제 브라우저** tests/export-hits-browser.test.mjs(내려받은 SVG 파일·exportPages(PNG도 이 결과를 씀)·인쇄 영역 #print-pages 모두 0개, 화면 클릭 영역은 그대로, 변이 3건 잡힘) · tests/hit-browser.test.mjs(layout 머리와 화면 .note-hit 1:1) |
+| 3 | 피아노 100마디 편집 시간 기록 — 300ms 이상이면 9-8을 Phase 8 앞으로 | ✅ | tests/baseline/PERF.md "Phase 5 후 편집 지연": 같은 세션에서 세 코드를 번갈아 3회 잰 중앙값 5-B1 전 347 → 5-B1 후 240 → 5-B2 후 236ms(300ms 미만). docs/DECISIONS.md P5 = "안 당김(Phase 9 그대로)". 사람 PC에서 다시 재는 일은 (P5-B2) ⑥ |
+
+P5 집중 점검
+- 기둥 5종 ✅ — 위 1. 드럼·TAB은 성부 규칙 그대로(지금까지와 같음)를 테스트로 고정.
+- 기준 이미지 사람 확인 기록 ⏳ — 사람 작업으로 기록했다: (P5-A2) Edge로 `--png-only` 재생성, (P5-A1) 화면에서 기둥 확인.
+- 내보내기 SVG note-hit 0 ✅ — 위 2.
+- PERF 기록과 9-8 판단 ✅ — 위 3. 편집 지연을 줄인 것은 5-B1(347 → 240ms)이고 5-B2는 측정 오차 안(240 → 236ms)이다 — 5-B2는 구조 정리(클릭 영역을 만드는 곳을 조판기 한 곳으로)가 목적이다.
+
+CLAUDE.md 금지 항목 점검
+- `window.confirm`·`window.prompt` 없음. app.js 1,100줄(1,600줄 이하). vendor/ 변경 없음. 새 `innerHTML` 사용 0줄(Phase 4 대비 추가된 줄 0). 새 외부 URL 없음.
+- 테스트 삭제·skip·완화 없음: tests/*.test.mjs에서 사라진 assert 0줄(기존 테스트 파일은 줄이 늘기만 함, engrave-v3.test.mjs +200/−0). 사라진 5줄은 모두 tests/capture-baseline.mjs(기준 파일을 만드는 스크립트)의 `--png-only`·`SF_URL` 지원 변경이다. 새 브라우저 테스트의 `skip: !process.env.PLAYWRIGHT_MODULE`은 기존 브라우저 테스트와 같은 관례(조건부).
+- 설계와 달라진 점(각 Step 기록 참고): 사람이 고른 기둥 방향이 타이·슬러의 위/아래에도 반영됨(A1) · 드럼·TAB 빔은 성부 규칙 유지(A1) · 이벤트 조회는 문서에서 먼저 나온 것이 이김(B1) · 클릭 영역 좌표는 소수 둘째 자리 반올림(B2) · 내보내기 판단은 모듈 변수 emitHits(B2).
+
+전체 검증: npm run check 27개 OK · npm test 351건(324 통과·0 실패·27 건너뜀) · CI 명령 재현(tests/*.test.mjs 전체, SF_HEADERS=1, SF_BLOCK_SAMPLES=1, --test-concurrency=1) 410/410 · 오프라인 검증 48파일·CSP 위반 0·오류 0 · verify-deploy 통과.
+판정: ❌ 없음, ⏳ 1건(기준 이미지 4장 — 사람이 Edge로 재생성) → 로컬 릴리스 준비는 가능, **병합 전에 사람이 기준 이미지를 갱신하고 화면에서 기둥 방향·음표 클릭·내보내기를 확인**((P5-A1)·(P5-A2)·(P5-B2))한다.
+
 ## 릴리스 준비 기록
 (로컬에서 버전 올리기·검증까지만 했다. push·PR·병합·배포는 하지 않았다.)
 
@@ -254,6 +277,7 @@ CLAUDE.md 금지 항목 점검
 | 2026-11-23 | 3.1.0 | phase/p2-work-safety | P2-A~P2-E (+DoD ③ 테스트) | check 27 · npm test 254/236/0/18 skip · 브라우저(SF_HEADERS=1) 78/78 · 오프라인 검증 통과(캐시 48개, CSP 위반 0) | 로컬 준비 완료 — push 대기(Phase 1의 3.0.2를 먼저 배포) |
 | 2026-11-23 | 3.1.1 | phase/p3-ci | P3-1·3-2·3-3·3-5·3-6 (3-4는 사람) | check 27 · npm test 269/249/0/20 skip · CI 명령 재현(tests/*.test.mjs 전체, SF_HEADERS=1) 328/328 · 오프라인 검증 통과(캐시 48개, CSP 위반 0) · verify-deploy 통과 | 로컬 준비 완료 — push 대기(3.0.2 → 3.1.0 → 3.1.1 순서로 배포, ⏳ 2건은 GitHub에서 확인) |
 | 2026-11-23 | 3.2.0 | phase/p4-playback-memory | P4-1~P4-4 | check 27 · npm test 320/297/0/23 skip · CI 명령 재현(tests/*.test.mjs 전체, SF_HEADERS=1) 379/379 · 오프라인 검증 통과(캐시 48개, CSP 위반 0) · verify-deploy 통과 | 로컬 준비 완료 — push 대기(3.0.2 → 3.1.0 → 3.1.1 → 3.2.0 순서로 배포, ⏳ 메모리·Long Task 측정과 소리 확인은 사람이) |
+| 2026-11-23 | 3.3.0 | phase/p5-stems-render | P5-A1·A2·B1·B2 (+R-1 검토 중 브라우저 테스트 1건) | check 27 · npm test 351/324/0/27 skip · CI 명령 재현(tests/*.test.mjs 전체, SF_HEADERS=1) 410/410 · 오프라인 검증 통과(캐시 48개, CSP 위반 0) · verify-deploy 통과 | 로컬 준비 완료 — push 대기(3.0.2 → 3.1.0 → 3.1.1 → 3.2.0 → 3.3.0 순서로 배포, ⏳ 기준 이미지 재생성과 기둥·클릭·내보내기 화면 확인은 사람이) |
 
 ## 사람이 해야 할 일 (자동 진행에서 건너뜀)
 - [ ] P0-2 공유 동결: Supabase SQL Editor에서 공개 악보·문자열 템포 질의 2건 실행, **개수만** 이 파일에 기록. Phase 1 배포 전까지 새 공유 링크 만들지 않기.
