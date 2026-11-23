@@ -20,3 +20,10 @@ test('SF.html.num은 숫자가 아니면 빈 문자열', () => {
   assert.equal(SF.html.num(5, { min: 30, max: 280 }), '30');
   assert.equal(SF.html.num(undefined, { fallback: '-' }), '-');
 });
+
+test('panels.js의 data-prop 입력 value는 모두 이스케이프 또는 숫자 변환을 거친다', () => {
+  const src = readFileSync('js/panels.js', 'utf8');
+  const values = [...src.matchAll(/data-prop="[^"]+"[^>]*value="\$\{(.*?)\}"/g)].map(m => m[1]);
+  assert.ok(values.length >= 8, '입력이 8개 이상이어야 한다: ' + values.length);   // 016ad44 기준 8개 입력
+  for (const v of values) assert.match(v, /^\s*(htmlEsc\(|SF\.html\.(esc|num)\(|\+ev\.)/, `unsafe value: ${v}`);
+});
