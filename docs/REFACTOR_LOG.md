@@ -200,6 +200,19 @@ P2 집중 점검: 교체 경로 9개+1 ✅ · 옛 자동 저장 이전 1회성·
 전체 검증: npm run check 27개 OK · npm test 254건(236 통과·0 실패·18 건너뜀) · 브라우저(SF_HEADERS=1) 78/78 · 오프라인 검증 48파일·CSP 위반 0·오류 0.
 판정: ❌ 없음 → **R-2 가능**(로컬 준비까지만 한다).
 
+### Phase 3 배포 안전망 검토 (2026-11-23, phase/p3-ci)
+범위: P3-1·3-2(P0에서 앞당겨 완료)·P3-3·P3-5·P3-6. P3-4는 사람이 GitHub에서 하는 일이라 건너뛰었다(아래 "사람이 해야 할 일").
+
+| # | Phase 3 DoD | 결과 | 증거 |
+|---|---|---|---|
+| 1 | 일부러 실패시킨 테스트가 있는 PR이 병합 불가(1회 확인) | ⏳ 사람 확인 대기 | push·GitHub 보호 규칙(P3-4)이 있어야 확인할 수 있다. 준비된 것: ci.yml의 잡 이름이 `unit`·`browser`(보호 규칙의 필수 상태 검사 이름과 같음), 실패 시 `playwright-output` 아티팩트 업로드 |
+| 2 | `PW_CHANNEL` 없이 번들 Chromium에서 브라우저 테스트 통과 | ⏳ CI 첫 실행에서 확인 | `grep -rn "channel: 'msedge'" tests` → 0줄(P3-1). 이 환경은 번들 Chromium을 받을 수 없어 시스템 Chrome(`PW_CHANNEL=chrome`)으로 CI 명령 전체(SF_HEADERS=1 서버 + tests/*.test.mjs + SF_BLOCK_SAMPLES=1 + --test-concurrency=1)를 재현: 322건 전부 통과·건너뜀 0 |
+| 3 | 버전 올리기 = package.json 수정 + `npm run release` | ✅ | tests/release.test.mjs "prepare-release 끝에서 끝까지(임시 폴더): 버전 올리기 = package.json 수정 + 실행"(버전·해시·멱등·CRLF·셸 파일 변경 때만 sw.js 해시 변경) / `npm run release` 2회 연속 결과 동일 |
+
+P3 집중 점검: release 멱등 ✅(변이 9건 전부 잡힘) · 번들 Chromium 통과 ⏳ · 병합 차단 ⏳(3-4 기록 필요) · 배포 후 점검(P3-6) ✅(변이 6건 전부 잡힘)
+CLAUDE.md 금지 항목: window.confirm·prompt·새 외부 URL 없음 · app.js 1,110줄 · vendor/ 변경 없음 · 테스트 삭제·skip 없음(사라진 assert 줄은 pwa.test의 더 엄격한 정규식 대체와, ui-v3 한 줄에 기다림을 덧붙인 것뿐).
+판정: ❌ 없음, ⏳ 2건(GitHub에서만 확인 가능) → 로컬 릴리스 준비는 가능, **병합 전에 사람이 ⏳ 두 건을 확인**한다.
+
 ## 릴리스 준비 기록
 (로컬에서 버전 올리기·검증까지만 했다. push·PR·병합·배포는 하지 않았다.)
 
@@ -207,6 +220,7 @@ P2 집중 점검: 교체 경로 9개+1 ✅ · 옛 자동 저장 이전 1회성·
 |---|---|---|---|---|---|
 | 2026-11-23 | 3.0.2 | phase/p1-security | P1-1~P1-5 | check 21 · npm test 115/113/2 · 브라우저(SF_HEADERS=1) 16/16 · 오프라인 검증 통과(캐시 42개, CSP 위반 0) | 로컬 준비 완료 — push 대기 |
 | 2026-11-23 | 3.1.0 | phase/p2-work-safety | P2-A~P2-E (+DoD ③ 테스트) | check 27 · npm test 254/236/0/18 skip · 브라우저(SF_HEADERS=1) 78/78 · 오프라인 검증 통과(캐시 48개, CSP 위반 0) | 로컬 준비 완료 — push 대기(Phase 1의 3.0.2를 먼저 배포) |
+| 2026-11-23 | 3.1.1 | phase/p3-ci | P3-1·3-2·3-3·3-5·3-6 (3-4는 사람) | check 27 · npm test 269/249/0/20 skip · CI 명령 재현(tests/*.test.mjs 전체, SF_HEADERS=1) 328/328 · 오프라인 검증 통과(캐시 48개, CSP 위반 0) · verify-deploy 통과 | 로컬 준비 완료 — push 대기(3.0.2 → 3.1.0 → 3.1.1 순서로 배포, ⏳ 2건은 GitHub에서 확인) |
 
 ## 사람이 해야 할 일 (자동 진행에서 건너뜀)
 - [ ] P0-2 공유 동결: Supabase SQL Editor에서 공개 악보·문자열 템포 질의 2건 실행, **개수만** 이 파일에 기록. Phase 1 배포 전까지 새 공유 링크 만들지 않기.
@@ -220,6 +234,7 @@ P2 집중 점검: 교체 경로 9개+1 ✅ · 옛 자동 저장 이전 1회성·
 - [ ] (P3-3) `.github/workflows/ci.yml`을 처음 push하는 PR에서 `unit`·`browser` 두 잡이 초록인지 `gh pr checks`로 확인. 번들 Chromium(PW_CHANNEL 없음)으로 통과하는지가 로컬에서는 확인되지 않았다(이 환경은 시스템 Chrome만 가능). 일부러 실패시킨 커밋을 1회 올려 `playwright-output` 아티팩트가 올라가는지 확인한 뒤 되돌리기. 액션 메이저(checkout·setup-node·upload-artifact, 지금 v4)를 `gh api repos/actions/checkout/releases/latest --jq .tag_name`으로 확인해 최신 메이저로 올리기.
 - [ ] (P3-5) 이 버전을 처음 배포한 뒤 기존 설치본(PWA)에서 업데이트 알림이 뜨는지, 개발자도구 → Application → Cache Storage에서 `scoreforge-shell-<버전>+<해시8자리>`가 새로 생기고 옛 `scoreforge-shell-…`가 지워지는지 확인. 이후 버전 올리기는 `package.json`의 version만 고치고 `npm run release`.
 - [ ] (P3-6) 다음 운영 배포 뒤 `deploy-smoke` 워크플로(.github/workflows/deploy-smoke.yml)가 실행되고 통과하는지 확인. Vercel이 GitHub에 남기는 환경 이름이 `Production`이 아니면 조건(`github.event.deployment.environment`)을 첫 실행 로그에 나온 이름으로 고치기. Preview 배포는 Vercel 인증 보호 때문에 건너뛴다.
+- [ ] (P3-4, 사람 작업) GitHub에서 master 보호 규칙 적용: Settings → Branches → Add branch protection rule(master) — PR 필수(승인 0명), 상태 검사 `unit`·`browser` 필수 + 최신 상태 유지, 관리자 포함 예외 없음. 또는 프롬프트북 P3-4의 gh 명령(`protect.json`, 저장소 이름 대소문자 확인). 적용 뒤 `test/ci-must-fail` 브랜치에 `assert.equal(1, 2)`만 있는 테스트를 올려 PR이 BLOCKED인지 1회 확인하고 PR·브랜치 삭제. 이 세션에서는 push·설정 변경을 하지 않았다.
 - [ ] (P2-E) 실제 Chrome·Safari·Firefox에서 부팅 안전 모드 확인: ①개발자도구에서 IndexedDB `scoreforge`의 `kv`에 `boot.pending`(값 `{"<문서ID>": 시각}`)을 넣고 새로고침 → "지난번에 여는 중 문제가 있었어요" 대화상자(그래도 열기·파일로 내려받기·새 악보로 시작) ②[파일로 내려받기]가 열지 않은 원본을 `제목.scoreforge.json`으로 받는지 ③손상 기록(`docs`의 한 기록에서 `data`의 어떤 음표 `dur`을 `{n:0,d:0,dots:0}`로)을 만든 뒤 새로고침 → 데모+안내 토스트, 최근 작업 맨 위 ⚠️ 행 ④백그라운드 탭으로 복원되는 경우(브라우저 재시작 후 탭 복원)에 "여는 중" 표시가 남지 않는지.
 - [ ] (P2-D) 실제 Chrome·Safari(iPad 포함)·Firefox에서 탭 두 개로 확인: ①같은 악보를 두 번째 탭에서 열면 읽기 전용+안내 띠 ②첫 탭을 닫거나 다른 악보로 바꾸면 "이제 편집할 수 있어요"가 뜨고 [편집 시작]이 최신 내용으로 연다 ③탭 복제·새로고침 때 악보를 잃지 않는다 ④Safari에서 탭이 백그라운드로 가거나 절전된 뒤에도 잠금이 유지되는지(Web Locks는 페이지가 살아 있는 동안만 유지, 폐기된 탭은 풀린 것으로 보임).
 - [ ] (P2-C) 실제 iPad·휴대폰 브라우저에서 최근 작업 창(작은 화면 배치)과 [되돌리기] 토스트가 하단 건반·툴바에 가려지지 않는지 확인. 저장 공간 사용량 줄(navigator.storage.estimate)은 Safari·Firefox에서 값이 근사치이거나 없을 수 있음(없으면 줄이 숨겨짐).
