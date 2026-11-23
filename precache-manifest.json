@@ -22,6 +22,7 @@
   "js/panels.js",
   "js/playback.js",
   "js/pwa.js",
+  "js/recent.js",
   "js/safe-html.js",
   "js/session.js",
   "js/store.js",

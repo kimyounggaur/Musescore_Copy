@@ -218,7 +218,8 @@ test('P2-B 보관: 변경이 있어도 묻지 않고 교체하고 이전 악보�
       await fileMenu(page, 'new');
       await page.waitForSelector('#dlg-settings[open]');                          // 새 악보를 만든 뒤 설정 창
       assert.equal(await choiceOpen(page).count(), 0, '보관했는데 대화상자가 떴다');
-      assert.equal(await page.textContent('#toast'), '이전 악보는 최근 작업에 보관했어요');
+      assert.equal(await page.textContent('#toast > span'), '이전 악보는 최근 작업에 보관했어요');   // P2-C: 문구 뒤에 [되돌리기] 버튼이 붙는다
+      assert.equal(await page.textContent('#toast .toast-action'), '되돌리기');
       assert.ok((await docList(page)).some(row => row.id === oldId && row.title === '지켜야 할 작업'));
       const now = await page.evaluate(() => ({ id: SF.session.activeId(), tab: sessionStorage.getItem('scoreforge.activeDocId'), title: SF.core.state.score.meta.title }));
       assert.notEqual(now.id, oldId); assert.equal(now.tab, now.id);
@@ -232,7 +233,8 @@ test('P2-B 보관: 변경이 있어도 묻지 않고 교체하고 이전 악보�
       await fileMenu(page, 'demo-star');
       await page.waitForFunction(() => SF.core.state.score.meta.title !== 'Keep this');
       assert.equal(await choiceOpen(page).count(), 0);
-      assert.equal(await page.textContent('#toast'), 'Your previous score is kept in Recent work');
+      assert.equal(await page.textContent('#toast > span'), 'Your previous score is kept in Recent work');
+      assert.equal(await page.textContent('#toast .toast-action'), 'Undo');
       await context.close();
     });
     await t.test('변경이 없으면 보관 토스트도 없다', async () => {

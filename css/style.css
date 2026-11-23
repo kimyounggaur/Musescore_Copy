@@ -469,10 +469,17 @@ select.tsel {
   position: fixed; left: 50%; bottom: 150px; transform: translateX(-50%) translateY(16px);
   background: rgba(18, 20, 24, .92); color: #fff; border: 1px solid var(--line);
   padding: 9px 16px; border-radius: 999px; font-size: 13.5px;
-  opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 100;
-  box-shadow: var(--shadow);
+  opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s, visibility 0s linear .2s; z-index: 100;
+  box-shadow: var(--shadow); visibility: hidden;
 }
-#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); visibility: visible; transition-delay: 0s; }
+/* 버튼이 있는 토스트(되돌리기 등): 누를 수 있고, 좁은 화면에서도 글이 한 줄에 가깝게 보이게 한다 */
+#toast.has-action { display: flex; align-items: center; gap: 12px; pointer-events: auto; width: max-content; max-width: min(92vw, 520px); padding-right: 8px; }
+#toast .toast-action {
+  flex: none; font: inherit; font-weight: 700; color: inherit; cursor: pointer;
+  background: transparent; border: 1px solid currentColor; border-radius: 999px; padding: 3px 12px;
+}
+#toast .toast-action:hover, #toast .toast-action:focus-visible { background: rgba(128, 128, 128, .3); }
 
 /* ---------------- 단축키 확인 팝업 ---------------- */
 .shortcut-overlay {
@@ -874,6 +881,30 @@ dialog::backdrop { background: rgba(10, 12, 16, .6); backdrop-filter: blur(2px);
 }
 .imp-list:empty { display: none; }
 .imp-list li::marker { color: var(--accent); }
+
+/* 최근 작업 창(js/recent.js) */
+#dlg-recent { width: min(92vw, 640px); }
+.rc-note, .rc-empty, .rc-usage { margin: 0 0 10px; font-size: 12.5px; line-height: 1.6; color: var(--text-dim); }
+.rc-empty { padding: 18px 8px; text-align: center; }
+.rc-usage { margin: 10px 0 0; font-size: 12px; }
+.rc-warn { margin: 0 0 10px; padding: 8px 12px; border-radius: 8px; border: 1px solid #ae252d; background: rgba(174, 37, 45, .14); font-size: 13px; line-height: 1.55; }
+.rc-list { list-style: none; margin: 0; padding: 0; max-height: min(52vh, 420px); overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; }
+.rc-list[hidden], .rc-empty[hidden], .rc-warn[hidden], .rc-usage[hidden] { display: none; }
+.rc-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+.rc-row:last-child { border-bottom: none; }
+.rc-row[aria-current="true"] { background: rgba(79, 141, 249, .12); }
+.rc-main { min-width: 0; flex: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; }
+.rc-title { font-weight: 700; font-size: 14px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rc-badge { flex: none; font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--select); color: #fff; }
+.rc-badge.rc-lock { background: var(--accent); color: #1a1a1a; }
+.rc-meta { flex-basis: 100%; font-size: 12px; color: var(--text-dim); }
+.rc-actions { flex: none; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.rc-btn { padding: 4px 10px; font-size: 12.5px; }
+.rc-btn[disabled] { opacity: .45; cursor: not-allowed; }
+@media (max-width: 500px) {
+  .rc-row { flex-direction: column; align-items: stretch; }
+  .rc-actions { justify-content: flex-start; }
+}
 
 /* 드래그&드롭 */
 #canvas.droppable { outline: 3px dashed var(--select); outline-offset: -8px; }
