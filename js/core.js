@@ -45,6 +45,9 @@ window.SF = window.SF || {};
    * the escape hatch after direct structural writes by importers/UI code. */
   let cacheRevision = 0;
   const measureOwners = new WeakMap();
+  // 테스트 전용 계수기(이름이 __). 복잡도를 시간 대신 횟수로 단언한다 — 모두 "악보 전체를 한 번 훑는" 일의 횟수라서, 음마다 일어나면 가져오기가 O(N²)이 된다.
+  //  indexBuilds: eventIndex가 악보 전체 색인을 새로 만든 횟수 · tieSweeps: normalizeTies가 악보 전체 타이를 훑은 횟수 · timingBuilds: timingOf가 마디 길이·조표 표를 새로 계산한 횟수
+  const stats = { indexBuilds: 0, tieSweeps: 0, timingBuilds: 0 };
   function cacheOf(score) {
     if (!score.__cache) Object.defineProperty(score, "__cache", {
       configurable: true, writable: true, enumerable: false,
@@ -60,6 +63,13 @@ window.SF = window.SF || {};
     });
   }
   function edited(score) { invalidate(score, { keepNormalized: true }); }
+  /* 일괄 입력(ctx.batch) 전용: 이벤트 내용만 바뀌는 편집이라 마디 길이·조표(timing)는 그대로이니 그 캐시는 살린다.
+   * 일반 편집으로 넓히지 않는다 — 박자·조표·마디 길이를 바꾸는 함수가 모두 스스로 캐시를 버리는지 확인되기 전에는 묵은 timing이 남을 수 있다. */
+  function editedContent(score) {
+    const timing = score.__cache?.timing;
+    invalidate(score, { keepNormalized: true });
+    if (timing) score.__cache.timing = timing;
+  }
 
   function cloneData(value) {
     if (value === undefined) return undefined;
@@ -548,6 +558,7 @@ window.SF = window.SF || {};
   function timingOf(score) {
     const cache = cacheOf(score);
     if (cache.timing) return cache.timing;
+    stats.timingBuilds++;
     let key = score.keySig ?? 0, ts = score.timeSig || { num: 4, den: 4 };
     const keys = [], times = [], lengths = [], starts = [Fraction.ZERO];
     for (const [m, mm] of canonicalMeasures(score).entries()) {
@@ -1123,6 +1134,7 @@ window.SF = window.SF || {};
     ensureParts(score);
     const cache = cacheOf(score);
     if (cache.index) return cache.index;
+    stats.indexBuilds++;
     const index = new Map(), order = new Map();
     for (const ref of staffRefs(score)) {
       for (let m = 0; m < ref.measures.length; m++) {
@@ -1201,16 +1213,18 @@ window.SF = window.SF || {};
     if (!inserted) out.push(...replacement); // 빈 마디 안전망
     measure.voices[voice - 1] = out;
     syncMeasureEvents(measure);
-    edited(score);
+    if (ctx?.batch) editedContent(score); else edited(score);
   }
 
-  /* 음표/쉼표 입력. 마디를 넘으면 다음 마디로 타이 분할. 입력된 첫 이벤트 ref 반환 */
-  function inputAt(score, mIdx, tick, dur, pitches /* null=쉼표 */, ctx) {
+  /* 음표/쉼표 입력. 마디를 넘으면 다음 마디로 타이 분할. 입력된 첫 이벤트의 { id, ev }를 돌려준다(ev는 악보 안의 그 객체).
+   * ctx.batch(MIDI 가져오기처럼 한 번에 많이 놓을 때): 입력마다 하던 악보 전체 타이 정리(normalizeTies)를 건너뛰고(부른 쪽이 마지막에 한 번),
+   * 내용만 바뀌는 편집이라 timing 캐시를 유지한다. 돌려준 ev로 바로 후처리하므로 findEvent(악보 전체 색인)가 필요 없다. */
+  function inputAtEvent(score, mIdx, tick, dur, pitches /* null=쉼표 */, ctx) {
     const ref = staffRef(score, ctx);
     const voice = voiceFromCtx(ctx);
     let remaining = durValue(dur);
     if (remaining.n <= 0) throw new RangeError("Duration must be positive");
-    let firstId = null;
+    let firstId = null, firstEv = null;
 
     const place = (m, t, pieces, tieOut) => {
       const evs = pieces.map((d, i) => {
@@ -1222,10 +1236,10 @@ window.SF = window.SF || {};
           notes: pitches ? pitches.map(p => ({ step: p.step, alter: p.alter, oct: p.oct, tie: false })) : [],
         };
         if (pitches && (i < pieces.length - 1 || tieOut)) ev.notes.forEach(n => n.tie = true);
-        if (!firstId) firstId = ev.id;
+        if (!firstId) { firstId = ev.id; firstEv = ev; }
         return ev;
       });
-      replaceRange(score, m, t, pieces.reduce((a, d) => a.add(durValue(d)), Fraction.ZERO), () => evs, { ...ref, voice });
+      replaceRange(score, m, t, pieces.reduce((a, d) => a.add(durValue(d)), Fraction.ZERO), () => evs, { ...ref, voice, batch: ctx?.batch });
     };
 
     let m = mIdx;
@@ -1247,8 +1261,12 @@ window.SF = window.SF || {};
       t = Fraction.ZERO;
       firstChunk = false;
     }
-    normalizeTies(score);
-    return firstId;
+    if (!ctx?.batch) normalizeTies(score);
+    return { id: firstId, ev: firstEv };
+  }
+  /* 기존 API 그대로: 첫 이벤트 ID만 돌려준다 */
+  function inputAt(score, mIdx, tick, dur, pitches /* null=쉼표 */, ctx) {
+    return inputAtEvent(score, mIdx, tick, dur, pitches, ctx).id;
   }
 
   /** Re-enter an event at its original location, preserving its decorations and
@@ -1438,6 +1456,7 @@ window.SF = window.SF || {};
 
   /* 타이 정합성: 다음 이벤트에 같은 음높이가 없으면 tie 해제 */
   function normalizeTies(score) {
+    stats.tieSweeps++;
     for (const ref of staffRefs(score)) {
       for (let m = 0; m < ref.measures.length; m++) {
         for (let voice = 1; voice <= VOICE_COUNT; voice++) {
@@ -1966,12 +1985,13 @@ window.SF = window.SF || {};
     toggleStartRepeat, toggleEndRepeat, setRepeatCount, setEnding, clearEndings, setMeasureBreak, clearMeasureBreak,
     JUMP_TYPES, MARKERS, setMeasureJump, setMeasureMarker,
     eventStartTick, findEvent, nextEvent, prevEvent,
-    replaceRange, inputAt, addDrumNote, deleteEvent, makeTupletAt, consolidateRests, normalizeTies, isTiedFrom,
+    replaceRange, inputAt, inputAtEvent, addDrumNote, deleteEvent, makeTupletAt, consolidateRests, normalizeTies, isTiedFrom,
     removeNoteFromChord, transposeNote, setNoteAccidental, toggleNoteTie,
     addGraceBefore, findGrace, cloneGraceList,
     invalidate, eventIndex, eventOrderMap, normalizeSpanners, slurCoverMap, addOttava, ottavaShiftAt,
     rebar, transposeScore, toJSON, fromJSON,
     state, mutate, undo, redo, canUndo, canRedo, undoLabel, redoLabel, resetHistory, setScore, onChange,
     markSaved, markAutosaved, isAutosaved,
+    __stats: stats,
   };
 })(window.SF);
