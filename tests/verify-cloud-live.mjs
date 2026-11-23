@@ -1,18 +1,19 @@
 import { createRequire } from 'node:module';
 import { mkdir, writeFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
+import { launchOptions, pageOptions, preparePage } from './browser-launch.mjs';
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const credentials = JSON.parse(process.env.SF_TEST_ACCOUNT);
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const browser = await chromium.launch(launchOptions());
 const base = process.env.SF_URL || 'http://127.0.0.1:8000';
 const results = [], errors = [];
 let savedId;
-const first = await browser.newContext({ serviceWorkers: 'block' });
-const second = await browser.newContext({ serviceWorkers: 'block' });
-const anonymous = await browser.newContext({ serviceWorkers: 'block' });
+const first = await browser.newContext(pageOptions({ serviceWorkers: 'block' }));
+const second = await browser.newContext(pageOptions({ serviceWorkers: 'block' }));
+const anonymous = await browser.newContext(pageOptions({ serviceWorkers: 'block' }));
 const boot = async context => {
-  const page = await context.newPage(); page.on('pageerror', e => errors.push(e.message));
+  const page = await context.newPage(); await preparePage(page); page.on('pageerror', e => errors.push(e.message));
   await page.goto(base, { waitUntil: 'networkidle' });
   await page.evaluate(() => document.querySelectorAll('dialog[open]').forEach(d => d.close()));
   await page.waitForFunction(() => window.SF?.cloud?.state.initialized);

@@ -178,7 +178,7 @@ vendor/           고정 버전 외부 라이브러리·라이선스·해시
 
 ## 개발·검증
 
-`npm run check`, `npm test`는 빌드나 패키지 설치 없이 Node에서 실행합니다. 브라우저 회귀는 `tests/browser.html`, 추가 UI/PWA/클라우드 검증은 `tests/verify-*.mjs`와 `tests/ui-v3.test.mjs`에 있습니다. Playwright는 선택 개발 도구이며 실행 시 `PLAYWRIGHT_MODULE`로 설치 경로를 지정할 수 있습니다.
+`npm run check`, `npm test`는 빌드나 패키지 설치 없이 Node에서 실행합니다. 브라우저 회귀는 `tests/browser.html`, 추가 UI/PWA/클라우드 검증은 `tests/verify-*.mjs`와 `tests/ui-v3.test.mjs`에 있습니다. Playwright는 선택 개발 도구이며 실행 시 `PLAYWRIGHT_MODULE`로 설치 경로를 지정할 수 있습니다. 브라우저 선택은 `PW_CHANNEL`(`msedge`·`chrome`, 비우면 번들 Chromium), 외부 음원 차단은 `SF_BLOCK_SAMPLES=1`, 테스트 브라우저 언어는 기본 `ko-KR`(`PW_LOCALE`로 변경)로 정합니다. 공용 설정은 `tests/browser-launch.mjs`입니다.
 
 배포 전 `node tests/gen-readme-keys.mjs`와 `node tests/prepare-release.mjs`를 실행하세요. 앱 셸 파일 변경 시 `js/version.js`와 `sw.js`의 버전을 함께 올려야 합니다. 사용자가 업데이트를 선택하기 전에는 기존 셸을 유지합니다. 버전 없는 JS에 장기 immutable 캐시를 적용하지 않습니다.
 

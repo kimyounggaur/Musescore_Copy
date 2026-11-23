@@ -1,10 +1,12 @@
 import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { launchOptions, pageOptions, preparePage } from './browser-launch.mjs';
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
-const page = await browser.newPage({ viewport: { width: 1440, height: 1080 } });
+const browser = await chromium.launch(launchOptions());
+const page = await browser.newPage(pageOptions({ viewport: { width: 1440, height: 1080 } }));
+await preparePage(page);
 const errors = [];
 page.on('pageerror', e => errors.push(e.message));
 page.on('console', msg => { if (['error', 'warning'].includes(msg.type())) errors.push(msg.text()); });
