@@ -651,8 +651,8 @@
   /* ---------------- Supabase 인증 ---------------- */
 
   /* ---------------- 악보 교체 (열기·드롭·앱 파일 실행·새 악보·데모·클라우드) ---------------- */
-  /** 악보를 실제로 갈아 끼운다. 직접 부르지 말고 SF.session.replaceScore를 거친다(저장 확인·순서 보장).
-   * opts: readOnly, name, report(가져오기 보고서), toast(문구 / false=표시 안 함) */
+  /** 악보를 실제로 갈아 끼운다. 직접 부르지 말고 SF.session.replaceScore를 거친다(저장 확인·순서 보장). 부팅 때 데모·복원도 여기를 거친다.
+   * opts: readOnly, name, report(가져오기 보고서), toast(문구 / false=표시 안 함), boot(부팅 중 — 부팅 흐름이 자기 안내를 직접 보여 주므로 "불러왔어요" 생략) */
   function installScore(score, opts = {}) {
     setReadOnly(!!opts.readOnly);
     C.setScore(score);
@@ -661,7 +661,7 @@
     stopPlayback();
     update();
     if (opts.report && opts.report.length) showImportReport(opts.name, score, opts.report);
-    else if (opts.toast !== false) toast(opts.toast || `"${score.meta.title || opts.name}" 불러왔어요`);
+    else if (opts.toast !== false && !opts.boot) toast(opts.toast || `"${score.meta.title || opts.name}" 불러왔어요`);
   }
   /** 파일·클라우드에서 읽은 결과를 받는다. 실패는 알리고, 성공은 교체 통로로 보낸다(교체 여부를 Promise로 돌려줌). */
   function handleLoadedScore(loaded, name, err, report, opts = {}) {
@@ -965,6 +965,87 @@
   }
 
   /* ---------------- 시작 ---------------- */
+  const BOOT_PROBLEM = "저장된 악보를 여는 중 문제가 생겨 안전하게 시작했어요. 최근 작업에서 원본을 내려받을 수 있어요.";
+  const tx = text => SF.i18n?.translate?.(text) ?? text;   // i18n 초기화(SF.i18n.init) 전에도 대화상자 글이 언어에 맞게 나오게
+
+  /** 데모(blank면 빈 악보)로 시작한다. 문서 ID와 편집 잠금만 붙인다 — 첫 편집 전에는 기록을 만들지 않는다. */
+  async function installFallback(blank) {
+    if (blank) {
+      const fresh = C.createScore({});
+      await SF.session.adopt(fresh, { origin: "new" });
+      installScore(fresh, { boot: true });
+      return;
+    }
+    const demo = IO.DEMOS.butterfly();
+    await SF.session.adopt(demo, { origin: "demo" });   // 문서 ID와 편집 잠금만 붙인다 — 첫 편집 전에는 기록을 만들지 않는다
+    installScore(demo, { boot: true });
+  }
+  /** 지난 부팅이 끝나지 못한 문서가 시작 문서일 때 묻는다(P2-E). 돌려주는 값:
+   * { score }(그래도 열기 — 열 수 없으면 null) · { blank: true }(새 악보로 시작) · {}(닫음 — 이번에는 데모로 시작하고 표시는 그대로 둬서 다음에 또 묻는다) */
+  async function safeMode() {
+    const title = SF.session.bootInfo().pending?.title || "제목 없음";
+    for (;;) {
+      const choice = await SF.ui.choiceDialog({
+        title: tx("지난번에 여는 중 문제가 있었어요"),
+        message: tx(`지난번에 ‘${title}’을(를) 여는 중 문제가 있었어요. 어떻게 할까요?`),
+        choices: [
+          { id: "open", label: tx("그래도 열기") },
+          { id: "download", label: tx("파일로 내려받기"), primary: true },
+          { id: "fresh", label: tx("새 악보로 시작") },
+        ],
+      });
+      if (choice === "download") { toast(await SF.session.bootDownloadPending() ? "악보 파일을 내려받았어요" : "이 기록을 찾지 못했어요 — 이미 지워졌을 수 있어요"); continue; }
+      if (choice === "open") return { score: await SF.session.bootOpenPending() };
+      if (choice === "fresh") { await SF.session.bootSkipPending(); return { blank: true }; }
+      return {};
+    }
+  }
+  /** 부팅 때 열 악보를 정해 설치한다(화면을 다 만든 뒤). 복원한 악보를 설치했으면 true — 첫 렌더가 끝날 때까지 settleBoot가 지킨다. */
+  async function bootScore(restoring) {
+    let saved = await restoring, blank = false;
+    if (!saved && SF.session.bootInfo().pending) {
+      const answer = await safeMode();
+      saved = answer.score || null; blank = Boolean(answer.blank);
+    }
+    const problem = SF.session.bootInfo().quarantined.length > 0;   // 이번 부팅에서 새로 격리한 기록이 있다
+    if (!saved) {
+      await installFallback(blank);
+      if (problem) toast(BOOT_PROBLEM);
+      return false;
+    }
+    await SF.session.bootBegin();   // 렌더 중 멈춰도 다음 부팅이 알 수 있게 "여는 중"을 먼저 적어 둔다
+    installScore(saved, { boot: true });
+    if (SF.session.lockState().locked) setReadOnly(true);   // 다른 탭이 편집 중이던 악보는 읽기 전용으로 되살린다(2-D)
+    toast(problem ? BOOT_PROBLEM : "이전 작업을 자동으로 불러왔어요");
+    return true;
+  }
+  /** 첫 렌더가 끝나기를 기다린다: 프레임 2번. 숨은 탭(복원으로 열린 배경 탭)은 프레임이 멈추므로 기다리지 않고, 보이는 탭도 1.5초가 상한. */
+  const framesSettled = () => new Promise(resolve => {
+    if (document.hidden || typeof requestAnimationFrame !== "function") { resolve(); return; }
+    const timer = setTimeout(resolve, 1500);
+    requestAnimationFrame(() => requestAnimationFrame(() => { clearTimeout(timer); resolve(); }));
+  });
+  /** 첫 렌더에서 예외가 났다: 그 기록을 격리하고 데모로 안전하게 시작한다. */
+  async function recoverBoot(error) {
+    console.warn("ScoreForge: 저장된 악보를 여는 중 문제가 생겼어요", error);
+    await SF.session.bootFailed(error);
+    await installFallback(false);
+    update({ immediate: true });
+    toast(BOOT_PROBLEM);
+  }
+  /** 첫 렌더를 지킨다(P2-E): 동기 렌더(예외는 여기서 잡힌다) → 프레임 2번(렌더 중 멈추면 여기까지 오지 못해 "여는 중" 표시가 남는다) → 표시 해제. */
+  async function settleBoot(restored) {
+    try {
+      update({ immediate: true });
+      if (restored) await framesSettled();
+    } catch (error) {
+      if (!restored) throw error;
+      await recoverBoot(error);
+      return;
+    }
+    if (restored) await SF.session.bootDone();
+  }
+
   async function start() {
     // 저장소 열기·옛 자동 저장 이전·복원할 악보 고르기를 화면을 만드는 동안 먼저 시작한다.
     const restoring = SF.session.restoreOnBoot().catch(() => null);
@@ -989,16 +1070,7 @@
     bindNavigationPanels();
     initMidi();
 
-    const saved = await restoring;
-    if (saved) {
-      if (SF.session.lockState().locked) setReadOnly(true);   // 다른 탭이 편집 중이던 악보는 읽기 전용으로 되살린다(2-D)
-      C.setScore(saved);
-      toast("이전 작업을 자동으로 불러왔어요");
-    } else {
-      const demo = IO.DEMOS.butterfly();
-      await SF.session.adopt(demo, { origin: "demo" });   // 문서 ID와 편집 잠금만 붙인다 — 첫 편집 전에는 기록을 만들지 않는다
-      C.setScore(demo);
-    }
+    const restored = await bootScore(restoring);   // 부팅 때 열 악보를 정해 설치(복원·데모·안전 모드 대화상자·격리 안내)
     C.onChange((score, event) => {
       if (["saved", "autosaved"].includes(event?.type)) { refreshToolbar(); refreshSavedLabel(); return; }
       changeRevision = C.state.revision; update();
@@ -1014,7 +1086,7 @@
     window.addEventListener("beforeunload", e => { if (C.state.dirty && !C.isAutosaved()) { e.preventDefault(); e.returnValue = ""; } });
     if (matchMedia("(max-width: 900px)").matches) $("#properties-panel").classList.add("collapsed");
     SF.cloud?.onScoreLoaded(C.state.score);
-    update({ immediate: true });
+    await settleBoot(restored);   // 첫 렌더 — 복원한 악보가 그리다 예외를 내면 격리하고 데모로(P2-E)
     maybeShowWelcome();
 
     E.loadFont(() => update({ force: true })); // Bravura 로드되면 다시 그림

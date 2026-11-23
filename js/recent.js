@@ -54,7 +54,8 @@
 
   function row(doc, current, elsewhere) {
     const isCurrent = doc.id === current;
-    const item = el("li", "rc-row");
+    const quarantined = Boolean(doc.quarantined);            // 열 때 문제가 있어 자동으로 열지 않기로 한 기록(P2-E)
+    const item = el("li", quarantined ? "rc-row rc-quarantined" : "rc-row");
     item.dataset.id = doc.id;
     if (isCurrent) item.setAttribute("aria-current", "true");
 
@@ -65,17 +66,18 @@
     main.append(title);
     if (isCurrent) main.append(el("span", "rc-badge", tr("지금 열려 있어요")));
     if (elsewhere.has(doc.id)) main.append(el("span", "rc-badge rc-lock", tr("다른 탭에서 편집 중")));
+    if (quarantined) main.append(el("span", "rc-badge rc-problem", tr("열 때 문제가 있었어요")));
     const meta = el("div", "rc-meta");
     meta.append(el("span", "rc-measures", tr(`${doc.measures || 0}마디`)), el("span", "rc-sep", " · "), el("span", "rc-time", formatTime(doc.updatedAt)));
     main.append(meta);
+    if (quarantined) main.append(el("div", "rc-why", tr("원본은 그대로 보관돼 있어요. 파일로 내려받아 확인해 보세요.")));
 
     const actions = el("div", "rc-actions");
-    actions.append(
-      button("열기", "rc-open", () => openFromList(doc.id), doc, { disabled: isCurrent, why: "지금 열려 있는 악보예요" }),
-      button("파일로 내려받기", "rc-download", () => download(doc), doc),
-      button("삭제", "rc-delete danger", () => remove(doc), doc,
-        { disabled: isCurrent || elsewhere.has(doc.id), why: isCurrent ? "지금 열려 있는 악보는 지울 수 없어요" : "다른 탭에서 편집 중이라 지울 수 없어요" }),
-    );
+    const openButton = button("열기", "rc-open", () => openFromList(doc.id), doc, { disabled: isCurrent, why: "지금 열려 있는 악보예요" });
+    const downloadButton = button("파일로 내려받기", quarantined ? "rc-download primary" : "rc-download", () => download(doc), doc);
+    const deleteButton = button("삭제", "rc-delete danger", () => remove(doc), doc,
+      { disabled: isCurrent || elsewhere.has(doc.id), why: isCurrent ? "지금 열려 있는 악보는 지울 수 없어요" : "다른 탭에서 편집 중이라 지울 수 없어요" });
+    actions.append(...(quarantined ? [downloadButton, openButton, deleteButton] : [openButton, downloadButton, deleteButton]));   // 격리된 기록은 내려받기가 먼저
     item.append(main, actions);
     return item;
   }
@@ -101,6 +103,7 @@
     const elsewhere = usable ? await lockedElsewhere(docs.map(doc => doc.id)) : new Set();
     if (mine !== token) return;
     const current = SF.session?.activeId?.() || "";
+    docs.sort((a, b) => Number(Boolean(b.quarantined)) - Number(Boolean(a.quarantined)));   // 격리된 기록을 위로(그 안의 순서는 최근순 그대로)
     list.replaceChildren(...docs.map(doc => row(doc, current, elsewhere)));
     list.removeAttribute("aria-busy");
     $("#rc-unavailable").hidden = usable;

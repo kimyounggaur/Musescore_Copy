@@ -4,7 +4,9 @@
  * ② 악보마다 문서 ID(meta.docId)를 붙여 IndexedDB에 따로 자동 저장한다(P2-B).
  *    기록은 첫 편집 때 만들고, 부팅 때 이 탭이 보던 악보를 되살린다. 옛 localStorage 자동 저장은 한 번 옮기되 원본은 지우지 않는다.
  * ③ 열려 있는 악보마다 SF.lock의 편집 잠금을 하나 쥔다(P2-D). 다른 탭이 이미 편집 중인 악보는 읽기 전용으로 열고,
- *    풀리면 알려 준다. 사용자가 [편집 시작]을 누르면 보관된 최신 내용을 다시 읽어 와서 연다(오래된 화면 내용으로 편집하지 않는다). */
+ *    풀리면 알려 준다. 사용자가 [편집 시작]을 누르면 보관된 최신 내용을 다시 읽어 와서 연다(오래된 화면 내용으로 편집하지 않는다).
+ * ④ 부팅 안전 모드(P2-E): 열 수 없는 기록은 격리(quarantined)하고 건너뛰며, 첫 렌더가 끝나기 전까지 kv "boot.pending"에 "여는 중"을
+ *    적어 둔다. 렌더 중 멈춰서 표시가 남았다면 다음 부팅은 그 문서를 자동으로 열지 않고 앱이 사용자에게 묻는다(bootInfo). */
 "use strict";
 (function (SF) {
   const C = SF.core;
@@ -20,6 +22,9 @@
   const KEPT = "이전 악보는 최근 작업에 보관했어요";
   const COPY_MADE = "사본을 만들었어요. 이제 편집할 수 있어요.";
   const IDENTITY_KEYS = ["docId", "cloudId", "cloudUpdatedAt", "cloudOwner", "cloudProject"];   // 사본에는 붙이지 않는 식별 필드(cloud.js META_KEYS + docId)
+  const PENDING_KEY = "boot.pending";            // kv — { 문서ID: 여는 중이 된 시각 }. 첫 렌더가 끝나면 지운다
+  const PENDING_MAX = 20;                        // 지워지지 않고 남는 표시가 끝없이 쌓이지 않게(오래된 것부터 버린다)
+  const PENDING = Symbol("pending");             // 후보가 "지난 부팅이 끝나지 못한 문서"라 열지 않았다
 
   const store = () => SF.store;                  // 테스트에서 바꿔 끼울 수 있게 부를 때마다 읽는다
   const validId = id => typeof id === "string" && SAFE_ID.test(id);
@@ -239,10 +244,81 @@
     } catch { return false; }
   }
 
+  /* ---------------- 부팅 안전 모드(P2-E) ---------------- */
+  // 이번 부팅에서 있었던 일. 앱이 화면을 다 만든 뒤 bootInfo()로 읽는다.
+  //   pending: 지난 부팅이 끝나지 못한 문서(자동으로 열지 않았다) · quarantined: 이번에 새로 격리한 기록 ·
+  //   opened: 이번 부팅이 열어 둔 문서(첫 렌더가 끝나면 bootDone이, 예외면 bootFailed가 정리한다)
+  const boot = { pending: null, quarantined: [], opened: null };
+  const bootInfo = () => ({ pending: boot.pending, quarantined: boot.quarantined.slice() });
+
+  /** kv "boot.pending"을 { 문서ID: 시각 }으로 읽는다. 문자열 ID 하나인 옛 모양도 받는다. */
+  function pendingMap(raw) {
+    const map = Object.create(null);
+    if (validId(raw)) map[raw] = 0;
+    else if (raw && typeof raw === "object" && !Array.isArray(raw)) for (const [id, at] of Object.entries(raw)) if (validId(id)) map[id] = Number(at) || 0;
+    return map;
+  }
+  /** 문서 하나의 "여는 중" 표시를 켜거나 끈다. 여러 탭이 동시에 부팅해도 서로의 표시를 지우지 않게 한 트랜잭션 안에서 고친다. */
+  async function setPending(id, on) {
+    const s = store();
+    if (!s?.usable || !validId(id)) return false;
+    try {
+      await s.updateKv(PENDING_KEY, old => {
+        const map = pendingMap(old);
+        delete map[id];
+        const rest = Object.entries(map).sort((a, b) => b[1] - a[1]);
+        const entries = (on ? [[id, Date.now()], ...rest] : rest).slice(0, PENDING_MAX);   // 방금 적은 표시는 항상 남긴다
+        return entries.length ? Object.fromEntries(entries) : null;
+      });
+      return true;
+    } catch { return false; }
+  }
+
+  /** 열 수 없는 기록을 격리한다: quarantined 표시와 오류를 붙이고 data·updatedAt은 그대로 둔다(최근 작업에서 내려받을 수 있다).
+   * 읽은 뒤 다른 탭이 새로 저장했거나(updatedAt·revision이 달라짐) 이미 격리돼 있으면 건드리지 않는다.
+   * report=true면 이번 부팅의 "새로 격리한 기록"에 올려 앱이 토스트로 알리게 한다. */
+  async function quarantine(doc, error, report = true) {
+    const s = store();
+    const info = { at: Date.now(), code: String(error?.code || error?.name || "Error").slice(0, 40), message: String(error?.message ?? error).slice(0, 200) };
+    let changed = false, failed = false;
+    try {
+      changed = await s.updateDoc(doc.id, current => (current && !current.quarantined && current.updatedAt === doc.updatedAt && current.revision === doc.revision)
+        ? { ...current, quarantined: true, quarantineError: info } : undefined);
+    } catch { failed = true; }   // 표시를 못 써도 부팅은 계속한다 — 다음 부팅에 다시 걸러진다
+    if (report && (changed || failed)) boot.quarantined.push({ id: doc.id, title: String(doc.title ?? ""), code: info.code });
+    return changed;
+  }
+
+  /** 보관된 기록 하나를 부팅 후보로 열어 본다. 악보(claim·잠금까지 끝남) · PENDING(지난 부팅이 끝나지 못한 문서 — 열지 않음) · null(건너뜀).
+   * mine: 이 탭이 보던 문서 — 새로고침 직후 옛 잠금이 풀리길 기다리고, 다른 탭이 쥐고 있어도 읽기 전용으로 되살린다.
+   * pending: { 문서ID: 시각 } — 넘기면 표시가 남은 문서를 열지 않고 PENDING을 돌려준다(안전 모드의 [그래도 열기]는 넘기지 않는다). */
+  async function tryRecord(id, { mine = false, pending = {} } = {}) {
+    const s = store();
+    if (!validId(id)) return null;
+    const doc = await s.loadDoc(id).catch(() => null);
+    if (!doc?.data || doc.quarantined) return null;                    // 이미 격리한 기록은 자동으로 열지 않는다
+    let score;
+    try { SF.schema?.checkShape(doc.data); score = C.fromJSON(doc.data); }
+    catch (error) { await quarantine(doc, error); return null; }       // 깨진 기록은 격리하고 건너뛴다
+    const got = await lockDoc(id, mine ? { retries: 4 } : undefined);
+    if (got.locked && !mine) return null;
+    if (pending[id] !== undefined) {                         // 지난 부팅이 이 문서에서 끝나지 못했다 — 자동으로 다시 열지 않는다
+      drop(got.handle);
+      boot.pending = { id, title: String(doc.title ?? "") };
+      return PENDING;
+    }
+    claim(score, { origin: doc.origin, docId: doc.id, record: doc });
+    setLock({ docId: id, handle: got.handle, locked: got.locked });
+    boot.opened = { id, title: String(doc.title ?? ""), updatedAt: doc.updatedAt, revision: doc.revision };
+    return score;
+  }
+
   /** 시작 악보를 고른다: 이 탭의 문서 → 마지막으로 편집한 문서 → 가장 최근 문서 → 없으면 null(데모는 호출한 쪽이 연다).
-   * 읽을 수 없는 기록은 건너뛴다. 돌려주는 악보는 이미 이 탭의 현재 문서로 등록돼 있다.
-   * 다른 탭이 편집 중인 문서는 건너뛴다 — 다만 이 탭이 보던 문서(새로고침 전)라면 읽기 전용으로 되살린다(lockState().locked로 확인). */
+   * 읽을 수 없는 기록은 격리하고 건너뛴다. 돌려주는 악보는 이미 이 탭의 현재 문서로 등록돼 있다.
+   * 다른 탭이 편집 중인 문서는 건너뛴다 — 다만 이 탭이 보던 문서(새로고침 전)라면 읽기 전용으로 되살린다(lockState().locked로 확인).
+   * 지난 부팅이 끝나지 못한 문서가 시작 문서라면 열지 않고 null — bootInfo().pending으로 앱이 사용자에게 묻는다. */
   async function restoreOnBoot() {
+    boot.pending = null; boot.quarantined = []; boot.opened = null;
     const s = store();
     try { await s?.open(); } catch { /* 열기 실패는 아래에서 처리 */ }
     if (!s?.usable) {                             // 예전 방식(localStorage 1칸)으로 되돌린다
@@ -250,24 +326,13 @@
     }
     try {
       await migrateLegacyAutosave();
+      const pending = pendingMap(await s.kvGet(PENDING_KEY).catch(() => null));
       const tried = new Set();
-      const attempt = async (id, mine) => {
-        if (!validId(id) || tried.has(id)) return null;
-        tried.add(id);
-        const doc = await s.loadDoc(id).catch(() => null);
-        if (!doc?.data) return null;
-        let score;
-        try { score = C.fromJSON(doc.data); } catch { return null; }   // 깨진 기록은 건너뛴다
-        // 새로고침 직후에는 옛 페이지의 잠금이 풀리길 잠깐 기다린다(자기 자신에게 막히지 않게).
-        const got = await lockDoc(id, mine ? { retries: 4 } : undefined);
-        if (got.locked && !mine) return null;
-        claim(score, { origin: doc.origin, docId: doc.id, record: doc });
-        setLock({ docId: id, handle: got.handle, locked: got.locked });
-        return score;
-      };
-      let found = await attempt(readTabId(), true);
-      if (!found) found = await attempt(await s.kvGet("lastDocId").catch(() => null), false);
-      if (!found) for (const doc of (await s.listDocs()).slice(0, 8)) { found = await attempt(doc.id, false); if (found) break; }
+      const next = (id, mine) => { if (tried.has(id)) return null; tried.add(id); return tryRecord(id, { mine, pending }); };
+      let found = await next(readTabId(), true);
+      if (!found) found = await next(await s.kvGet("lastDocId").catch(() => null), false);
+      if (!found) for (const doc of (await s.listDocs()).filter(d => !d.quarantined).slice(0, 8)) { found = await next(doc.id, false); if (found) break; }
+      if (found === PENDING) return null;
       if (found) return found;
       // 이전하지 못한 예전 자동 저장이 남아 있으면 그대로 보여 준다(원본은 건드리지 않았고, 첫 편집 때 다시 문서로 옮겨 쓴다).
       if (!(await s.kvGet("migrated.v1").catch(() => null))) {
@@ -276,6 +341,56 @@
       }
     } catch { /* 저장소 오류 — 데모로 시작 */ }
     return null;
+  }
+
+  /** 복원한 악보를 설치하기 직전에 부른다: 이 문서를 "여는 중"으로 적어 둔다(쓰기가 끝날 때까지 기다린다 — 렌더 중 멈춰도 다음 부팅이 알 수 있게).
+   * 표시를 적었으면 true. 복원한 기록이 없거나(데모·옛 방식) 저장소를 못 쓰면 false. */
+  async function bootBegin() {
+    const opened = boot.opened;
+    return opened ? setPending(opened.id, true) : false;
+  }
+  /** 첫 렌더가 끝났다 — "여는 중" 표시를 지운다. */
+  async function bootDone() {
+    const opened = boot.opened;
+    boot.opened = null;
+    if (opened) await setPending(opened.id, false);
+  }
+  /** 설치·첫 렌더 중 예외가 났다 — 그 기록을 격리하고 표시를 지우고 잠금을 놓는다(이어서 앱이 데모를 연다). 격리했으면 true. */
+  async function bootFailed(error) {
+    const opened = boot.opened;
+    boot.opened = null;
+    if (!opened) return false;
+    const changed = await quarantine(opened, error);
+    await setPending(opened.id, false);
+    if (lock.docId === opened.id) { drop(lock.handle); setLock({}); }
+    return changed;
+  }
+  /** 안전 모드 [그래도 열기]: 지난번에 끝나지 못한 문서를 일반 부팅처럼 연다. 열 수 있으면 악보, 아니면 null. */
+  async function bootOpenPending() {
+    const pending = boot.pending;
+    if (!pending) return null;
+    boot.pending = null;
+    const found = await tryRecord(pending.id, { mine: true });   // pending 맵을 넘기지 않는다 — 표시를 확인하지 않고 연다
+    return found && found !== PENDING ? found : null;
+  }
+  /** 안전 모드 [새 악보로 시작]: 그 기록을 BOOT_INTERRUPTED로 격리하고 표시를 지운다(같은 대화상자가 매번 반복되지 않게). */
+  async function bootSkipPending() {
+    const pending = boot.pending;
+    if (!pending) return false;
+    boot.pending = null;
+    const doc = await store().loadDoc(pending.id).catch(() => null);
+    if (doc) await quarantine(doc, { code: "BOOT_INTERRUPTED", message: "지난번에 여는 중 끝나지 못했어요" }, false);
+    await setPending(pending.id, false);
+    return true;
+  }
+  /** 안전 모드 [파일로 내려받기]: 보관된 기록 그대로(열어 보지 않고) 파일로 내려받는다. */
+  async function bootDownloadPending() {
+    const pending = boot.pending;
+    if (!pending) return false;
+    const doc = await store().loadDoc(pending.id).catch(() => null);
+    if (!doc?.data) return false;
+    SF.io.download(`${SF.io.safeName(doc.title)}.scoreforge.json`, SF.io.jsonFileText(doc.data), "application/json");
+    return true;
   }
 
   /* ---------------- 교체 통로 ---------------- */
@@ -379,7 +494,7 @@
     try { await s.open(); doc = s.usable ? await s.loadDoc(id) : null; } catch { return "missing"; }
     if (!doc) return "missing";
     let score;
-    try { score = C.fromJSON(doc.data); } catch { return "unreadable"; }
+    try { SF.schema?.checkShape(doc.data); score = C.fromJSON(doc.data); } catch { return "unreadable"; }
     const opened = await replaceScore(score, { reason: "최근 작업 열기", ...opts, docId: doc.id, origin: doc.origin });
     return opened ? "opened" : "canceled";
   }
@@ -425,7 +540,8 @@
   C.onChange?.((score, event) => { if (event?.type === "saved") noteFileSaved(); });
   SF.session = {
     replaceScore, openDoc, guard, flushActive,
-    activeId, claim, adopt, restoreOnBoot, migrateLegacyAutosave, persist, noteFileSaved, savedLabel,
+    activeId, claim, adopt, restoreOnBoot, bootInfo, bootBegin, bootDone, bootFailed, bootOpenPending, bootSkipPending, bootDownloadPending,
+    migrateLegacyAutosave, persist, noteFileSaved, savedLabel,
     lockState, onLock, resume, copyForEditing,
   };
 })(window.SF);

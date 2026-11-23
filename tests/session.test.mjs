@@ -118,14 +118,14 @@ test('옵션은 installScore로 그대로 전달된다', async () => {
   assert.equal(h.installs[0].opts.readOnly, true); assert.equal(h.installs[0].opts.name, '파일.json'); assert.equal(h.installs[0].opts.toast, false);
 });
 
-// 구조 고정: core.js 밖에서 악보를 직접 갈아 끼우는 곳은 app.js의 installScore 1곳과 부팅 2곳뿐
+// 구조 고정: core.js 밖에서 악보를 직접 갈아 끼우는 곳은 app.js의 installScore 1곳뿐(부팅의 데모·복원도 installScore를 거친다 — P2-E)
 test('구조 고정: setScore 직접 호출 개수(core.js 제외)', () => {
   const counts = {};
   for (const file of readdirSync('js').filter(f => f.endsWith('.js') && f !== 'core.js')) {
     const n = (readFileSync(`js/${file}`, 'utf8').match(/\b(?:C|core|SF\.core)\.setScore\(/g) || []).length;
     if (n) counts[file] = n;
   }
-  assert.deepEqual(counts, { 'app.js': 3 });   // installScore 1 + 부팅 2(2-E에서 1로 줄인다)
+  assert.deepEqual(counts, { 'app.js': 1 });   // installScore 1(부팅 2곳은 P2-E에서 installScore 경유로 바꿔 없앴다)
   const app = readFileSync('js/app.js', 'utf8');
   assert.equal((app.match(/function installScore\(/g) || []).length, 1);
 });

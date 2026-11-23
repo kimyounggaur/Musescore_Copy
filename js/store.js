@@ -43,6 +43,22 @@
       put: (name, value, key) => api.transact(name, "readwrite", s => key === undefined ? s.put(value) : s.put(value, key)),
       delete: (name, key) => api.transact(name, "readwrite", s => s.delete(key)),
       getAll: name => api.transact(name, "readonly", s => s.getAll()),
+      /** 한 트랜잭션 안에서 읽고(mutate) 쓴다 — 읽은 뒤 다른 탭이 값을 바꿔도 덮어쓰지 않는다. mutate가 undefined를 돌려주면 쓰지 않는다. 썼으면 true. */
+      async update(name, key, mutate) {
+        let changed = false;
+        await api.transact(name, "readwrite", s => {
+          changed = false;
+          const read = s.get(key);
+          read.onsuccess = () => {
+            const next = mutate(read.result);
+            if (next === undefined) return;
+            if (name === "kv") s.put(next, key); else s.put(next);
+            changed = true;
+          };
+          return read;
+        });
+        return changed;
+      },
     };
     return api;
   }
@@ -61,6 +77,13 @@
       },
       async delete(name, key) { stores[name].delete(key); },
       async getAll(name) { return [...stores[name].values()].map(copy); },
+      async update(name, key, mutate) {
+        if (options.failPut) throw Object.assign(new Error("저장 공간이 부족해요"), { name: "QuotaExceededError" });
+        const next = mutate(copy(stores[name].get(key)));
+        if (next === undefined) return false;
+        stores[name].set(key, copy(next));
+        return true;
+      },
     };
     return api;
   }
@@ -104,6 +127,10 @@
       },
       async kvGet(key) { await ready(); return (await backend.get("kv", key)) ?? null; },
       async kvSet(key, value) { await ready(); await backend.put("kv", value, key); },
+      /** 기록 하나를 읽고 고쳐 쓴다(한 트랜잭션). mutate(기록 또는 undefined) → 새 기록, undefined면 그대로 둔다. 바꿨으면 true. */
+      async updateDoc(id, mutate) { await ready(); return backend.update("docs", id, mutate); },
+      /** kv 값 하나를 읽고 고쳐 쓴다(한 트랜잭션). mutate(옛 값 또는 undefined) → 새 값(null 가능), undefined면 그대로. */
+      async updateKv(key, mutate) { await ready(); return backend.update("kv", key, mutate); },
     };
   }
 
