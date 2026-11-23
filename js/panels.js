@@ -15,9 +15,7 @@
   const toast = (...args) => api.toast(...args);
   const flashHint = (...args) => api.flashHint(...args);
   /* ---------------- 속성 패널 ---------------- */
-  function htmlEsc(s) {
-    return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
-  }
+  const htmlEsc = SF.html.esc;
   function checked(v) { return v ? "checked" : ""; }
   function selectedPropIds() {
     const ids = selectedIds();
