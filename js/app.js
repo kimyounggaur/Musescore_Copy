@@ -151,8 +151,14 @@
   function scheduleAutosave() {
     if (C.state.readOnly) return;
     IO.autosave(C.state.score, { onComplete(status) {
-      if (status.error) toast(status.error.name === "QuotaExceededError" ? "자동 저장 공간이 부족해요. 파일 메뉴에서 악보를 저장해 주세요." : "자동 저장에 실패했어요. 파일 메뉴에서 악보를 저장해 주세요.");
-      else { savedRevision = status.revision; $("#status-hint").textContent = "이 기기에 자동 저장했어요"; }
+      if (status.error) {
+        const quota = status.error.name === "QuotaExceededError";
+        // 공간 부족은 처음 한 번 최근 작업 창을 사용량과 함께 열고, 그 뒤로는 토스트의 [최근 작업] 버튼으로 안내한다.
+        if (!(quota && SF.recent?.onQuota())) {
+          toast(quota ? "자동 저장 공간이 부족해요. 파일 메뉴에서 악보를 저장해 주세요." : "자동 저장에 실패했어요. 파일 메뉴에서 악보를 저장해 주세요.",
+            quota ? { action: { label: "최근 작업", run: () => SF.recent?.open({ quota: true }) } } : undefined);
+        }
+      } else { savedRevision = status.revision; $("#status-hint").textContent = "이 기기에 자동 저장했어요"; }
     } });
   }
 
@@ -617,12 +623,28 @@
 
   /* ---------------- 토스트/힌트 ---------------- */
   let toastTimer = null;
-  function toast(msg) {
-    const el = $("#toast");
-    el.textContent = SF.i18n?.translate(msg) ?? msg;
+  const toastHide = () => { clearTimeout(toastTimer); $("#toast").classList.remove("show"); };
+  const toastArm = ms => { clearTimeout(toastTimer); toastTimer = setTimeout(toastHide, ms); };
+  /** toast(msg) — 2.2초. toast(msg, { action: { label, run }, duration }) — 버튼이 있으면 6초(마우스·키보드가 올라가 있는 동안은 멈춤). */
+  function toast(msg, options) {
+    const el = $("#toast"), action = options?.action;
+    const text = SF.i18n?.translate(msg) ?? msg;
+    el.classList.toggle("has-action", Boolean(action));
+    if (action) {
+      const label = document.createElement("span"); label.textContent = text;
+      const button = document.createElement("button");
+      button.type = "button"; button.className = "toast-action"; button.textContent = SF.i18n?.translate(action.label) ?? action.label;
+      button.addEventListener("click", () => { toastHide(); Promise.resolve().then(() => action.run?.()).catch(() => {}); });
+      el.replaceChildren(label, button);
+    } else el.textContent = text;
+    if (!el.dataset.pause) {
+      el.dataset.pause = "1";
+      for (const [type, hold] of [["pointerenter", true], ["focusin", true], ["pointerleave", false], ["focusout", false]]) {
+        el.addEventListener(type, () => { if (!el.classList.contains("has-action") || !el.classList.contains("show")) return; if (hold) clearTimeout(toastTimer); else toastArm(1500); });
+      }
+    }
     el.classList.add("show");
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.classList.remove("show"), 2200);
+    toastArm(options?.duration ?? (action ? 6000 : 2200));
   }
   function flashHint(msg) { if (msg) toast(msg); }
 
@@ -699,6 +721,8 @@
         if (await SF.session.replaceScore(C.createScore({}), { reason: "새 악보 만들기", toast: false, origin: "new" })) openSettings();
       } else if (act === "open") {
         IO.openScoreDialog(handleLoadedScore);
+      } else if (act === "recent") {
+        SF.recent?.open();
       } else if (act === "save") {
         saveScore();
       } else if (act === "musicxml") {

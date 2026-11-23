@@ -28,6 +28,13 @@
 | 2026-11-23 | P0-3 | phase/p0-baseline | 부분 완료 | 운영 값 미확인(샌드박스에서 호스트 접근 차단) | docs/PRODUCTION_HEADERS.md에 vercel.json 값과 확인 명령을 남김 |
 | 2026-11-23 | P0-4 | phase/p0-baseline | 완료 | 사용자 지시로 결정 4건을 추천안으로 자체 승인 | D1 분리 · D2 A · D3 보기·재생·간단한 수정 · D4a 운영 · D4b 불허. P5 행은 Phase 5 뒤 측정으로 판단 |
 | 2026-11-23 | P1-1 | refactor/p1-1-safe-html | 완료 | 없음 | esc 3벌→SF.html.esc. npm test 108/107/1(+2), 브라우저 13/13. 옛 esc와 출력 차이로 바뀐 기대값 없음 |
+| 2026-11-23 | P1-2 | refactor/p1-2-tempo | 완료 | 없음 | 속성 패널 입력 1곳 수정, 사용처 29곳 점검표 기록(아래), PR 템플릿 추가. 정적 검사 테스트: 수정 전 실패(1곳)→수정 후 통과 |
+| 2026-11-23 | P1-3 | refactor/p1-3-sanitize | 완료 | 템포는 설계서의 Math.round 대신 clamp만(정정 C3) | 테스트 3개: 수정 전 2개 실패·기준 악보 테스트 통과 → 수정 후 전부 통과. npm test 112/111/1 |
+| 2026-11-23 | P1-4 | refactor/p1-4-csp | 완료 | 운영 CSP 값은 샌드박스에서 확인 못 함(P0-3 미완료) | CSP script-src 'self'만, CDN 예비 경로 3곳 제거, audioio-v3 바꿔치기 단언 추가. SF_HEADERS=1에서 CSP 위반 0·폰트 OK·재생 호출 OK. npm test 114/113/1, ui-v3 13/13(1회는 기존 간헐 실패 #8) |
+| 2026-11-23 | P1-5 | refactor/p1-5-xss-e2e | 완료 | 없음 | 악성 파일 E2E(시나리오 2개) 통과. 취약 상태(수정 되돌림)에서는 2개 모두 실패함을 확인. tests/fixtures/make-xss-fixture.mjs로 파일 생성 |
+| 2026-11-23 | P2-A | refactor/p2-a-replace-guard | 완료 | 교체 경로가 설계서 표(7개)+시작 화면 2개 외에 ui-v3.js:219의 중복 앱 파일 실행 소비자 1곳 더. 클라우드 열기에 stale 검사 유지(설계서에 없던 보강) | 9개 경로(+1) 모두 SF.session.replaceScore 경유. session.test 15 + session-browser 18 + cloud 3 추가. check 22 · npm test 136/131/0/5 · 브라우저(SF_HEADERS=1) 34/34 · 오프라인 검증 통과(캐시 43개). 가드를 끄면 Node 테스트 5개 실패 확인. app.js 999줄. 읽기 전용 화면에서 앱 파일 실행 시 이제 편집 가능 상태로 열림(기존 버그 수정). 관찰: 한글 제목 파일 저장 시 헤드리스 Chrome이 내려받기 이름을 'download'로 보고함(기존 동작, 이 Step에서 안 건드림 — 실제 Chrome 확인은 사람 몫) |
+| 2026-11-23 | P2-B | refactor/p2-b-idb-autosave | 통과: check 23 · npm test 170/160/0(스킵 10=브라우저) · 브라우저 45/45 · 오프라인 검증 통과 | docId는 META_KEYS 대신 LOCAL_META_KEYS · 파일 저장 시각은 core 'saved' 이벤트에서 기록 · P2-A 브라우저 테스트는 IndexedDB 차단 환경에서 실행(기대값 무변경) · 상세는 '계획 기록 — P2-B' | store.js 신규, io.js writer 훅, session.js(문서 id·보관·부팅 복원·옛 자동 저장 이전·충돌 대화상자), 상태 표시줄 '마지막 파일 저장', ui-v3:113 한 줄 교체 |
+| 2026-11-23 | P2-C | refactor/p2-c-recent | 통과: check 24 · npm test 184/170/0(스킵 14=브라우저) · 브라우저(SF_HEADERS=1) 57/57 · 오프라인 검증 통과(캐시 45개) | ①공간 부족(QuotaExceededError)이면 최근 작업 창을 사용량과 함께 열되, 탭마다 처음 한 번만 자동으로 열고 그 뒤로는 토스트의 [최근 작업] 버튼으로 안내(실패할 때마다 모달이 뜨면 편집 중 포커스를 뺏음) ②보관된 기록을 여는 일은 SF.session.openDoc(id)로 한 곳에 모음(결과 opened/canceled/missing/unreadable) — 최근 작업 창과 되돌리기 토스트가 같이 씀 ③io.jsonFileText(data) 추출(saveJSON과 출력 동일) — 목록의 내려받기가 같은 파일 형식을 씀 ④지금 열린 문서의 내려받기는 화면의 악보 기준(일반 저장과 같고 파일 저장 시각이 남음), 나머지는 보관된 기록 그대로(기록은 건드리지 않으므로 '마지막 파일 저장'에는 반영 안 됨) ⑤목록에서 열 때 창을 먼저 닫고 취소·실패하면 목록으로 되돌아옴(토스트·확인 창이 모달 뒤에 가려지지 않게) ⑥토스트에 버튼이 있으면 마우스·키보드가 올라가 있는 동안 타이머를 멈추고 6초, 숨은 토스트는 visibility:hidden(버튼이 탭 순서에 남지 않게) ⑦다른 탭 편집 중 표시는 SF.lock?.heldElsewhere?.() 훅과 번역 문구만 마련(2-D에서 채움) ⑧P2-B 브라우저 테스트 2곳은 토스트 전체 글자 대신 문구 부분(#toast > span)을 같은 문자열로 비교하고 [되돌리기] 존재를 추가 확인(기대 문구 무변경) | js/recent.js 신규(163줄) · recent.test 5 + recent-browser 12 + session.test 5 추가. 변이 검사 7종(제목을 HTML로 넣기·현재 문서 삭제 허용·공간 부족 창 매번 열기·되돌리기 버튼 제거·같은 문서에도 버튼·깨진 기록 무시·토스트 버튼 잔류) 모두 테스트가 잡음. 화면 확인: 어두운·밝은·Pretty·Cute 테마와 폭 390px. 측정: 300마디 366KB 문서 100건에서 listDocs 250ms·창 열기 208ms — restoreOnBoot가 부팅 때마다 listDocs를 부르는 점은 P2-E에서 지연 호출로 고칠 것. 관찰: 밝은 테마들에서 .tbtn.danger의 빨강이 테마 CSS에 덮여 삭제 버튼이 일반 버튼처럼 보임(기존 현상, Phase 9에서). 로그 정리: 흩어져 있던 P1-2~P1-5·P2-A·P2-B 행을 Step 표로 옮기고 logrow가 Step 표 끝에 붙이도록 고침 |
 
 ### P1-2 innerHTML 사용처 점검 (016ad44, engrave.js 제외 29곳)
 | 위치 | 들어가는 값 | 판정 | 근거 |
@@ -52,11 +59,6 @@
 | auth.js 430–472 | 관리자 요약·회원 표·오류 | ✅ | 모든 값 `htmlEsc`, 나머지는 상수 |
 
 ❌ 0건(수정 후). 방어를 하나 더 추가: engrave.js 박자표 글꼴 대체 경로의 문자열도 `esc` 처리.
-
-| 2026-11-23 | P1-2 | refactor/p1-2-tempo | 완료 | 없음 | 속성 패널 입력 1곳 수정, 사용처 29곳 점검표 기록(아래), PR 템플릿 추가. 정적 검사 테스트: 수정 전 실패(1곳)→수정 후 통과 |
-| 2026-11-23 | P1-3 | refactor/p1-3-sanitize | 완료 | 템포는 설계서의 Math.round 대신 clamp만(정정 C3) | 테스트 3개: 수정 전 2개 실패·기준 악보 테스트 통과 → 수정 후 전부 통과. npm test 112/111/1 |
-| 2026-11-23 | P1-4 | refactor/p1-4-csp | 완료 | 운영 CSP 값은 샌드박스에서 확인 못 함(P0-3 미완료) | CSP script-src 'self'만, CDN 예비 경로 3곳 제거, audioio-v3 바꿔치기 단언 추가. SF_HEADERS=1에서 CSP 위반 0·폰트 OK·재생 호출 OK. npm test 114/113/1, ui-v3 13/13(1회는 기존 간헐 실패 #8) |
-| 2026-11-23 | P1-5 | refactor/p1-5-xss-e2e | 완료 | 없음 | 악성 파일 E2E(시나리오 2개) 통과. 취약 상태(수정 되돌림)에서는 2개 모두 실패함을 확인. tests/fixtures/make-xss-fixture.mjs로 파일 생성 |
 
 ## 계획 기록 (⚠️ 단계 — 에이전트가 계획을 적고 스스로 승인)
 
@@ -118,8 +120,6 @@
 | 날짜 | 버전 | Phase 브랜치 | 포함 Step | 검증 | 상태 |
 |---|---|---|---|---|---|
 | 2026-11-23 | 3.0.2 | phase/p1-security | P1-1~P1-5 | check 21 · npm test 115/113/2 · 브라우저(SF_HEADERS=1) 16/16 · 오프라인 검증 통과(캐시 42개, CSP 위반 0) | 로컬 준비 완료 — push 대기 |
-| 2026-11-23 | P2-A | refactor/p2-a-replace-guard | 완료 | 교체 경로가 설계서 표(7개)+시작 화면 2개 외에 ui-v3.js:219의 중복 앱 파일 실행 소비자 1곳 더. 클라우드 열기에 stale 검사 유지(설계서에 없던 보강) | 9개 경로(+1) 모두 SF.session.replaceScore 경유. session.test 15 + session-browser 18 + cloud 3 추가. check 22 · npm test 136/131/0/5 · 브라우저(SF_HEADERS=1) 34/34 · 오프라인 검증 통과(캐시 43개). 가드를 끄면 Node 테스트 5개 실패 확인. app.js 999줄. 읽기 전용 화면에서 앱 파일 실행 시 이제 편집 가능 상태로 열림(기존 버그 수정). 관찰: 한글 제목 파일 저장 시 헤드리스 Chrome이 내려받기 이름을 'download'로 보고함(기존 동작, 이 Step에서 안 건드림 — 실제 Chrome 확인은 사람 몫) |
-| 2026-11-23 | P2-B | refactor/p2-b-idb-autosave | 통과: check 23 · npm test 170/160/0(스킵 10=브라우저) · 브라우저 45/45 · 오프라인 검증 통과 | docId는 META_KEYS 대신 LOCAL_META_KEYS · 파일 저장 시각은 core 'saved' 이벤트에서 기록 · P2-A 브라우저 테스트는 IndexedDB 차단 환경에서 실행(기대값 무변경) · 상세는 '계획 기록 — P2-B' | store.js 신규, io.js writer 훅, session.js(문서 id·보관·부팅 복원·옛 자동 저장 이전·충돌 대화상자), 상태 표시줄 '마지막 파일 저장', ui-v3:113 한 줄 교체 |
 
 ## 사람이 해야 할 일 (자동 진행에서 건너뜀)
 - [ ] P0-2 공유 동결: Supabase SQL Editor에서 공개 악보·문자열 템포 질의 2건 실행, **개수만** 이 파일에 기록. Phase 1 배포 전까지 새 공유 링크 만들지 않기.
@@ -129,4 +129,5 @@
 - [ ] 배포 확인 뒤 `.git/info/exclude`에서 설계서 줄을 지우고 `docs/scoreforge-refactor-design.md`를 커밋.
 - [ ] 외부 공유 재개 공지.
 - [ ] (P2-B) 실제 Chrome·Safari(iPad 포함)·Firefox에서 악보를 편집한 뒤 새로고침·탭 두 개 시나리오로 자동 저장이 문서별로 나뉘는지 확인. Firefox는 `navigator.storage.persist()` 때 권한 안내가 뜰 수 있음(허용·거부 모두 앱은 정상 동작해야 함). 시크릿 창에서는 저장소 용량이 작을 수 있음.
+- [ ] (P2-C) 실제 iPad·휴대폰 브라우저에서 최근 작업 창(작은 화면 배치)과 [되돌리기] 토스트가 하단 건반·툴바에 가려지지 않는지 확인. 저장 공간 사용량 줄(navigator.storage.estimate)은 Safari·Firefox에서 값이 근사치이거나 없을 수 있음(없으면 줄이 숨겨짐).
 - [ ] (P2-A) 실제 Chrome에서 한글 제목 악보를 파일로 저장했을 때 파일 이름이 `제목.scoreforge.json`으로 나오는지 확인. 헤드리스 Chrome에서는 내려받기 이름이 `download`로 보고됨(앱 코드는 `a.download`에 정상 이름을 넣고 있어 헤드리스 한정 현상으로 보임).

@@ -45,6 +45,7 @@
     <div id="file-menu" class="menu">
       <div class="mi" data-act="new">🆕 새 악보 만들기</div>
       <div class="mi" data-act="open">📂 열기 <small>.json·.musicxml·.mxl·.mid</small></div>
+      <div class="mi" data-act="recent">🕘 최근 작업 <small>자동 보관된 악보</small></div>
       <div class="mi" data-act="save">💾 저장 (.json) <small>Ctrl+S</small></div>
       <hr>
       <div class="mi" data-act="musicxml">🎼 MusicXML 내보내기 <small>MuseScore용</small></div>
@@ -417,6 +418,25 @@ where email = 'admin@example.com';</pre>
   </div>
 </dialog>
 
+<!-- ═══════════ 최근 작업 다이얼로그(js/recent.js) — 목록은 모두 DOM API로 그린다 ═══════════ -->
+<dialog id="dlg-recent">
+  <div class="dlg-head">
+    <h2>🕘 최근 작업</h2>
+    <form method="dialog"><button class="dlg-close" title="닫기">✕</button></form>
+  </div>
+  <div class="dlg-body">
+    <p id="rc-warn" class="rc-warn" role="alert" hidden>자동 저장 공간이 부족해요. 쓰지 않는 악보를 지우거나 파일로 내려받아 두세요.</p>
+    <p class="rc-note">자동 저장은 이 브라우저에만 남아요. 중요한 악보는 파일로 저장해 두세요.</p>
+    <ul id="rc-list" class="rc-list" hidden></ul>
+    <p id="rc-empty" class="rc-empty" hidden>보관된 악보가 아직 없어요. 악보를 고치면 자동으로 여기에 쌓여요.</p>
+    <p id="rc-unavailable" class="rc-empty" hidden>이 브라우저에서는 악보별 자동 보관을 쓸 수 없어요. 파일로 저장해 두세요.</p>
+    <p id="rc-usage" class="rc-usage" hidden></p>
+    <div class="dlg-actions">
+      <form method="dialog"><button class="tbtn primary">닫기</button></form>
+    </div>
+  </div>
+</dialog>
+
 <!-- ═══════════ 가져오기 결과 다이얼로그 ═══════════ -->
 <dialog id="dlg-import">
   <div class="dlg-head">
@@ -463,6 +483,7 @@ where email = 'admin@example.com';</pre>
 <script src="js/ui-dialog.js"></script>
 <script src="js/store.js"></script>
 <script src="js/session.js"></script>
+<script src="js/recent.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/cloud.js"></script>
 <script src="js/pwa.js"></script>

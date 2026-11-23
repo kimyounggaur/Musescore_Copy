@@ -178,16 +178,16 @@ function boot(options = {}) {
   const SF = context.SF, C = SF.core;
   const backend = options.backend || SF.storeTesting.memoryBackend(options.backendOptions);
   if (!options.noStore) SF.store = SF.storeTesting.createStore(backend);
-  const dialogs = [], installs = [], toasts = [], answers = [...(options.answers || [])];
+  const dialogs = [], installs = [], toasts = [], toastOptions = [], answers = [...(options.answers || [])];
   SF.ui = { choiceDialog: async dialog => { dialogs.push(dialog); await new Promise(resolve => setTimeout(resolve, 2)); return answers.shift() ?? 'cancel'; } };
   SF.io.saveJSON = () => {};   // 파일 내려받기 흉내(브라우저 API 없음)
-  SF.app = { installScore: (score, opts) => { installs.push({ score, opts }); C.state.readOnly = !!opts.readOnly; C.setScore(score); }, toast: message => toasts.push(message) };
+  SF.app = { installScore: (score, opts) => { installs.push({ score, opts }); C.state.readOnly = !!opts.readOnly; C.setScore(score); }, toast: (message, toastOpts) => { toasts.push(message); toastOptions.push(toastOpts); } };
   vm.runInContext(readFileSync('js/session.js', 'utf8'), context, { filename: 'session.js' });
   const titled = title => { const score = C.createScore({ measureCount: 1 }); score.meta.title = title; return score; };
   const edit = title => C.mutate('편집', score => { score.meta.title = title; });
   const replace = (score, opts = {}) => SF.session.replaceScore(score, { confirmed: true, ...opts });
   const docId = () => C.state.score.meta.docId;
-  return { SF, C, context, backend, dialogs, installs, toasts, answers, titled, edit, replace, docId, local: context.localStorage, tab: context.sessionStorage, list: () => SF.store.listDocs(), load: id => SF.store.loadDoc(id), flush: () => SF.io.flushAutosave() };
+  return { SF, C, context, backend, dialogs, installs, toasts, toastOptions, answers, titled, edit, replace, docId, local: context.localStorage, tab: context.sessionStorage, list: () => SF.store.listDocs(), load: id => SF.store.loadDoc(id), flush: () => SF.io.flushAutosave() };
 }
 
 test('P2-B ① docId 규칙: 새 악보·데모·가져오기=새 UUID, 파일=UUID 이어받기, 클라우드=cloud:+cloudId, 사본=새 UUID, 공유 보기=없음', async () => {
@@ -433,4 +433,83 @@ test('P2-B i18n: 보관 토스트·충돌 대화상자·상태 표시줄 문구�
     '이 파일과 같은 악보가 이 기기에 자동 저장돼 있는데 내용이 달라요. 어느 쪽을 열까요?', '마지막 파일 저장 14:32', '마지막 파일 저장 11/23 09:05'])
     assert.doesNotMatch(t(ko), /[가-힣]/, ko);
   assert.equal(t('마지막 파일 저장 14:32'), 'Last file save 14:32');
+});
+
+
+/* =====================================================================
+ * P2-C 최근 작업 — 보관본 열기(openDoc)와 토스트 [되돌리기]
+ * ===================================================================== */
+const KEPT_TEXT = '이전 악보는 최근 작업에 보관했어요';
+/** 문서 A를 만들어 고치고(보관 가능 상태) 그 ID를 돌려준다. */
+async function workedDoc(h, title, origin = 'new') {
+  await h.replace(h.titled('시작'), { origin }); h.edit(title);
+  assert.equal(await h.flush(), true);
+  return h.docId();
+}
+
+test('P2-C ① openDoc: 보관된 문서를 같은 ID로 열고, 없는 기록·읽을 수 없는 기록은 구분해서 알려 준다', async () => {
+  const h = boot();
+  const a = await workedDoc(h, 'A 작업');
+  await h.replace(h.titled('B'), { origin: 'demo' });
+  const b = h.docId(); assert.notEqual(a, b);
+  assert.equal(await h.SF.session.openDoc(a, { reason: '최근 작업 열기' }), 'opened');
+  assert.equal(h.docId(), a); assert.equal(h.C.state.score.meta.title, 'A 작업');
+  const last = h.installs.at(-1); assert.equal(last.opts.docId, a); assert.equal(last.opts.origin, 'new');   // 기록의 출처를 이어받는다
+  assert.equal(h.tab.getItem(TAB_KEY), a);
+  assert.equal(await h.SF.session.openDoc('없는-문서'), 'missing');
+  assert.equal(await h.SF.session.openDoc('../나쁜 id'), 'missing');            // 형식이 틀린 ID는 저장소에 묻지도 않는다
+  assert.equal(await h.SF.session.openDoc(''), 'missing');
+  await h.SF.store.saveDoc({ id: 'broken', title: '깨짐', createdAt: 1, updatedAt: 2, revision: 1, origin: 'new', cloudId: null, measures: 1, bytes: 1, schema: 1, data: { parts: 'x' } });
+  assert.equal(await h.SF.session.openDoc('broken'), 'unreadable');
+  assert.equal(h.docId(), a);                                                   // 실패해도 지금 악보는 그대로
+});
+
+test('P2-C ② 보관 토스트에는 [되돌리기]가 붙고, 누르면 직전 문서가 다시 열린다(지금 악보는 보관)', async () => {
+  const h = boot();
+  const a = await workedDoc(h, 'A 작업');
+  assert.equal(await h.SF.session.replaceScore(h.titled('B'), { origin: 'demo', reason: '데모 열기' }), true);
+  assert.equal(h.dialogs.length, 0); assert.equal(h.toasts.at(-1), KEPT_TEXT);
+  const action = h.toastOptions.at(-1)?.action;
+  assert.equal(action?.label, '되돌리기'); assert.equal(typeof action.run, 'function');
+  h.edit('B 작업'); const b = h.docId();                                         // B도 고치고 나서 되돌린다
+  assert.equal(await action.run(), 'opened');
+  assert.equal(h.docId(), a); assert.equal(h.C.state.score.meta.title, 'A 작업');
+  assert.equal(h.dialogs.length, 0); assert.equal((await h.load(b)).title, 'B 작업');   // B는 묻지 않고 보관
+  assert.equal(h.toasts.at(-1), KEPT_TEXT);                                       // 되돌린 자리에도 같은 안내와 [되돌리기]
+  assert.equal(h.toastOptions.at(-1)?.action?.label, '되돌리기');
+  assert.equal(await h.toastOptions.at(-1).action.run(), 'opened');              // 다시 누르면 B로
+  assert.equal(h.docId(), b); assert.equal(h.C.state.score.meta.title, 'B 작업');
+  assert.equal((await h.list()).length, 2);                                       // 어느 쪽도 지워지지 않았다
+});
+
+test('P2-C ③ 보관할 게 없으면 토스트도 [되돌리기]도 없고, 같은 문서로 되돌아오는 요청에는 버튼을 달지 않는다', async () => {
+  const h = boot();
+  await h.replace(h.titled('고치지 않음'), { origin: 'new' });
+  await h.SF.session.replaceScore(h.titled('다음'), { origin: 'new' });
+  assert.equal(h.toasts.length, 0);
+  const a = await workedDoc(h, 'A 작업');
+  // 자신의 보관본을 같은 ID로 다시 여는 경우(문서가 같다)에는 되돌릴 곳이 없다
+  h.edit('A 작업 2'); h.toasts.length = 0; h.toastOptions.length = 0;
+  assert.equal(await h.SF.session.openDoc(a, { reason: '최근 작업 열기' }), 'opened');
+  assert.equal(h.toasts.at(-1), KEPT_TEXT); assert.equal(h.toastOptions.at(-1), undefined);
+});
+
+test('P2-C ④ 되돌릴 문서가 그 사이 지워졌으면 현재 악보를 건드리지 않고 안내만 한다', async () => {
+  const h = boot();
+  const a = await workedDoc(h, 'A 작업');
+  await h.SF.session.replaceScore(h.titled('B'), { origin: 'demo' });
+  const b = h.docId(), action = h.toastOptions.at(-1).action;
+  await h.SF.store.deleteDoc(a);
+  assert.equal(await action.run(), 'missing');
+  assert.equal(h.docId(), b); assert.match(h.toasts.at(-1), /^이전 악보를 열 수 없어요/);
+});
+
+test('P2-C ⑤ 보관할 수 없는 상태(저장 공간 부족)에서는 openDoc도 예전처럼 묻고, 취소하면 그대로 둔다', async () => {
+  const h = boot({ answers: ['cancel'] });
+  const a = await workedDoc(h, 'A 작업');
+  await h.replace(h.titled('B'), { origin: 'demo' }); h.edit('B 작업'); const b = h.docId();
+  h.backend.options.failPut = true;                                              // 이제부터 저장이 실패한다
+  assert.equal(await h.SF.session.openDoc(a, { reason: '최근 작업 열기' }), 'canceled');
+  assert.equal(h.dialogs.length, 1); assert.match(h.dialogs[0].message, /^최근 작업 열기 전에/);
+  assert.equal(h.docId(), b); assert.equal(h.C.state.score.meta.title, 'B 작업');
 });

@@ -279,9 +279,13 @@
       const chosen = await plan(next, opts);
       if (!chosen || opts.stale?.()) return false;
       const before = active;
+      const previous = kept ? activeId() : "";    // 보관한 직전 문서 — 토스트 [되돌리기]가 다시 연다
       if (chosen.readOnly) release(chosen.score); else claim(chosen.score, chosen.info);
       try { SF.app.installScore(chosen.score, opts); } catch (error) { active = before; writeTabId(before.id); throw error; }
-      if (kept) SF.app.toast?.(KEPT);
+      if (kept) {
+        const back = previous && previous !== activeId() ? { action: { label: "되돌리기", run: () => undo(previous) } } : undefined;
+        SF.app.toast?.(KEPT, back);
+      }
       return true;
     };
     const result = chain.then(run, run);
@@ -289,11 +293,30 @@
     return result;
   }
 
+  /** 보관된 문서를 골라 연다(최근 작업 창·토스트 [되돌리기]). 지금 악보는 replaceScore의 보관 규칙(guard)을 거친다.
+   * 결과: "opened" | "canceled"(취소했거나 더 새로운 요청에 밀림) | "missing"(기록 없음) | "unreadable"(읽을 수 없는 기록) */
+  async function openDoc(id, opts = {}) {
+    const s = store();
+    if (!s || !validId(id)) return "missing";
+    let doc = null;
+    try { await s.open(); doc = s.usable ? await s.loadDoc(id) : null; } catch { return "missing"; }
+    if (!doc) return "missing";
+    let score;
+    try { score = C.fromJSON(doc.data); } catch { return "unreadable"; }
+    const opened = await replaceScore(score, { reason: "최근 작업 열기", ...opts, docId: doc.id, origin: doc.origin });
+    return opened ? "opened" : "canceled";
+  }
+  async function undo(id) {
+    const outcome = await openDoc(id, { reason: "이전 악보로 되돌리기" });
+    if (outcome === "missing" || outcome === "unreadable") SF.app.toast?.("이전 악보를 열 수 없어요 — 파일 메뉴의 최근 작업에서 확인해 주세요");
+    return outcome;
+  }
+
   SF.io?.setAutosaveWriter?.(persist);
   // 파일로 저장(io.saveJSON → markSaved)이 끝나면 어느 경로든 시각을 남긴다.
   C.onChange?.((score, event) => { if (event?.type === "saved") noteFileSaved(); });
   SF.session = {
-    replaceScore, guard, flushActive,
+    replaceScore, openDoc, guard, flushActive,
     activeId, claim, restoreOnBoot, migrateLegacyAutosave, persist, noteFileSaved, savedLabel,
   };
 })(window.SF);

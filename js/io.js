@@ -20,11 +20,14 @@
     return (title || "악보").replace(/[\\/:*?"<>|]/g, "_").slice(0, 60);
   }
 
+  /** 악보 파일(.scoreforge.json)의 본문. data는 C.toJSON의 결과 — 최근 작업 창이 보관된 기록을 내려받을 때도 같은 모양을 쓴다. */
+  function jsonFileText(data) {
+    return JSON.stringify({ app: "scoreforge", version: 1, score: data }, null, 1);
+  }
+
   function saveJSON(score) {
     const revision = C.state.revision;
-    download(safeName(score.meta.title) + ".scoreforge.json",
-      JSON.stringify({ app: "scoreforge", version: 1, score: C.toJSON(score) }, null, 1),
-      "application/json");
+    download(safeName(score.meta.title) + ".scoreforge.json", jsonFileText(C.toJSON(score)), "application/json");
     if (score === C.state.score) C.markSaved?.(revision);
   }
 
@@ -1200,7 +1203,7 @@
   };
 
   SF.io = {
-    download, saveJSON, openJSON, safeName,
+    download, saveJSON, jsonFileText, openJSON, safeName,
     autosave, loadAutosave, clearAutosave, getAutosaveStatus, setAutosaveWriter, flushAutosave, writeLegacyAutosave,
     exportMusicXML, buildDemo, DEMOS,
     parseMusicXML, readMxl, openScoreDialog, loadScoreFile,
