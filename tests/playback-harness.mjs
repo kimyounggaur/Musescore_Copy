@@ -10,7 +10,8 @@ const node = () => ({ gain: parameter(), pan: parameter(), frequency: parameter(
 
 // hq: 피아노 음질 설정을 '고음질'로 시작한다(기본은 가벼운 Soundfont 피아노). store: localStorage 초기값. blockedStorage: 저장소가 막힌 브라우저.
 export const PIANO_QUALITY_KEY = 'scoreforge.audio.pianoQuality';
-export function loadPlayback({ sampleModule, fetch, hq = false, store = {}, blockedStorage = false } = {}) {
+// hook: import() 문을 바꿔치지 않고 playback.js가 제공하는 __setSmplrModuleForTest로 가짜 smplr를 넣는다(P4-4 이후 새 테스트의 기본 방식).
+export function loadPlayback({ sampleModule, fetch, hq = false, store = {}, blockedStorage = false, hook = false } = {}) {
   const stats = { decodes: 0, contexts: 0 }, logs = [];
   const data = new Map(Object.entries({ ...(hq ? { [PIANO_QUALITY_KEY]: 'hq' } : {}), ...store }));
   const blocked = () => { throw new Error('storage blocked'); };
@@ -32,9 +33,10 @@ export function loadPlayback({ sampleModule, fetch, hq = false, store = {}, bloc
   });
   context.window = context;
   const original = readFileSync(new URL('../js/playback.js', import.meta.url), 'utf8');
-  const source = original.replace('import("../vendor/smplr/index.mjs")', 'window.__sampleModule()');
-  if (source === original) throw new Error('smplr import 바꿔치기 실패 — playback.js의 import 문을 확인');
+  const source = hook ? original : original.replace('import("../vendor/smplr/index.mjs")', 'window.__sampleModule()');
+  if (source === original && !hook) throw new Error('smplr import 바꿔치기 실패 — playback.js의 import 문을 확인');
   vm.runInContext(source, context);
+  if (hook) context.SF.playback.__setSmplrModuleForTest(sampleModule);
   return { playback: context.SF.playback, context, stats, logs, data };
 }
 
@@ -42,7 +44,7 @@ export function loadPlayback({ sampleModule, fetch, hq = false, store = {}, bloc
 export function fakeSmplr({ makeReady = () => Promise.resolve(), withLoader = true } = {}) {
   const made = [], loaders = [];
   const instrument = (kind, opts, extra = {}) => {
-    const inst = { kind, opts, disposed: false, ready: makeReady(made.length, kind), start() {}, stop() {}, dispose() { this.disposed = true; }, ...extra };
+    const inst = { kind, opts, disposed: false, disposeCalls: 0, ready: makeReady(made.length, kind), start() {}, stop() {}, dispose() { this.disposed = true; this.disposeCalls++; }, ...extra };
     made.push(inst);
     return inst;
   };
