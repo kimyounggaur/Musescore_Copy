@@ -84,6 +84,34 @@
 - app.js 줄 수: 현재 1,015 → 예상 약 1,010(1,600 이하 유지).
 - 알려진 동작: 클라우드에 저장했어도 파일로 저장하기 전이면 `C.state.dirty`라서 묻는다. 2-B에서 보관(flush)이 생기면 사라진다.
 
+### P2-B 악보별 자동 저장 — IndexedDB (2026-11-23 승인)
+**저장 구조**(설계서와 같음): DB `scoreforge` v1 — `docs`(keyPath `id`, 색인 `updatedAt`) `{ id, title, createdAt, updatedAt, revision, origin, cloudId, measures, bytes, schema, data }`, `kv`(`lastDocId`·`migrated.v1`·`boot.pending`). `data`는 `C.toJSON(score)` 그대로(저장 형식 v1, `schema: 1`). 열기에 실패하면 `SF.store.backend === "localStorage"`가 되고 지금과 똑같이 1칸 방식으로 동작(`flushActive()`는 항상 false). 테스트는 `SF.storeTesting.memoryBackend`(이름 `memory`, 문서 저장 가능으로 취급).
+
+| origin | 만들어지는 때 | docId |
+|---|---|---|
+| new / demo | 새 악보·데모(메뉴·시작 화면)를 설치할 때 id만 부여, **기록은 첫 편집 때** | 새 UUID |
+| file | `.scoreforge.json`을 열 때 | 파일의 `meta.docId`(UUID 형식일 때만, 아니면 새 UUID). 같은 id 기록이 있고 내용이 다르면 [자동 저장본 열기 / 파일 그대로 열기(새 문서로) / 취소] |
+| import | MusicXML·MIDI·MXL | 새 UUID |
+| cloud | 클라우드에서 열 때 | `cloud:` + cloudId (공유 보기는 기록 안 함) |
+| copy | 로컬 사본 | 새 UUID (메타에서 id·클라우드 식별 제거 후) |
+| legacy | 옛 localStorage 1칸을 한 번 옮길 때 | 고정 `legacy-v1`(실패 뒤 다시 시도해도 문서가 둘이 되지 않게) |
+
+**쓰기 순서**: io.js `autosave`의 700ms 디바운스·revision 확인은 그대로, 쓰는 곳만 `setAutosaveWriter(fn)` 훅(기본 = 현행 localStorage, 동기 동작 유지 → audioio-v3 테스트 무변경). writer가 Promise를 돌려주면 성공 뒤에 `markAutosaved`. `flushAutosave()`는 대기 중인 저장을 즉시 실행해 성공 여부를 돌려줌. `flushActive()`(session)는 store가 쓸 수 있을 때만 `flushAutosave()`→`C.isAutosaved()`로 판단.
+
+**start()가 async가 될 때**: 저장소 열기·옛 저장본 이전·시작 문서 고르기만 `await SF.session.restoreOnBoot()` 자리(옛 `IO.loadAutosave()` 자리)로 모으고, 그 앞의 UI 만들기·`bind*`는 그대로 앞에 둔다. 저장소 열기는 `start()` 맨 앞에서 먼저 시작(Promise)해 UI 만드는 동안 병렬로 진행하고 옛 위치에서 기다린다. 그 뒤(`C.onChange` 등록, `dirty=false`, uiV3·auth·cloud·pwa init, 첫 `update`)는 순서 그대로이고, 기다리는 지점만 `await`로 바뀐다. 위험: 키·버튼 바인딩(`bind*`)은 `await` 앞에 있어서, 저장소를 여는 동안(보통 수십 ms) 들어온 입력은 아직 `C.onChange`가 없는 빈 임시 악보에 닿았다가 곧 `C.setScore`로 교체된다 → 저장되는 것이 없어 유실 위험은 없고, 그 사이 입력 한 번이 사라질 수 있을 뿐이라 받아들인다(브라우저 테스트의 `networkidle` + `#svg-host .ev` 대기로 안정 확인). 부팅의 `C.setScore` 2곳은 app.js에 남김(구조 고정 3개 유지, 2-E에서 정리).
+
+**옛 자동 저장 이전 실패 시**: localStorage 원본은 어떤 경우에도 지우지 않는다. 쓰기·읽기·형식 오류 어느 쪽이든 `migrated.v1`을 남기지 않아 다음 부팅에 다시 시도하고(문서 id가 고정이라 중복 생성 없음), 이번 부팅에는 `IO.loadAutosave()`로 원본을 그대로 읽어 보여 준다(읽을 수 없으면 데모). 이전에 성공했는데 표시(flag) 쓰기만 실패한 경우에도 같은 id 기록이 있으면 덮어쓰지 않고 표시만 남긴다.
+
+**테스트**: tests/store.test.mjs(Node, 메모리 backend) · tests/session.test.mjs 추가(docId 규칙 5종·첫 편집 전 기록 없음·flush 성공 시 대화상자 없음·localStorage backend면 flush false·이전 1회성·같은 docId 다른 내용 선택·사본이 이전 기록을 덮어쓰지 않음) · ui-v3.test.mjs:113 한 줄만 교체(의미 유지) · session-browser 추가(두 페이지 격리·legacy 이전). 완료 기준 추가 확인: 새 코드에 v1 원본을 지우는 곳이 없음(grep). 기존 `io.clearAutosave()`(테스트 전용, 앱 코드 호출 0)는 그대로 두고 9-6에서 함께 정리.
+
+**구현하면서 달라진 점(설계서·프롬프트북 대비)**
+1. `cloud.js`: `META_KEYS`에 `docId`를 넣지 않고 `LOCAL_META_KEYS = ["docId"]`를 따로 둔다. `writeMetadata`의 대체 경로가 `META_KEYS` 중 값이 없는 키를 지우므로, 넣으면 `docId`가 지워진다. 클라우드 데이터(snapshot·decode)에서는 둘 다 제거한다.
+2. 파일 저장 시각은 `app.saveScore()`가 아니라 core의 `saved` 이벤트(= `io.saveJSON` 끝)에서 세션이 기록한다 — 파일 메뉴·"파일로 저장하고 계속"·PWA 업데이트 저장 어느 경로든 한 곳에서 처리. 기록(`fileSavedAt`)은 설계서 표에 없는 추가 필드(없던 기록은 0).
+3. 상태 표시줄 `#status-saved`는 기록이 있는 문서에서만 보이고 폭 640px 이하에서는 숨긴다(`#status-hint`와 같은 처리 — 좁은 화면 상태 표시줄은 Phase 6에서 다시 본다).
+4. `SF.store`의 모든 메서드는 열지 않았으면 먼저 연다(호출하는 쪽이 `open()` 순서를 신경 쓰지 않게). 열기에 5초 안에 못 끝나면 localStorage 방식으로 넘어간다(다른 탭이 막은 경우 앱이 멈추지 않게). 연결이 닫혀 있으면(InvalidStateError) 한 번 다시 열고 재시도.
+5. P2-A의 브라우저 테스트 18개는 "보관할 곳이 없을 때의 3지선다"를 보는 테스트라서 IndexedDB를 막은 환경(`openApp`의 `idb: false` 기본값)에서 돈다 — 기대값은 그대로. IndexedDB가 있을 때(묻지 않고 보관·토스트)는 새 테스트가 따로 본다.
+6. 파일 열기 충돌 확인은 확인(저장) 대화상자 **뒤에** 한다(취소하면 충돌 질문도 없음). 파일 안의 `docId`가 UUID 모양이 아니면(예: `cloud:…`) 믿지 않고 새 UUID를 준다 — 다른 문서의 id를 흉내 낸 파일이 기록을 건드리지 못하게.
+
 ## 릴리스 준비 기록
 (로컬에서 버전 올리기·검증까지만 했다. push·PR·병합·배포는 하지 않았다.)
 
@@ -91,6 +119,7 @@
 |---|---|---|---|---|---|
 | 2026-11-23 | 3.0.2 | phase/p1-security | P1-1~P1-5 | check 21 · npm test 115/113/2 · 브라우저(SF_HEADERS=1) 16/16 · 오프라인 검증 통과(캐시 42개, CSP 위반 0) | 로컬 준비 완료 — push 대기 |
 | 2026-11-23 | P2-A | refactor/p2-a-replace-guard | 완료 | 교체 경로가 설계서 표(7개)+시작 화면 2개 외에 ui-v3.js:219의 중복 앱 파일 실행 소비자 1곳 더. 클라우드 열기에 stale 검사 유지(설계서에 없던 보강) | 9개 경로(+1) 모두 SF.session.replaceScore 경유. session.test 15 + session-browser 18 + cloud 3 추가. check 22 · npm test 136/131/0/5 · 브라우저(SF_HEADERS=1) 34/34 · 오프라인 검증 통과(캐시 43개). 가드를 끄면 Node 테스트 5개 실패 확인. app.js 999줄. 읽기 전용 화면에서 앱 파일 실행 시 이제 편집 가능 상태로 열림(기존 버그 수정). 관찰: 한글 제목 파일 저장 시 헤드리스 Chrome이 내려받기 이름을 'download'로 보고함(기존 동작, 이 Step에서 안 건드림 — 실제 Chrome 확인은 사람 몫) |
+| 2026-11-23 | P2-B | refactor/p2-b-idb-autosave | 통과: check 23 · npm test 170/160/0(스킵 10=브라우저) · 브라우저 45/45 · 오프라인 검증 통과 | docId는 META_KEYS 대신 LOCAL_META_KEYS · 파일 저장 시각은 core 'saved' 이벤트에서 기록 · P2-A 브라우저 테스트는 IndexedDB 차단 환경에서 실행(기대값 무변경) · 상세는 '계획 기록 — P2-B' | store.js 신규, io.js writer 훅, session.js(문서 id·보관·부팅 복원·옛 자동 저장 이전·충돌 대화상자), 상태 표시줄 '마지막 파일 저장', ui-v3:113 한 줄 교체 |
 
 ## 사람이 해야 할 일 (자동 진행에서 건너뜀)
 - [ ] P0-2 공유 동결: Supabase SQL Editor에서 공개 악보·문자열 템포 질의 2건 실행, **개수만** 이 파일에 기록. Phase 1 배포 전까지 새 공유 링크 만들지 않기.
@@ -99,4 +128,5 @@
 - [ ] **Phase 1 릴리스(3.0.2)**: `phase/p1-security`를 처음으로 push → PR → 곧바로 병합(공개~배포 간격 최소화). 배포 뒤 `curl.exe -sI https://musescore-copy.vercel.app/`로 CSP의 script-src가 'self'뿐인지, 앱 콘솔 오류 0, `SF.VERSION === "3.0.2"`, 기존 설치본에 업데이트 알림이 뜨는지 확인.
 - [ ] 배포 확인 뒤 `.git/info/exclude`에서 설계서 줄을 지우고 `docs/scoreforge-refactor-design.md`를 커밋.
 - [ ] 외부 공유 재개 공지.
+- [ ] (P2-B) 실제 Chrome·Safari(iPad 포함)·Firefox에서 악보를 편집한 뒤 새로고침·탭 두 개 시나리오로 자동 저장이 문서별로 나뉘는지 확인. Firefox는 `navigator.storage.persist()` 때 권한 안내가 뜰 수 있음(허용·거부 모두 앱은 정상 동작해야 함). 시크릿 창에서는 저장소 용량이 작을 수 있음.
 - [ ] (P2-A) 실제 Chrome에서 한글 제목 악보를 파일로 저장했을 때 파일 이름이 `제목.scoreforge.json`으로 나오는지 확인. 헤드리스 Chrome에서는 내려받기 이름이 `download`로 보고됨(앱 코드는 `a.download`에 정상 이름을 넣고 있어 헤드리스 한정 현상으로 보임).

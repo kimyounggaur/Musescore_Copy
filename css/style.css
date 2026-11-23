@@ -458,6 +458,8 @@ select.tsel {
 }
 #status-sel { font-weight: 600; color: #c7cdd8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #status-hint { flex: 1; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#status-saved { flex: none; white-space: nowrap; font-size: 11.5px; opacity: .85; }
+#status-saved[hidden] { display: none; }
 .zoom-ctrl { display: flex; align-items: center; gap: 2px; }
 .zoom-ctrl .tbtn { min-width: 26px; height: 24px; padding: 0 6px; font-size: 15px; }
 #zoom-label { width: 44px; text-align: center; font-variant-numeric: tabular-nums; }
@@ -1510,7 +1512,7 @@ body[data-theme="cute"] .tbtn:disabled:hover { background: #ffffff; }
 @media (max-width: 640px) {
   .brand { font-size: 0; gap: 0; }
   .brand .logo { font-size: 14px; }
-  #status-hint { display: none; }
+  #status-hint, #status-saved { display: none; }
 }
 
 /* ---------------- 인쇄 ---------------- */

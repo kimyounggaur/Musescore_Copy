@@ -36,24 +36,49 @@
   let saveTimer = null;
   let autosaveStatus = { revision: -1, savedAt: 0, error: null, pending: false };
   function getAutosaveStatus() { return { ...autosaveStatus }; }
+  // 쓰는 곳 훅: 세션이 등록하면 악보별 저장소(IndexedDB)에 쓴다. 없으면 localStorage 1칸(기본).
+  // writer(score, revision, savedAt)가 Promise를 돌려주면 성공한 뒤에 markAutosaved한다.
+  let autosaveWriter = null, pendingJob = null;
+  function setAutosaveWriter(fn) { autosaveWriter = typeof fn === "function" ? fn : null; }
+  // 예전 방식(localStorage 1칸). 기본 writer이자, IndexedDB를 쓸 수 없을 때 세션이 되돌아오는 길.
+  function writeLegacyAutosave(score, revision, savedAt) {
+    localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({ savedAt, revision, score: C.toJSON(score) }));
+  }
+  // 저장을 실제로 실행한다. 동기 writer면 true/false를, Promise writer면 Promise<boolean>을 돌려준다.
+  function runAutosave(score, revision, options) {
+    // Never label a mutable newer score with the revision that queued this save.
+    if (score !== C.state.score || revision !== C.state.revision) { autosaveStatus.pending = false; return false; }
+    const savedAt = Date.now();
+    const succeed = () => {
+      // 비동기 writer는 늦게 끝난 오래된 저장이 더 새로운 저장의 표시를 덮어쓰지 않게 한다.
+      if (revision >= autosaveStatus.revision) autosaveStatus = { revision, savedAt, error: null, pending: false };
+      C.markAutosaved?.(revision);
+      options.onComplete?.(getAutosaveStatus());
+      return true;
+    };
+    const fail = error => {
+      autosaveStatus = { ...autosaveStatus, error, pending: false };
+      options.onComplete?.(getAutosaveStatus());
+      return false;
+    };
+    try {
+      const result = (autosaveWriter || writeLegacyAutosave)(score, revision, savedAt);
+      return result && typeof result.then === "function" ? result.then(succeed, fail) : succeed();
+    } catch (error) { return fail(error); }
+  }
   function autosave(score, options = {}) {
     clearTimeout(saveTimer);
     const revision = C.state.revision;
     autosaveStatus = { ...autosaveStatus, pending: true, error: null };
-    saveTimer = setTimeout(() => {
-      try {
-        // Never label a mutable newer score with the revision that queued this save.
-        if (score !== C.state.score || revision !== C.state.revision) { autosaveStatus.pending = false; return; }
-        const savedAt = Date.now();
-        localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({ savedAt, revision, score: C.toJSON(score) }));
-        autosaveStatus = { revision, savedAt, error: null, pending: false };
-        C.markAutosaved?.(revision);
-        options.onComplete?.(getAutosaveStatus());
-      } catch (error) {
-        autosaveStatus = { ...autosaveStatus, error, pending: false };
-        options.onComplete?.(getAutosaveStatus());
-      }
-    }, options.delay ?? 700);
+    pendingJob = { score, revision, options };
+    saveTimer = setTimeout(() => { pendingJob = null; runAutosave(score, revision, options); }, options.delay ?? 700);
+  }
+  /** 대기 중인 자동 저장을 지금 실행한다. 쓸 것이 없고 이미 저장돼 있으면 바로 true. 현재 revision이 저장됐으면 true. */
+  function flushAutosave() {
+    clearTimeout(saveTimer);
+    const job = pendingJob; pendingJob = null;
+    if (!job && C.isAutosaved?.()) return Promise.resolve(true);
+    return Promise.resolve(runAutosave(C.state.score, C.state.revision, job?.options || {}));
   }
   function loadAutosave() {
     try {
@@ -1176,7 +1201,7 @@
 
   SF.io = {
     download, saveJSON, openJSON, safeName,
-    autosave, loadAutosave, clearAutosave, getAutosaveStatus,
+    autosave, loadAutosave, clearAutosave, getAutosaveStatus, setAutosaveWriter, flushAutosave, writeLegacyAutosave,
     exportMusicXML, buildDemo, DEMOS,
     parseMusicXML, readMxl, openScoreDialog, loadScoreFile,
     parseMidi, midiToScore, instrumentForGm, requestMidiOptions: null,

@@ -954,6 +954,15 @@
     openDemo | 데모 열기 | Open a demo score
     openCloud | 클라우드 악보 열기 | Open a cloud score
     makeCopy | 로컬 사본 만들기 | Make a local copy
+    kept | 이전 악보는 최근 작업에 보관했어요 | Your previous score is kept in Recent work
+    conflictTitle | 같은 악보의 자동 저장본이 있어요 | An autosaved copy of this score exists
+    conflictMessage | 이 파일과 같은 악보가 이 기기에 자동 저장돼 있는데 내용이 달라요. 어느 쪽을 열까요? | This device has an autosaved copy of the same score, but it differs from this file. Which one should open?
+    openAutosave | 자동 저장본 열기 | Open the autosaved copy
+    openFileAsNew | 파일 그대로 열기(새 문서로) | Open the file as it is (as a new document)
+    neverFileSaved | 파일로 저장한 적 없어요 | Never saved to a file
+    savedHint | 자동 저장은 이 브라우저에만 남아요. 중요한 악보는 파일로 저장해 두세요. | Autosaves stay only in this browser. Save important scores to a file.
+    autosaveFailed | 자동 저장에 실패했어요. 파일 메뉴에서 악보를 저장해 주세요. | Autosave failed. Save the score to a file from the File menu.
+    fileSaved | 마지막 파일 저장 {time} | Last file save {time}
   `);
   STRINGS.ko["session.beforeReplace"] = "{reason} 전에 현재 악보를 어떻게 할까요?";
   STRINGS.en["session.beforeReplace"] = "What should happen to the current score before you continue? ({reason})";
@@ -1036,6 +1045,7 @@
   pattern("toast.theme", /^(Dark|Light|Pretty|Cute)(?: UI)?로 전환했어요$/, ["theme"]);
   pattern("toast.openError", /^열 수 없어요: ([\s\S]*)$/, ["name"]);
   pattern("session.beforeReplace", /^([\s\S]+) 전에 현재 악보를 어떻게 할까요\?$/, ["reason"], ["reason"]);
+  pattern("session.fileSaved", /^마지막 파일 저장 ([\s\S]+)$/, ["time"]);
   pattern("status.selected", /^(\d+)개 선택$/, ["count"]);
   pattern("status.selectionHint", /^(\d+)개 선택 — Ctrl\+C\/V=복사\/붙여넣기 · S=이음줄 · < >=쐐기$/, ["count"]);
   pattern("hint.held", /^건반 (\d+)개 누름 — 숫자로 입력 · 1~8=입력 · 0=쉼표 · Esc=종료$/, ["count"]);
