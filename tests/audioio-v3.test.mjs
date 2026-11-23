@@ -173,7 +173,9 @@ test('scheduler locks late samples per session and both engines share live gain/
   context.window = context;
   // Substitute only the module transport. Instrument readiness, routing,
   // session choice and scheduler code remain the production implementations.
-  const source = readFileSync(new URL('../js/playback.js', import.meta.url), 'utf8').replace('import("../vendor/smplr/index.mjs").catch(() => import(SMPLR_URL))', 'window.__sampleModule()');
+  const original = readFileSync(new URL('../js/playback.js', import.meta.url), 'utf8');
+  const source = original.replace('import("../vendor/smplr/index.mjs")', 'window.__sampleModule()');
+  assert.notEqual(source, original, 'smplr import 바꿔치기 실패 — playback.js의 import 문을 확인');
   vm.runInContext(source, context);
   const playback = context.SF.playback;
   const s = C.createScore({ measureCount: 1, tempo: 120 });

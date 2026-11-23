@@ -7,7 +7,6 @@
 (function (SF) {
   const C = SF.core;
   const { Fraction } = SF;
-  const SMPLR_URL = "https://unpkg.com/smplr@1.0.0/dist/index.mjs";
   const F = (n, d = 1) => new Fraction(n, d);
   const timeAt = (score, m) => C.timeSigAt ? C.timeSigAt(score, m) : score.measures.slice(0, m + 1).reduce((ts, mm) => mm.timeSig || ts, score.timeSig);
   const lengthAt = (score, m) => {
@@ -156,7 +155,7 @@
     if (smplrModule) return smplrModule;
     if (!smplrPromise) {
       setSampleStatus("loading", "샘플 로딩", "smplr 라이브러리를 불러오는 중입니다.");
-      smplrPromise = import("../vendor/smplr/index.mjs").catch(() => import(SMPLR_URL)).then(mod => {
+      smplrPromise = import("../vendor/smplr/index.mjs").then(mod => {
         smplrModule = mod;
         return mod;
       }).catch(err => {

@@ -3,8 +3,7 @@
  * ========================================================================= */
 @font-face {
   font-family: "BravuraSF";
-  src: url("../fonts/Bravura.woff2") format("woff2"),
-       url("https://cdn.jsdelivr.net/gh/steinbergmedia/bravura@master/redist/woff/Bravura.woff2") format("woff2");
+  src: url("../fonts/Bravura.woff2") format("woff2");
   font-display: swap;
 }
 

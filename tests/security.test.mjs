@@ -72,3 +72,17 @@ test('기준 악보 5개는 fromJSON 정규화로 값이 바뀌지 않는다', (
     for (const [id, fields] of before) assert.deepEqual(after.get(id), fields, f + ' ' + id);
   }
 });
+
+// ---- Step 1-4: CSP·CDN ----
+test('CSP: script-src는 self만, 어떤 지시문에도 CDN 출처 없음', () => {
+  const csp = JSON.parse(readFileSync('vercel.json', 'utf8')).headers.flatMap(r => r.headers)
+    .find(h => h.key === 'Content-Security-Policy').value;
+  const dir = Object.fromEntries(csp.split(';').map(s => s.trim().split(/\s+/)).filter(p => p[0]).map(([k, ...v]) => [k, v]));
+  assert.deepEqual(dir['script-src'], ["'self'"]);
+  assert.deepEqual(dir['font-src'], ["'self'", 'data:']);
+  for (const [k, v] of Object.entries(dir)) assert.ok(!v.some(x => /jsdelivr|unpkg/.test(x)), k);
+});
+test('앱 코드에 CDN 주소 없음', () => {
+  const files = ['index.html', 'sw.js', ...readdirSync('js').map(f => 'js/' + f), ...readdirSync('css').map(f => 'css/' + f)];
+  for (const f of files) assert.doesNotMatch(readFileSync(f, 'utf8'), /jsdelivr|unpkg/, f);
+});
