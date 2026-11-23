@@ -1,0 +1,29 @@
+# 운영 배포가 끝나면 30초짜리 점검을 돌린다: 첫 화면 오류 0 · CSP(script-src 'self'뿐, CDN 없음) · SF.VERSION이 package.json과 같음.
+# (프롬프트북 P3-6 · 선택) Vercel이 GitHub에 남기는 deployment_status 이벤트로 시작한다.
+# 환경 이름("Production")은 Vercel 설정에 따라 다를 수 있다 — 첫 실행 로그에서 확인하고 맞출 것(docs/REFACTOR_LOG.md '사람이 해야 할 일').
+# Preview 배포에 Vercel 인증 보호가 켜져 있으면 점검할 수 없으므로 Production만 본다.
+name: deploy-smoke
+on:
+  deployment_status:
+permissions:
+  contents: read
+  deployments: read
+jobs:
+  smoke:
+    if: github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.deployment.sha }}     # 배포된 커밋의 package.json 버전과 비교한다
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm i --no-save playwright@1.65.1
+      - run: npx playwright install --with-deps chromium
+      - name: verify deployment
+        run: node tests/verify-deploy.mjs
+        env:
+          PLAYWRIGHT_MODULE: ${{ github.workspace }}/node_modules/playwright
+          SF_URL: ${{ github.event.deployment_status.environment_url }}
