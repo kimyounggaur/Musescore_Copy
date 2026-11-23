@@ -24,7 +24,8 @@ try {
   });
   await page.waitForFunction(() => SF.core.isAutosaved());
   const cached = await page.evaluate(async () => {
-    const cache = await caches.open('scoreforge-shell-' + SF.VERSION);
+    const key = (await caches.keys()).find(name => name.startsWith('scoreforge-shell-'));   // 이름은 버전+해시라서 접두로 찾는다
+    const cache = await caches.open(key);
     return (await cache.keys()).map(r => r.url);
   });
   assert.ok(cached.some(url => url.endsWith('/vendor/supabase.js')));

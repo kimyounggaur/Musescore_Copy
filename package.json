@@ -5,6 +5,7 @@
   "scripts": {
     "check": "node tests/check.mjs",
     "test": "node tests/run-node.mjs",
-    "serve": "node tests/serve.mjs"
+    "serve": "node tests/serve.mjs",
+    "release": "node tests/gen-readme-keys.mjs && node tests/prepare-release.mjs && npm run check && npm test"
   }
 }
