@@ -128,3 +128,69 @@ test('P6-2 CSS: 500px 이하에서 .authbar를 통째로 숨기던 규칙이 없
   assert.match(css, /\.account-wrap\s*\{\s*display:\s*none/);
   assert.match(css, /@media \(max-width:\s*500px\)[^{]*\{[^]*\.account-wrap\s*\{\s*display:\s*block/);
 });
+
+// ───────── P6-3 상단바 정리 ─────────
+const header = html.match(/<header class="topbar">([\s\S]*?)<\/header>/)[1];
+const groups = [...header.matchAll(/<div class="more-group"[^>]*>([\s\S]*?)<!-- \/more-group -->/g)].map(m => m[1]);
+const idsIn = text => [...text.matchAll(/\bid="([^"]+)"/g)].map(m => m[1]);
+
+test('P6-3 마크업: 더보기 버튼(#btn-more)은 aria-label·popovertarget을 갖고, #more-menu는 popover이며 처음에는 비어 있다', () => {
+  const button = html.match(/<button id="btn-more"[^>]*>/)[0];
+  assert.match(button, /aria-label="더보기"/);
+  assert.match(button, /popovertarget="more-menu"/);
+  const menu = html.match(/<div id="more-menu"[^>]*>/)[0];
+  assert.match(menu, /\spopover[\s>=]/);
+  assert.match(menu, /class="menu"/);
+  assert.match(html, /<div id="more-menu"[^>]*>\s*<\/div>/, '묶음은 좁은 화면일 때만 menus.js가 옮겨 넣는다 — 마크업에서는 비어 있다');
+});
+
+test('P6-3 마크업: 자주 안 쓰는 컨트롤은 .more-group 3묶음 안에, 핵심 컨트롤은 상단바에 그대로 있다', () => {
+  assert.equal(groups.length, 3, '.more-group은 3묶음(테마·언어 / 빠르기~타임라인 / 악기~도움말)');
+  const moved = groups.flatMap(idsIn);
+  for (const id of ['theme-select', 'language-select', 'tempo-input', 'swing-select', 'btn-mixer', 'staff-select', 'view-select', 'btn-hide-empty',
+    'btn-navigator', 'btn-timeline', 'instrument-select', 'btn-piano', 'btn-midi', 'midi-select', 'btn-shortcuts', 'btn-help']) {
+    assert.ok(moved.includes(id), `${id}는 .more-group 안`);
+  }
+  // 핵심 컨트롤: 눌러서 바로 써야 하거나(재생·되돌리기·파일·계정) 기존 브라우저 테스트가 좁은 화면에서 바로 누르는 것(#btn-props)
+  for (const id of ['btn-account', 'btn-file', 'btn-settings', 'btn-more', 'btn-undo', 'btn-redo', 'btn-rewind', 'btn-play', 'btn-stop', 'btn-metronome', 'btn-props']) {
+    assert.ok(!moved.includes(id), `${id}는 상단바에 남는다`);
+    assert.match(header, new RegExp(`id="${id}"`), id);
+  }
+});
+
+test('P6-3 마크업: 더보기 버튼은 설정 버튼 바로 뒤(첫 줄)에 있고, 묶음은 넓은 화면의 원래 순서를 지킨다', () => {
+  const at = text => header.indexOf(text);
+  assert.ok(at('id="btn-settings"') < at('id="btn-more"') && at('id="btn-more"') < at('id="btn-undo"'));
+  // 원래 순서: 테마·언어 → 계정 → 파일 → … → 빠르기 → 보기 → 속성 → 악기 → 건반 → 도움말
+  const order = ['theme-select', 'language-select', 'btn-account', 'btn-file', 'btn-settings', 'btn-undo', 'btn-play', 'tempo-input', 'swing-select', 'btn-mixer',
+    'staff-select', 'view-select', 'btn-hide-empty', 'btn-navigator', 'btn-timeline', 'btn-props', 'instrument-select', 'btn-piano', 'btn-midi', 'midi-select', 'btn-shortcuts', 'btn-help'];
+  const positions = order.map(id => at(`id="${id}"`));
+  assert.ok(positions.every(p => p > 0), '모두 있다');
+  assert.deepEqual(positions, [...positions].sort((a, b) => a - b), '넓은 화면의 배치 순서가 바뀌지 않았다');
+});
+
+test('P6-3 연결: app.js가 더보기 메뉴를 만들고 .more-group을 500px 이하에서 옮긴다(선택 컨트롤을 눌러도 닫히지 않게 button만 닫는다)', () => {
+  const app = read('js/app.js');
+  assert.match(app, /SF\.menus\.setup\(\{ button: "#btn-more", menu: "#more-menu"[^}]*closeOn: "button"/);
+  assert.match(app, /SF\.menus\.dock\(\{[^}]*\.more-group[^}]*"\(max-width:\s*500px\)"/);
+});
+
+test('P6-3 CSS: .topbar에는 max-height·overflow가 없고(스크롤 상자 아님), 묶음은 넓은 화면에서 display:contents, 더보기 버튼은 500px 이하에서만 보인다', () => {
+  const css = read('css/style.css');
+  const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(m => ({ selector: m[1].trim(), body: m[2] }));
+  const topbarRules = rules.filter(rule => rule.selector.split(',').some(part => /\.topbar$/.test(part.trim())));
+  assert.ok(topbarRules.length > 0);
+  for (const rule of topbarRules) {
+    assert.equal(/max-height|overflow/.test(rule.body), false, `${rule.selector}: ${rule.body.trim()}`);
+  }
+  assert.match(css, /\.more-group\s*\{\s*display:\s*contents/);
+  assert.match(css, /\.more-wrap\s*\{\s*display:\s*none/);
+  assert.match(css, /@media \(max-width:\s*500px\)[^{]*\{[^]*\.more-wrap\s*\{\s*display:\s*block/);
+  assert.match(css, /@media \(max-width:\s*500px\)[^{]*\{[^]*\.topbar > \.more-group\s*\{\s*display:\s*none/, '스크립트가 옮기기 전 첫 그리기에서 깜박이지 않게');
+});
+
+test('P6-3 번역: 더보기·계정 메뉴 문구에 영어가 있다', () => {
+  const i18n = read('js/i18n.js');
+  assert.match(i18n, /more \| 더보기 \| More/);
+  assert.match(i18n, /accountMenu \| 계정 메뉴 \| Account menu/);
+});

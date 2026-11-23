@@ -9,15 +9,19 @@
  *
  * 메뉴 마크업 규칙: 버튼은 popovertarget·aria-haspopup, 메뉴는 popover·role="menu",
  * 항목은 <button type="button" role="menuitem">. (Popover를 모르는 브라우저에서는 setup이 popover·popovertarget을 걷어 낸다.)
- * role="menu"가 아닌 꾸러미(계정 메뉴처럼 상태 글자와 버튼이 섞인 것)는 items 선택자로 키보드 이동 대상을 알려 준다.
+ * role="menu"가 아닌 꾸러미(계정·더보기 메뉴처럼 상태 글자·버튼·선택 칸이 섞인 것)는 items 선택자로 키보드 이동 대상을,
+ * closeOn 선택자로 "이걸 누르면 메뉴를 닫는다"를 알려 준다(기본: 버튼·링크·label·data-act).
  *
- * dock(P6-2): 좁은 화면에서 어떤 노드(회원 메뉴 .authbar)를 메뉴 안으로 옮겼다가 넓어지면 제자리로 되돌린다. */
+ * dock(P6-2·P6-3): 좁은 화면에서 어떤 노드(회원 메뉴 .authbar, 더보기로 모이는 .more-group들)를 메뉴 안으로 옮겼다가
+ * 넓어지면 제자리로 되돌린다. */
 "use strict";
 (function (SF) {
   const MARGIN = 8;        // 화면 가장자리에서 띄우는 간격(px)
   const GAP = 4;           // 버튼과 메뉴 사이(px)
   const MIN_HEIGHT = 120;  // 남은 높이가 아무리 작아도 이만큼은 보여 준다(px)
   const ITEM = '[role="menuitem"],[role="menuitemcheckbox"],[role="menuitemradio"]';
+  const CLOSE_ON = "button,a,label,[data-act]";
+  const OWN_KEYS = "select,textarea,input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit])"; // 방향키를 스스로 쓰는 컨트롤
   const controllers = new Map(); // 메뉴 요소 → 제어 객체
 
   // 이 브라우저가 Popover를 "쓸 수 있는가" — JS 쪽 API와 CSS 쪽 :popover-open이 같이 있을 때만 켠다.
@@ -37,7 +41,8 @@
 
   const resolve = target => typeof target === "string" ? document.querySelector(target) : target;
 
-  // options: { button, menu, items? } — 요소 또는 선택자. items는 ↑↓로 오갈 항목의 선택자(기본: role이 menuitem인 것).
+  // options: { button, menu, items?, closeOn? } — 요소 또는 선택자. items는 ↑↓로 오갈 항목의 선택자(기본: role이 menuitem인 것),
+  // closeOn은 누르면 메뉴가 닫히는 항목의 선택자(기본: 버튼·링크·label·data-act. 선택 칸이 든 꾸러미는 "button"만 두어 값을 고르는 동안 열어 둔다).
   // 제어 객체 { open, close, isOpen, place }를 돌려준다.
   function setup(options) {
     const button = resolve(options.button), menu = resolve(options.menu);
@@ -155,9 +160,12 @@
       open({ focus: e.key === "ArrowUp" ? "last" : "first" });
     });
     // 항목 사이 이동. 메뉴에 포커스가 있는 동안의 글자 키는 전역 단축키(음표 입력 등)로 새어 나가지 않게 막는다.
+    // 선택 칸·입력 칸은 ↑↓·Home·End를 스스로 쓰므로(값 바꾸기·커서 옮기기) 메뉴 이동으로 가로채지 않는다.
     menu.addEventListener("keydown", e => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const own = !!(e.target.closest && e.target.closest(OWN_KEYS));
       const list = items(), index = list.indexOf(document.activeElement);
+      if (own && (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Home" || e.key === "End")) return;
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         if (!list.length) return;
         e.preventDefault(); e.stopPropagation();
@@ -172,8 +180,9 @@
       }
     });
     // 항목을 누르면 메뉴를 먼저 닫고(포커스는 버튼으로), 그다음 항목의 동작이 이어서 실행된다.
+    const closeOn = options.closeOn || CLOSE_ON;
     menu.addEventListener("click", e => {
-      const target = e.target.closest && e.target.closest("button,a,label,[data-act]");
+      const target = e.target.closest && e.target.closest(closeOn);
       if (!target || !menu.contains(target) || target.disabled) return;
       close();
     });
@@ -196,26 +205,30 @@
   function closeAll(opts) { for (const controller of controllers.values()) controller.close(opts); }
   function isOpen(target) { const controller = controllers.get(resolve(target)); return !!controller && controller.isOpen(); }
 
-  // options: { node, target, media } — media(CSS 미디어 쿼리)가 맞는 동안 node를 target 안으로 옮기고, 아니면 원래 자리로 되돌린다.
-  // 원래 자리는 주석 노드로 표시해 둔다. 노드를 옮길 뿐이라 id와 이벤트 연결이 그대로다(auth.js처럼 id로 찾아 붙인 코드도 계속 동작).
-  // target이 열려 있으면 먼저 닫는다(내용이 바뀌므로).
+  // options: { node, target, media } — node는 요소·선택자 또는 그 배열. media(CSS 미디어 쿼리)가 맞는 동안 node들을 target 안으로 옮기고,
+  // 아니면 각자 원래 자리로 되돌린다. 원래 자리는 노드 앞에 주석 노드를 남겨 표시한다. 노드를 옮길 뿐이라 id와 이벤트 연결이 그대로다
+  // (auth.js처럼 id로 찾아 붙인 코드도, 노드 안에 나중에 붙는 항목도 계속 동작). 되돌릴 때 target이 열려 있으면 먼저 닫는다(내용이 빠지므로).
   function dock(options) {
-    const node = resolve(options.node), target = resolve(options.target);
-    if (!node || !target || !node.parentNode || typeof window.matchMedia !== "function") return null;
-    const marker = document.createComment("dock home: " + (node.id || node.className));
-    node.parentNode.insertBefore(marker, node);
+    const target = resolve(options.target);
+    const nodes = (Array.isArray(options.node) ? options.node : [options.node]).map(resolve).filter(node => node && node.parentNode);
+    if (!nodes.length || !target || typeof window.matchMedia !== "function") return null;
+    const homes = nodes.map(node => {
+      const marker = document.createComment("dock home: " + (node.id || node.className));
+      node.parentNode.insertBefore(marker, node);
+      return { node, marker };
+    });
     const query = window.matchMedia(options.media);
     function apply() {
       if (query.matches) {
-        if (node.parentNode !== target) target.append(node); // 좁아질 때 target은 비어 있고 닫혀 있다
-      } else if (marker.nextSibling !== node) {
+        for (const { node } of homes) if (node.parentNode !== target) target.append(node); // 좁아질 때 target은 비어 있고 닫혀 있다
+      } else if (homes.some(({ node, marker }) => marker.nextSibling !== node)) {
         close(target, { restoreFocus: false }); // 열린 채로 넓어지면 내용이 빠지기 전에 먼저 닫는다
-        marker.parentNode.insertBefore(node, marker.nextSibling);
+        for (const { node, marker } of homes) if (marker.nextSibling !== node) marker.parentNode.insertBefore(node, marker.nextSibling);
       }
     }
     if (query.addEventListener) query.addEventListener("change", apply); else query.addListener(apply); // 구형 Safari
     apply();
-    return { apply, query, marker };
+    return { apply, query, markers: homes.map(home => home.marker) };
   }
 
   SF.menus = { supported, placement, setup, open, close, closeAll, isOpen, dock };
