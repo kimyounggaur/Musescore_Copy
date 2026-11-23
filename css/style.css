@@ -906,6 +906,22 @@ dialog::backdrop { background: rgba(10, 12, 16, .6); backdrop-filter: blur(2px);
   .rc-actions { justify-content: flex-start; }
 }
 
+/* 다른 탭이 편집 중인 악보 안내(js/lock-ui.js) — 읽기 전용으로 열렸을 때만 보인다 */
+.lock-banner {
+  flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px;
+  padding: 6px 14px; background: var(--panel-2); color: var(--text);
+  border-bottom: 1px solid var(--line); border-left: 4px solid var(--accent);
+  font-size: 13px; line-height: 1.5;
+}
+.lock-banner[hidden] { display: none; }
+.lock-text { flex: 1 1 220px; min-width: 0; font-weight: 600; }
+.lock-banner[data-state="available"] { border-left-color: var(--green); }
+.lock-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.lock-banner .tbtn { padding: 3px 12px; font-size: 12.5px; }
+.lock-banner .tbtn[disabled] { opacity: .5; cursor: progress; }
+/* 이 탭이 다른 탭 때문에 읽기 전용이면 공유 악보용 [사본 만들기] 안내는 겹치지 않게 숨긴다 */
+body.tab-locked #cloud-copy-banner { display: none; }
+
 /* 드래그&드롭 */
 #canvas.droppable { outline: 3px dashed var(--select); outline-offset: -8px; }
 #canvas.droppable::after {

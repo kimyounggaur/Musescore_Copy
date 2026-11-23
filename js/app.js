@@ -991,11 +991,12 @@
 
     const saved = await restoring;
     if (saved) {
+      if (SF.session.lockState().locked) setReadOnly(true);   // 다른 탭이 편집 중이던 악보는 읽기 전용으로 되살린다(2-D)
       C.setScore(saved);
       toast("이전 작업을 자동으로 불러왔어요");
     } else {
       const demo = IO.DEMOS.butterfly();
-      SF.session.claim(demo, { origin: "demo" });   // 문서 ID만 붙인다 — 첫 편집 전에는 기록을 만들지 않는다
+      await SF.session.adopt(demo, { origin: "demo" });   // 문서 ID와 편집 잠금만 붙인다 — 첫 편집 전에는 기록을 만들지 않는다
       C.setScore(demo);
     }
     C.onChange((score, event) => {
