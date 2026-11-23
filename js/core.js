@@ -1807,19 +1807,40 @@ window.SF = window.SF || {};
   }
 
   /* ---------------- 직렬화 ---------------- */
-  function toJSON(score) {
+  /** 저장용 복사본. 기본은 v2(schema 2): 같은 음표를 여러 번 적던 중복을 뺀다.
+   *  - 마디의 `events` 별칭과 최상위 `measures`는 쓰지 않는다(읽을 때 ensureMeasureVoices·syncLegacyFields가 되살린다).
+   *  - 이벤트가 쉼표뿐인 2~4성부는 `[]`로 적고 읽을 때 온쉼표로 다시 채운다. 단 스패너(헤어핀·옥타브 등)의 시작·끝점이
+   *    그 성부의 쉼표를 가리키면 ID가 바뀌어 스패너가 지워지므로 그 성부는 그대로 둔다(pinned). 끝의 빈 성부는 자른다.
+   *  - opts.keepSilentVoices: 빈 성부도 그대로 둔다(실행 취소 기록용 — 입력 커서·선택이 가리키는 쉼표 ID를 지키려고).
+   *  - opts.format === 1: 구버전 호환 출력(예전 모양 그대로: 마디 `events` 별칭 + 최상위 `measures`, schema 없음). */
+  function toJSON(score, opts = {}) {
     ensureParts(score);
     const out = cloneData(score);
-    // Serialized compatibility only: old applications read events, while the
-    // live model and structuredClone history contain voices just once per bar.
-    for (const part of out.parts) for (const staff of part.staves)
-      for (const mm of staff.measures) mm.events = mm.voices[0];
-    out.measures = out.parts[0].staves[0].measures;
+    if (opts.format === 1) {
+      // Serialized compatibility only: old applications read events, while the
+      // live model and structuredClone history contain voices just once per bar.
+      for (const part of out.parts) for (const staff of part.staves)
+        for (const mm of staff.measures) mm.events = mm.voices[0];
+      out.measures = out.parts[0].staves[0].measures;
+      return out;
+    }
+    const silent = ev => ev.type === "rest" && !hasVisibleContent(ev);
+    const pinned = new Set((out.spanners || []).flatMap(sp => [sp.startId, sp.endId]));
+    for (const part of out.parts) for (const staff of part.staves) for (const mm of staff.measures) {
+      delete mm.events;
+      if (opts.keepSilentVoices) continue;
+      for (let v = 1; v < mm.voices.length; v++)
+        if (mm.voices[v].every(ev => silent(ev) && !pinned.has(ev.id))) mm.voices[v] = [];
+      while (mm.voices.length > 1 && !mm.voices[mm.voices.length - 1].length) mm.voices.pop();
+    }
+    delete out.measures;
+    out.schema = 2;
     return out;
   }
   function fromJSON(obj) {
     const score = JSON.parse(JSON.stringify(obj));
     delete score.__cache;
+    delete score.schema;   // 파일 머리 정보일 뿐 모델의 일부가 아니다(가져오기는 안에서 fromJSON(toJSON())을 한다)
     // Reserve imported IDs before migration allocates silent voices/parts.
     const reserveIds = value => {
       if (!value || typeof value !== "object") return;

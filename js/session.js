@@ -12,7 +12,9 @@
   const C = SF.core;
   let chain = Promise.resolve();
 
-  const SCHEMA = 1;                              // 기록 data의 형식 버전(악보 JSON v1)
+  const SCHEMA = 2;                              // 기록 data의 형식 버전(악보 JSON v2 — 읽을 때는 v1 기록도 그대로 연다)
+  // 마디 수: v2 데이터에는 최상위 measures가 없으므로 첫 보표의 마디 목록을 센다(옛 모양이면 measures).
+  const measureCountOf = data => (data?.parts?.[0]?.staves?.[0]?.measures || data?.measures || []).length;
   const TAB_KEY = "scoreforge.activeDocId";      // sessionStorage — 이 탭이 지금 보는 문서
   const LEGACY_KEY = "scoreforge.autosave.v1";   // 예전 1칸 자동 저장(읽기만 한다 — 지우지 않는다)
   const LEGACY_ID = "legacy-v1";
@@ -158,7 +160,7 @@
     const json = JSON.stringify(data);
     const body = {
       id, title: String(score.meta.title ?? ""), updatedAt: savedAt, revision, cloudId: score.meta.cloudId ?? null,
-      measures: Array.isArray(data.measures) ? data.measures.length : 0, bytes: sizeOf(json), schema: SCHEMA, data,
+      measures: measureCountOf(data), bytes: sizeOf(json), schema: SCHEMA, data,
     };
     const run = async () => {
       // 교체 통로를 거치지 않고 들어온 악보(setScore 직접 호출)는 쓰기 전에 잠금부터 잡는다 — 다른 탭의 문서를 덮어쓰지 않게.
@@ -235,7 +237,7 @@
         const data = C.toJSON(score), at = Number(obj.savedAt) || Date.now();
         await s.saveDoc({
           id: LEGACY_ID, title: String(score.meta.title ?? ""), createdAt: at, updatedAt: at, revision: Number(obj.revision) || 0,
-          origin: "legacy", cloudId: score.meta.cloudId ?? null, measures: Array.isArray(data.measures) ? data.measures.length : 0,
+          origin: "legacy", cloudId: score.meta.cloudId ?? null, measures: measureCountOf(data),
           bytes: sizeOf(JSON.stringify(data)), schema: SCHEMA, fileSavedAt: 0, data,
         });
       }

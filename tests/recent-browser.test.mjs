@@ -129,7 +129,8 @@ test('최근 작업 창', { skip: !process.env.PLAYWRIGHT_MODULE, timeout: 24000
       const [download] = await Promise.all([page.waitForEvent('download'), row(page, 'Doc One').locator('.rc-download').click()]);
       assert.equal(download.suggestedFilename(), 'Doc One.scoreforge.json');
       const body = JSON.parse(readFileSync(await download.path(), 'utf8'));
-      assert.equal(body.app, 'scoreforge'); assert.equal(body.version, 1); assert.equal(body.score.meta.title, 'Doc One');
+      // P7-B1: 이 기록은 새 저장 형식(schema 2)으로 보관돼 있으니 내려받은 파일의 머리 version도 2다.
+      assert.equal(body.app, 'scoreforge'); assert.equal(body.version, 2); assert.equal(body.score.schema, 2); assert.equal(body.score.meta.title, 'Doc One');
       assert.ok(Array.isArray(body.score.measures) || body.score.parts, '악보 본문이 들어 있어야 한다');
       assert.deepEqual(await page.evaluate(() => ({ id: SF.session.activeId(), title: SF.core.state.score.meta.title, revision: SF.core.state.revision })), before);
       await closeRecent(page);

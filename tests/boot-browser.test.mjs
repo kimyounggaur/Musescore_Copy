@@ -48,7 +48,7 @@ const plant = (page, specs) => page.evaluate(async specs => {
     const first = data.parts[0].staves[0].measures[0].voices[0];
     if (spec.fault === 'dur') first[0].dur = { n: 0, d: 0, dots: 0 };
     if (spec.fault === 'render') first.find(event => event.type === 'note').notes = [null];
-    await SF.store.saveDoc({ id: spec.id, title: spec.title, createdAt: 1, updatedAt: spec.at, revision: 1, origin: 'new', cloudId: null, measures: data.measures.length, bytes: 1, schema: 1, fileSavedAt: 0, data, ...(spec.extra || {}) });
+    await SF.store.saveDoc({ id: spec.id, title: spec.title, createdAt: 1, updatedAt: spec.at, revision: 1, origin: 'new', cloudId: null, measures: data.parts[0].staves[0].measures.length, bytes: 1, schema: 1, fileSavedAt: 0, data, ...(spec.extra || {}) });
   }
 }, specs);
 /** 이 탭이 보던 문서·마지막 문서를 id로 맞춘다(새로고침하면 그 문서가 시작 문서가 된다). */
