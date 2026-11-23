@@ -600,11 +600,14 @@
 
   /* ---------------- 렌더 ---------------- */
   let lastLayout = null;
+  // 클릭 영역(.note-hit)을 그릴지. render()가 opts.export를 보고 호출마다 정하고 되돌린다 — 내보낸 SVG·PNG·인쇄물에는 넣지 않는다.
+  let emitHits = true;
   const renderCache = new WeakMap();
 
   function render(score, opts = {}) {
-    const savedLayout = lastLayout, savedFont = fontReady;
+    const savedLayout = lastLayout, savedFont = fontReady, savedHits = emitHits;
     if (opts.fallback) fontReady = false;
+    emitHits = !opts.export;
     try {
     C.ensureParts(score);
     // Structural edits invalidate the core revision. Small presentation fields
@@ -661,6 +664,7 @@
     return result;
     } finally {
       fontReady = savedFont;
+      emitHits = savedHits;
       if (opts.preserveLayout || opts.export) lastLayout = savedLayout;
     }
   }
@@ -1191,6 +1195,11 @@
     }
     return headShape(x, y, "black");
   }
+  // 클릭 영역: 글꼴 글리프의 경계 상자는 이웃한 화음 머리와 겹치므로, 보이는 머리마다 작은 타원을 따로 둔다.
+  // 좌표는 le.noteheads와 같은 전역 좌표다. CSS(#svg-host .nh > .note-hit)가 투명하게 만들고 포인터만 받게 한다.
+  function noteHit(head) {
+    return emitHits ? `<ellipse class="note-hit" cx="${r2(head.x)}" cy="${r2(head.y)}" rx="${r2(Math.max(6, head.width / 2))}" ry="${r2(Math.max(5, head.height / 2))}"/>` : "";
+  }
   function noteHeadShape(x, y, kind, notehead) {
     if (notehead === "x") {
       return `<path class="custom-head" d="M ${r2(x - 5.5)} ${r2(y - 4.5)} L ${r2(x + 5.5)} ${r2(y + 4.5)} M ${r2(x + 5.5)} ${r2(y - 4.5)} L ${r2(x - 5.5)} ${r2(y + 4.5)}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>`;
@@ -1252,9 +1261,10 @@
       const y = yForStep(S, score, C.absStep(n));
       const ox = offs.get(n) || 0;
       const ni = ev.notes.indexOf(n), headX = le.x + ox, scale = S.style?.noteheadScale || 1;
-      le.noteheads.push({ index: ni, x: headX, y, width: (ev.dur.d === 1 ? 24 : 12) * scale, height: 10 * scale });
+      const box = { index: ni, x: headX, y, width: (ev.dur.d === 1 ? 24 : 12) * scale, height: 10 * scale };
+      le.noteheads.push(box);
       const head = noteHeadShape(headX, y, kind, ev.notehead);
-      s += `<g class="nh${sel?.has(`${ev.id}#${ni}`) ? " sel-note" : ""}" data-note="${ni}">${scale === 1 ? head : `<g transform="translate(${headX},${y}) scale(${scale}) translate(${-headX},${-y})">${head}</g>`}</g>`;
+      s += `<g class="nh${sel?.has(`${ev.id}#${ni}`) ? " sel-note" : ""}" data-note="${ni}">${scale === 1 ? head : `<g transform="translate(${headX},${y}) scale(${scale}) translate(${-headX},${-y})">${head}</g>`}${noteHit(box)}</g>`;
       if (ev.dur.dots) {
         const off = C.absStep(n) - bottom;
         const dotY = off % 2 === 0 ? y - SP / 2 : y; // 줄 위 음표는 점을 위 칸으로
@@ -1322,9 +1332,10 @@
     const y = tabY(S, tab);
     const text = tab.fret === "x" ? "x" : String(tab.fret);
     const w = Math.max(12, text.length * 7 + 5);
-    le.noteheads.push({ index: 0, x: le.x, y, width: w, height: 14 });
+    const box = { index: 0, x: le.x, y, width: w, height: 14 };
+    le.noteheads.push(box);
     let s = `<g class="nh${sel?.has(`${ev.id}#0`) ? " sel-note" : ""}" data-note="0"><rect class="tab-fret-bg" x="${r2(le.x - w / 2)}" y="${r2(y - 7)}" width="${r2(w)}" height="13" rx="2"/>` +
-      `<text class="tab-fret" x="${r2(le.x)}" y="${r2(y + 4)}" text-anchor="middle">${esc(text)}</text></g>`;
+      `<text class="tab-fret" x="${r2(le.x)}" y="${r2(y + 4)}" text-anchor="middle">${esc(text)}</text>${noteHit(box)}</g>`;
     for (let d = 0; d < (ev.dur.dots || 0); d++) s += `<circle class="dot" cx="${r2(le.x + w / 2 + 4 + d * 6)}" cy="${r2(y - 4)}" r="2.1"/>`;
     if (ev.dur.d !== 1) {
       const dir = stem ? stem.dir : "up";
@@ -1342,8 +1353,9 @@
     const manualStem = ev.stemDirection && ev.stemDirection !== "auto" ? ev.stemDirection : null;
     const dir = stem ? stem.dir : (manualStem || stemDirForVoice(score, ev.notes && ev.notes.length ? ev.notes : [C.spellMidi(ev.midi || C.drumSpec(ev.drumId).midi, 0)], S, le.voice || ev.voice || 1));
     const stemX = dir === "up" ? le.x + 4.8 : le.x - 4.8;
-    le.noteheads.push({ index: 0, x: le.x, y, width: 12, height: 10 });
-    let s = `<g class="nh${sel?.has(`${ev.id}#0`) ? " sel-note" : ""}" data-note="0">${drumHeadShape(le.x, y, ev.notehead || C.drumSpec(ev.drumId).notehead)}</g>`;
+    const box = { index: 0, x: le.x, y, width: 12, height: 10 };
+    le.noteheads.push(box);
+    let s = `<g class="nh${sel?.has(`${ev.id}#0`) ? " sel-note" : ""}" data-note="0">${drumHeadShape(le.x, y, ev.notehead || C.drumSpec(ev.drumId).notehead)}${noteHit(box)}</g>`;
     if (ev.dur.dots) {
       for (let d = 0; d < ev.dur.dots; d++) s += `<circle class="dot" cx="${r2(le.x + 10 + d * 6)}" cy="${r2(y - SP / 2)}" r="2.1" fill="currentColor"/>`;
     }

@@ -85,32 +85,7 @@
       hideEmptyStaves: ui.hideEmptyStaves, activeVoice: ui.currentVoice });
     layoutCache = res.layout;
     $("#svg-host").innerHTML = res.svg;
-    // Font glyph bounding boxes overlap adjacent chord heads. Give each visible
-    // head its own small pointer target, in the renderer's global coordinates.
-    // 화면을 한 번만 훑어 data-ref → 요소 표를 만든다(이벤트마다 SVG 전체를 다시 찾지 않는다).
-    const host = $("#svg-host");
-    const byRef = new Map();
-    for (const el of host.querySelectorAll("[data-ref]")) {
-      const id = el.getAttribute("data-ref");
-      if (!byRef.has(id)) byRef.set(id, el); // 같은 id가 겹치면 문서에서 먼저 나온 것(예전 querySelector와 같다)
-    }
-    for (const le of layoutCache.eventsById.values()) {
-      if (!le.noteheads?.length) continue;
-      const event = byRef.get(le.id);
-      if (!event) continue;
-      const groups = new Map();
-      for (const group of event.querySelectorAll("[data-note]")) {
-        const index = +group.dataset.note;
-        if (!groups.has(index)) groups.set(index, group);
-      }
-      for (const head of le.noteheads) {
-        const group = groups.get(head.index);
-        if (!group) continue;
-        const hit = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
-        for (const [key, value] of Object.entries({ class: "note-hit", cx: head.x, cy: head.y, rx: Math.max(6, head.width / 2), ry: Math.max(5, head.height / 2) })) hit.setAttribute(key, value);
-        group.append(hit);
-      }
-    }
+    // 음표머리 클릭 영역은 조판기(engrave.js)가 그림과 함께 그린다 — 여기서 따로 붙이지 않는다.
     renderedScore = score; renderedRevision = changeRevision;
     const svg = $("#score-svg");
     if (svg) { svg.setAttribute("role", "img"); svg.setAttribute("aria-label", `악보: ${score.meta.title || "제목 없음"}, ${score.measures.length}마디`); }
