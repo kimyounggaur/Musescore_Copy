@@ -109,7 +109,13 @@ async function harness(options = {}) {
     core: C, auth: { state: authState, getClient: () => connected, openDialog: mode => notices.push(mode) },
     io: { autosave: () => {} },
     app: { ui: { readOnly: false }, update() {}, toast: value => notices.push(value),
-      setReadOnly: value => { SF.app.ui.readOnly = value; }, handleLoadedScore: value => C.setScore(value) },
+      setReadOnly: value => { SF.app.ui.readOnly = value; },
+      handleLoadedScore: async (value, name, err, report, opts = {}) => {
+        // SF.session.guard 흉내: 편집 중이면 확인을 받아야 교체(기존 confirms 대기열 재사용)
+        if (!opts.confirmed && !SF.app.ui.readOnly && C.state.dirty
+            && !(await SF.ui.confirmDialog({ title: 'replace', message: opts.reason }))) return false;
+        SF.app.setReadOnly(!!opts.readOnly); C.setScore(value); return true;
+      } },
     ui: { confirmDialog: async opts => { prompts.push(opts); return confirms.shift() ?? false; },
       promptDialog: async opts => { prompts.push(opts); return answers.shift() ?? null; } },
   };
@@ -347,4 +353,36 @@ test('cloud DOM uses safe text and creates file actions without inline onclick',
   const group = h.menu.children.find(child => child.id === 'cloud-menu');
   assert.ok(group); assert.ok(group.children.some(child => child.dataset.action === 'cloud-save'));
   assert.equal(/\.innerHTML\s*=|onclick\s*=/.test(source), false);
+});
+
+// P2-A: 클라우드 열기·사본은 교체 통로(SF.app.handleLoadedScore → SF.session)에 이유와 읽기 전용 여부를 넘긴다.
+test('클라우드 열기·로컬 사본은 교체 통로에 reason·readOnly·stale·confirmed를 넘긴다', async () => {
+  const h = await harness(); h.seed(ID, { is_public: true, share_slug: 'AbC_123-xyZ9' });
+  const calls = [], stub = h.SF.app.handleLoadedScore;
+  h.SF.app.handleLoadedScore = (...args) => { calls.push(args[4]); return stub(...args); };
+  await h.SF.cloud.openShared('AbC_123-xyZ9'); await h.SF.cloud.makeLocalCopy();
+  assert.equal(calls[0].reason, '클라우드 악보 열기'); assert.equal(calls[0].readOnly, true); assert.equal(typeof calls[0].stale, 'function');
+  assert.equal(calls[1].readOnly, false); assert.equal(calls[1].confirmed, true);
+});
+
+test('변경이 있을 때 클라우드 열기를 취소하면 악보·읽기 전용 상태가 그대로이고 null을 돌려준다', async () => {
+  const h = await harness(); h.seed(ID); h.edit('지키려는 작업'); h.confirms.push(false);
+  assert.equal(await h.SF.cloud.open(ID), null);
+  assert.equal(h.C.state.score.meta.title, '지키려는 작업'); assert.equal(h.SF.app.ui.readOnly, false);
+  assert.equal(h.prompts.at(-1).message, '클라우드 악보 열기');
+});
+
+test('확인을 기다리는 동안 더 새로운 열기가 시작되면 먼저 요청한 열기는 교체하지 않는다(stale)', async () => {
+  const h = await harness(); h.seed(ID); h.seed('22222222-2222-4222-8222-222222222222', { title: '둘째 악보' });
+  let release; const gate = new Promise(resolve => { release = resolve; });
+  const stub = h.SF.app.handleLoadedScore, installed = [];
+  h.SF.app.handleLoadedScore = async (value, name, err, report, opts) => {
+    if (name === '저장된 악보') await gate;                                   // 첫 요청의 확인창이 떠 있는 상황
+    if (opts.stale?.()) return false;
+    installed.push(name); return stub(value, name, err, report, { ...opts, confirmed: true });
+  };
+  const first = h.SF.cloud.open(ID); await new Promise(r => setTimeout(r, 20));
+  const second = h.SF.cloud.open('22222222-2222-4222-8222-222222222222');
+  assert.equal((await second)?.meta.title, '둘째 악보'); release();
+  assert.equal(await first, null); assert.deepEqual(installed, ['둘째 악보']);
 });

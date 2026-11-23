@@ -1562,6 +1562,7 @@ button { font:inherit; }
 .app-prompt input,.app-prompt textarea { width:100%; font:inherit; padding:10px; border-radius:6px; }
 .app-prompt textarea { min-height:95px; }
 .dialog-error { color:#e27a7a; font-size:13px; }
+#dlg-choice .dlg-actions { flex-wrap:wrap; }
 .tbtn.danger { background:#ae252d; color:#fff; }
 #shortcut-overlay { position:fixed; inset:0; margin:auto; padding:0; display:none; width:min(720px,calc(100vw - 24px)); height:auto; max-height:85vh; background:var(--panel); color:var(--text); border:1px solid var(--line); box-shadow:var(--shadow); }
 #shortcut-overlay[open] { display:block; }

@@ -70,6 +70,41 @@
     });
   }
   const confirmDialog = options => promptDialog({ ...options, confirm: true }).then(Boolean);
+  /* 여러 선택지 중 하나를 고르는 대화상자. choices: [{ id, label, primary, danger }] → Promise<id>.
+   * Esc·닫기·바깥 클릭은 "cancel". 글자는 모두 textContent로만 넣는다. 동시에 부르면 줄을 세운다. */
+  let choiceQueue = Promise.resolve();
+  function choiceDialog(options = {}) {
+    const run = () => new Promise(resolve => {
+      const dialog = document.getElementById("dlg-choice");
+      if (!dialog) { resolve("cancel"); return; }
+      const actions = dialog.querySelector(".dlg-actions");
+      dialog.querySelector("h2").textContent = options.title || "선택";
+      dialog.querySelector("p").textContent = options.message || "";
+      actions.replaceChildren();
+      let value = "cancel";
+      for (const choice of options.choices || []) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `tbtn${choice.primary ? " primary" : ""}${choice.danger ? " danger" : ""}`;
+        button.dataset.choice = choice.id;
+        button.textContent = choice.label;
+        if (choice.primary && !choice.danger) button.autofocus = true;
+        button.addEventListener("click", () => { value = choice.id; dialog.close(); });
+        actions.append(button);
+      }
+      const outside = event => {
+        if (event.target !== dialog) return;
+        const box = dialog.getBoundingClientRect();
+        if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) dialog.close();
+      };
+      dialog.addEventListener("click", outside);
+      dialog.addEventListener("close", () => { dialog.removeEventListener("click", outside); resolve(value); }, { once: true });
+      open(dialog);
+    });
+    const result = choiceQueue.then(run, run);
+    choiceQueue = result.catch(() => {});
+    return result;
+  }
   function init() {
     document.querySelectorAll("dialog").forEach(focusTrap);
     document.addEventListener("pointerdown", () => {
@@ -81,5 +116,5 @@
       n.querySelectorAll?.("dialog").forEach(focusTrap);
     }))).observe(document.body, { childList: true, subtree: true });
   }
-  SF.ui = { ...(SF.ui || {}), promptDialog, confirmDialog, focusTrap, open, init };
+  SF.ui = { ...(SF.ui || {}), promptDialog, confirmDialog, choiceDialog, focusTrap, open, init };
 })(window.SF);

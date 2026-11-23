@@ -72,7 +72,7 @@ test('악성 악보 파일: 어떤 패널에서도 HTML이 끼어들지 않는�
       const fixture = await readFile(new URL('./fixtures/xss.scoreforge.json', import.meta.url), 'utf8');
       await page.evaluate(async text => {
         const file = new File([text], 'xss.scoreforge.json', { type: 'application/json' });
-        await new Promise(resolve => SF.io.loadScoreFile(file, (...args) => { SF.app.handleLoadedScore(...args); resolve(); }));
+        await new Promise(resolve => SF.io.loadScoreFile(file, async (...args) => { await SF.app.handleLoadedScore(...args); resolve(); }));
       }, fixture);
       await settle();
       await assertClean('파일 열기 직후');
