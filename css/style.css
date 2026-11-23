@@ -219,6 +219,22 @@ select.tsel {
 #account-menu .authbar { display: flex; flex-direction: column; align-items: stretch; flex-wrap: nowrap; gap: 6px; padding: 2px; max-width: none; overflow: visible; }
 #account-menu .auth-status { max-width: none; height: auto; min-height: 30px; padding: 5px 10px; white-space: normal; overflow-wrap: anywhere; }
 #account-menu .auth-btn { width: 100%; height: auto; min-height: 40px; padding: 8px 12px; justify-content: flex-start; font-size: 13.5px; }
+
+/* 더보기 메뉴(P6-3): 넓은 화면에서는 버튼을 숨기고, 묶음(.more-group)은 display:contents라 안의 컨트롤이 상단바의 직계 자식처럼 놓인다.
+   ≤500px에서는 묶음 3개가 menus.js의 dock으로 #more-menu 안에 옮겨 오고, 아래 규칙이 그 안의 모양을 잡는다. */
+.more-wrap { display: none; }
+.more-group { display: contents; }
+#more-menu { width: min(360px, calc(100vw - 16px)); padding: 8px; }
+#more-menu .more-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 0; }
+#more-menu .more-group + .more-group { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 10px; }
+#more-menu .tbtn { height: 38px; }
+#more-menu .tbtn:not(.on) { border-color: var(--line); }
+#more-menu .tbtn span.lbl { display: inline; }
+#more-menu .tsel { height: 36px; }
+#more-menu .theme-control { height: 38px; }
+#more-menu .theme-control .tsel { height: 28px; }
+#more-menu .tempo-box { flex-wrap: wrap; row-gap: 6px; }
+#more-menu .tspacer, #more-menu #sample-status { display: none; }
 .menu hr { border: none; border-top: 1px solid var(--line); margin: 6px 4px; }
 .menu .mtitle { padding: 6px 10px 2px; font-size: 11.5px; color: var(--text-dim); font-weight: 700; }
 
@@ -1673,7 +1689,7 @@ button { font:inherit; }
   #status-sel { flex:1; }
   #status-cloud { max-width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   #network-status { flex:none; white-space:nowrap; font-size:11px; }
-  .topbar { max-height:148px; overflow-y:auto; flex:none; }
+  .topbar { flex:none; }
   .topbar .brand { order:-3; }
   .topbar .theme-control { order:-2; }
   .topbar .authbar { flex-wrap:nowrap; max-width:100%; overflow-x:auto; }
@@ -1696,12 +1712,13 @@ button { font:inherit; }
   #piano-scroll { scroll-snap-type:x proximity; overflow-x:auto; }
 }
 @media (max-width:500px) {
-  .topbar { max-height:172px; }
   .account-wrap { display:block; }
-  /* menus.js가 .authbar를 계정 메뉴로 옮기기 전(첫 그리기)에만 해당한다 — 옮겨진 뒤에는 상단바의 직계 자식이 아니다 */
-  .topbar > .authbar { display:none; }
+  .more-wrap { display:block; margin-left:auto; }
+  /* 첫 줄(로고·계정·파일·설정·⋯)과 둘째 줄(되돌리기·재생·속성)을 나누는 줄바꿈 — 첫 구분선을 폭 100%의 보이지 않는 선으로 쓴다 */
+  .topbar .more-wrap + .tsep { display:block; flex:0 0 100%; width:auto; height:0; margin:0; background:none; }
+  /* menus.js가 .authbar·.more-group을 계정·더보기 메뉴로 옮기기 전(첫 그리기)에만 해당한다 — 옮겨진 뒤에는 상단바의 직계 자식이 아니다 */
+  .topbar > .authbar, .topbar > .more-group { display:none; }
   .topbar .tsep { display:none; }
-  .topbar #sample-status { display:none; }
   .transport-options { gap:2px; }
   .count-in,.multi-rest { font-size:11px; }
   .dlg-body { padding:14px; }

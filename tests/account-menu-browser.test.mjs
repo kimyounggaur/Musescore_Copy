@@ -37,7 +37,8 @@ async function withPage(size, fn, { fallback = false } = {}) {
 
 const where = page => page.evaluate(() => {
   const bar = document.querySelector('.authbar');
-  return { parent: bar.parentElement.id || bar.parentElement.className, afterLanguage: document.querySelector('#language-select').nextElementSibling === bar };
+  // 언어 선택은 P6-3부터 .more-group 묶음 안에 있으므로, "언어 선택 바로 다음"은 그 묶음 바로 다음을 뜻한다
+  return { parent: bar.parentElement.id || bar.parentElement.className, afterLanguage: document.querySelector('#language-select').closest('.more-group').nextElementSibling === bar };
 });
 const accountOpen = page => page.evaluate(() => {
   const menu = document.querySelector('#account-menu');

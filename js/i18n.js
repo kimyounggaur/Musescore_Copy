@@ -82,6 +82,8 @@
     copy | 사본 만들기 | Make a copy
   `);
   group("toolbar", `
+    more | 더보기 | More
+    accountMenu | 계정 메뉴 | Account menu
     settings | 악보 설정 | Score settings
     settingsTitle | 조표·박자·빠르기 등 악보 설정 | Score settings: key, time signature, tempo, and more
     undo | 실행 취소 | Undo

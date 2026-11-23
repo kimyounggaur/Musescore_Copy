@@ -701,6 +701,10 @@
     // 좁은 화면(≤500px)에서는 회원 메뉴(.authbar)를 👤 계정 메뉴 안으로 옮긴다. 노드를 옮길 뿐이라 auth.js의 이벤트 연결은 그대로다.
     SF.menus.setup({ button: "#btn-account", menu: "#account-menu", items: "button" });
     SF.menus.dock({ node: ".topbar > .authbar", target: "#account-menu", media: "(max-width:500px)" });
+    // 같은 폭에서 자주 안 쓰는 컨트롤(테마·언어·빠르기·보기·악기·건반·MIDI·도움말 …)은 .more-group 3묶음째 "⋯ 더보기" 메뉴로 옮겨 상단바를 두 줄로 줄인다.
+    // 묶음째 옮기므로 이벤트 연결과 uiV3.init이 나중에 붙이는 항목(재생·보기 옵션)이 그대로다. 선택 칸·숫자 칸을 만지는 동안은 열어 두고 버튼을 누르면 닫는다.
+    SF.menus.setup({ button: "#btn-more", menu: "#more-menu", items: "button,select,input", closeOn: "button" });
+    SF.menus.dock({ node: $$(".topbar > .more-group"), target: "#more-menu", media: "(max-width:500px)" });
     menu.addEventListener("click", async (e) => {
       const item = e.target.closest("[data-act]");
       if (!item) return;
