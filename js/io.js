@@ -1006,8 +1006,9 @@
           if (!tuplets.has(groupKey)) tuplets.set(groupKey, C.newId());
           dur = { n: 1, d: 8, dots: 0, tuplet: { id: tuplets.get(groupKey), actual: 3, normal: 2 } };
         }
-        const ctx = { partIdx, staffIdx: entry.staff, voice }, id = C.inputAt(score, pos.m, pos.tick, dur, pitches, ctx);
-        const found = C.findEvent(score, id);
+        // 일괄 입력: 음마다 악보 전체 색인(findEvent)·타이 정리를 하지 않는다 — 놓은 이벤트 객체를 바로 받고, 타이는 아래에서 한 번만 정리한다
+        const ctx = { partIdx, staffIdx: entry.staff, voice, batch: true }, { ev: placedEv } = C.inputAtEvent(score, pos.m, pos.tick, dur, pitches, ctx);
+        const found = placedEv ? { ev: placedEv } : null;
         if (found) {
           found.ev.velocityOffset = Math.round(entry.notes.reduce((n, note) => n + note.velocity, 0) / entry.notes.length - 82);
           if (group.percussion) {
@@ -1020,6 +1021,7 @@
         }
       }
     });
+    C.normalizeTies(score); // 일괄 입력 동안 미룬 타이 정리를 한 번에
     for (const change of parsed.tempoMap) {
       const raw = F(change.tick, 4 * ppq), quantized = F(Math.round(raw.value / grid), Math.round(1 / grid)), pos = locate(quantized);
       const target = directionAnchor(score, 0, 0, pos.m, pos.tick);
