@@ -185,21 +185,33 @@ select.tsel {
 .sample-status.ready { color: #b9f5ca; border-color: rgba(46, 163, 77, .55); background: rgba(46, 163, 77, .15); }
 .sample-status.fallback { color: #ffcbc2; border-color: rgba(255, 122, 90, .55); background: rgba(255, 122, 90, .13); }
 
-/* 파일 메뉴 드롭다운 */
+/* 파일 메뉴 드롭다운 — 열기·닫기·자리는 js/menus.js가 맡는다(left/top/max-height를 인라인으로 정한다).
+   position:fixed라서 상단바의 overflow(좁은 화면에서 스크롤 상자)에 잘리지 않는다. */
 .menu-wrap { position: relative; }
 .menu {
-  position: absolute; top: 36px; left: 0; z-index: 60;
+  position: fixed; top: 44px; left: 8px; z-index: 60;
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
   box-shadow: var(--shadow); padding: 6px; min-width: 230px;
+  max-width: calc(100vw - 16px); max-height: min(80vh, 740px); overflow-y: auto;
   display: none;
 }
 .menu.open { display: block; }
-.menu .mi {
-  display: flex; align-items: center; gap: 9px;
-  padding: 8px 10px; border-radius: 7px; cursor: pointer; font-size: 13.5px;
+/* Popover를 아는 브라우저: 브라우저가 [popover]에 주는 기본 모양(가운데 정렬·글자색)을 덮어쓰고, 열렸을 때만 보인다.
+   모르는 브라우저는 이 블록을 건너뛰고 위의 .open 규칙을 쓴다(menus.js가 popover 속성도 걷어 낸다). */
+@supports selector(:popover-open) {
+  .menu[popover] { inset: auto; margin: 0; color: var(--text); }
+  .menu[popover]:popover-open { display: block; }
 }
-.menu .mi:hover { background: rgba(79, 141, 249, .18); }
+.menu .mi {
+  display: flex; align-items: center; gap: 9px; width: 100%; box-sizing: border-box;
+  padding: 8px 10px; border: 0; border-radius: 7px; background: transparent;
+  color: var(--text); font: inherit; font-size: 13.5px; text-align: left; cursor: pointer;
+}
+.menu .mi:hover, .menu .mi:focus-visible { background: rgba(79, 141, 249, .18); }
+.menu .mi:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.menu .mi:disabled { opacity: .5; cursor: default; }
 .menu .mi small { margin-left: auto; color: var(--text-dim); }
+@media (max-width: 900px), (pointer: coarse) { .menu .mi { min-height: 40px; } }
 .menu hr { border: none; border-top: 1px solid var(--line); margin: 6px 4px; }
 .menu .mtitle { padding: 6px 10px 2px; font-size: 11.5px; color: var(--text-dim); font-weight: 700; }
 
@@ -1634,10 +1646,6 @@ button { font:inherit; }
 #dlg-midi-import { min-width:min(400px,90vw); }
 #dlg-midi-import .dlg-body { display:grid; gap:12px; }
 #dlg-midi-import fieldset { display:grid; max-height:260px; overflow:auto; gap:8px; border:1px solid var(--line); }
-#file-menu { max-height:min(80vh,740px); overflow-y:auto; }
-#file-menu button.mi,#file-menu button.menu-item { display:block; width:100%; text-align:left; background:transparent; border:0; color:var(--text); padding:9px 14px; cursor:pointer; }
-#file-menu button.mi:hover,#file-menu button.menu-item:hover { background:var(--panel-2); }
-#file-menu:focus-within { outline:0; }
 #properties-body { overflow:auto; }
 #properties-panel .prop-actions { flex-wrap:wrap; }
 #properties-panel .prop-grid { grid-template-columns:minmax(86px,auto) minmax(0,1fr); }

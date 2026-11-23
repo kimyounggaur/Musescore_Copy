@@ -86,7 +86,7 @@
     });
     window.addEventListener("afterprint",()=>document.getElementById("print-pages")?.remove());
     const menu=A.$("#file-menu");for(const [format,label]of [["svg","SVG 내보내기 (글꼴 포함)"],["png","PNG 내보내기 (300dpi)"]]){
-      const b=document.createElement("button");b.className="menu-item";b.dataset.act=format;b.type="button";b.textContent=label;menu.append(b);
+      const b=document.createElement("button");b.className="mi";b.dataset.act=format;b.type="button";b.setAttribute("role","menuitem");b.textContent=label;menu.append(b);
       SF.keymap.registerCommand({id:`export-${format}`,label,run:()=>download(format)});
     }
     SF.keymap.registerCommand({id:"print",label:"인쇄/PDF",run:print});
