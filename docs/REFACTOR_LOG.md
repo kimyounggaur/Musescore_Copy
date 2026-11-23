@@ -217,6 +217,30 @@ P3 집중 점검: release 멱등 ✅(변이 9건 전부 잡힘) · 번들 Chromi
 CLAUDE.md 금지 항목: window.confirm·prompt·새 외부 URL 없음 · app.js 1,110줄 · vendor/ 변경 없음 · 테스트 삭제·skip 없음(사라진 assert 줄은 pwa.test의 더 엄격한 정규식 대체와, ui-v3 한 줄에 기다림을 덧붙인 것뿐).
 판정: ❌ 없음, ⏳ 2건(GitHub에서만 확인 가능) → 로컬 릴리스 준비는 가능, **병합 전에 사람이 ⏳ 두 건을 확인**한다.
 
+### Phase 4 재생 메모리 검토 (2026-11-23, phase/p4-playback-memory)
+범위: P4-1~P4-4(phase/p3-ci 이후 커밋 8개). 코드는 고치지 않고 점검만 했다.
+
+| # | Phase 4 DoD | 결과 | 증거 |
+|---|---|---|---|
+| 1 | 인스턴스 불변식 테스트 통과(악보를 바꿔도 샘플 악기 수 = 지금 악보의 연주 파트 수) | ✅ | tests/playback-lifecycle.test.mjs 13건 — "피아노 악보 A → 피아노 악보 B(다른 파트 ID) → 현악 악보 C를 세 바퀴 돌려도 악기·loader·버스가 쌓이지 않는다"(기본·고음질 각각), "installScore를 거치지 않고 악보만 바뀌어도 첫 재생 준비에서 정리된다", "같은 악보에서 파트의 악기만 바꾸면…", "건반 미리 듣기(preview)…" / 변이 검사 13건 전부 잡힘 |
+| 2 | 악보 3회 전환 후 메모리가 첫 재생 직후 대비 +50MB 이내(목표, 실측 후 조정) | ⏳ 사람 측정 대기 | 실제 브라우저의 작업 관리자 값이 필요하다. 준비: tests/baseline/PERF.md "Phase 4 후 재생 메모리" 표와 절차, 아래 "사람이 해야 할 일"의 (P4-4). 자동으로 확인된 대리 지표 — 악기·믹서 버스·loader 수가 모든 시점에 현재 악보와 같다(위 1) |
+| 3 | 로딩 중 200ms 넘는 Long Task 0~1개(Chrome 성능 패널, 목표) | ⏳ 사람 측정 대기 | Chrome 성능 패널이 필요하다. 준비된 것: 샘플 요청 동시 4개 제한(js/playback.js:215 limitedStorage, 본문을 다 읽을 때까지 슬롯 유지)과 같은 종류 차례 로딩(:258 inTurn). 사람 확인 (P4-1)·(P4-4) |
+
+P4 집중 점검
+- 인스턴스 불변식 ✅ — 위 1. 수명 테스트가 앱의 실제 순서(installScore의 setScore → 재생 멈춤 → releaseUnused, 그리고 play())를 그대로 따른다.
+- dispose 호출 ✅ — 지난 악보의 악기는 정확히 한 번씩 dispose(tests/playback-lifecycle.test.mjs `disposeCalls === 1`), 로딩 중에 빠진 파트·재시도 때 남은 악기도 정리(tests/playback-release.test.mjs 12건), 재생·재생 준비 중에는 미뤘다가 멈출 때 처리.
+- preview 버스 보존 ✅ — tests/playback-release.test.mjs "건반 미리 듣기(preview) 악기와 버스는 지우지 않는다", lifecycle의 preview 시나리오(기본·고음질).
+- D2 결정 반영 ✅ — docs/DECISIONS.md D2 = A(메모 갱신). 기본 피아노 = Soundfont acoustic_grand_piano(js/playback.js:135), 고음질 = Splendid(:136), 선택은 이 기기 localStorage에만 저장(악보에 없음). tests/playback-quality.test.mjs 11건 + tests/playback-browser.test.mjs 3건(설정 창 → 저장 → 새로고침 유지, 영어 화면). 🧑 첫 재생까지 시간 체감은 (P4-3) 항목.
+- 앱 호출 위치 ✅ — 해제는 app.js installScore(js/app.js:662) 한 곳에서만 부른다(정적 테스트가 js/ 전체에서 확인).
+
+CLAUDE.md 금지 항목 점검
+- `window.confirm`·`window.prompt` 없음(js/cloud.js의 자체 비동기 대화상자 함수는 master에도 있던 것). app.js 1,111줄(1,600줄 이하). vendor/ 변경 없음. 새 `innerHTML` 사용 0줄. 새 외부 URL 없음.
+- 테스트 삭제·skip·완화 없음: Phase 4 범위에서 기존 테스트 파일을 고친 곳이 없다(전부 새 파일 + PERF.md 끝에 절 추가). 범위 안에서 P4-3이 P4-1·P4-2 테스트를 '고음질로 시작'하게만 바꿨고 단언은 하나도 바꾸지 않았다(audioio-v3.test.mjs는 그대로).
+- 설계와 달라진 점(각 Step 기록 참고): 슬롯은 본문을 다 읽을 때까지 유지 · 같은 Splendid 종류는 차례로 로딩 · 해제 기준은 파트ID가 아니라 파트ID:악기 · 재생 중에는 해제를 멈출 때로 미룸 · 설정은 '적용'을 기다리지 않고 바로 저장 · 테스트 훅은 별도 변수에 보관.
+
+전체 검증: npm run check 27개 OK · npm test 320건(297 통과·0 실패·23 건너뜀) · CI 명령 재현(tests/*.test.mjs 전체, SF_HEADERS=1, SF_BLOCK_SAMPLES=1, --test-concurrency=1) 379/379 · 오프라인 검증 48파일·CSP 위반 0·오류 0 · verify-deploy 통과.
+판정: ❌ 없음, ⏳ 2건(실제 브라우저에서 사람이 재야 하는 측정) → 로컬 릴리스 준비는 가능, **병합 전에 사람이 ⏳ 두 건과 소리 확인 항목((P4-1)~(P4-3))을 확인**한다.
+
 ## 릴리스 준비 기록
 (로컬에서 버전 올리기·검증까지만 했다. push·PR·병합·배포는 하지 않았다.)
 
@@ -225,6 +249,7 @@ CLAUDE.md 금지 항목: window.confirm·prompt·새 외부 URL 없음 · app.js
 | 2026-11-23 | 3.0.2 | phase/p1-security | P1-1~P1-5 | check 21 · npm test 115/113/2 · 브라우저(SF_HEADERS=1) 16/16 · 오프라인 검증 통과(캐시 42개, CSP 위반 0) | 로컬 준비 완료 — push 대기 |
 | 2026-11-23 | 3.1.0 | phase/p2-work-safety | P2-A~P2-E (+DoD ③ 테스트) | check 27 · npm test 254/236/0/18 skip · 브라우저(SF_HEADERS=1) 78/78 · 오프라인 검증 통과(캐시 48개, CSP 위반 0) | 로컬 준비 완료 — push 대기(Phase 1의 3.0.2를 먼저 배포) |
 | 2026-11-23 | 3.1.1 | phase/p3-ci | P3-1·3-2·3-3·3-5·3-6 (3-4는 사람) | check 27 · npm test 269/249/0/20 skip · CI 명령 재현(tests/*.test.mjs 전체, SF_HEADERS=1) 328/328 · 오프라인 검증 통과(캐시 48개, CSP 위반 0) · verify-deploy 통과 | 로컬 준비 완료 — push 대기(3.0.2 → 3.1.0 → 3.1.1 순서로 배포, ⏳ 2건은 GitHub에서 확인) |
+| 2026-11-23 | 3.2.0 | phase/p4-playback-memory | P4-1~P4-4 | check 27 · npm test 320/297/0/23 skip · CI 명령 재현(tests/*.test.mjs 전체, SF_HEADERS=1) 379/379 · 오프라인 검증 통과(캐시 48개, CSP 위반 0) · verify-deploy 통과 | 로컬 준비 완료 — push 대기(3.0.2 → 3.1.0 → 3.1.1 → 3.2.0 순서로 배포, ⏳ 메모리·Long Task 측정과 소리 확인은 사람이) |
 
 ## 사람이 해야 할 일 (자동 진행에서 건너뜀)
 - [ ] P0-2 공유 동결: Supabase SQL Editor에서 공개 악보·문자열 템포 질의 2건 실행, **개수만** 이 파일에 기록. Phase 1 배포 전까지 새 공유 링크 만들지 않기.
