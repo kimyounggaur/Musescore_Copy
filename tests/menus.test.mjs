@@ -223,3 +223,17 @@ test('P6-4 번역: 세 안내 문구에 영어가 있고, 코드에 쓴 한국�
     assert.ok(panels.includes(`desktopOnly("${ko}")`), `${key}: panels.js가 같은 문구로 안내한다`);
   }
 });
+
+// ---- P6-1b — 처리기는 toggle(한 박자 늦음)이 아니라 열리는 순간(beforetoggle)에 붙인다 ----
+test('P6-1b 연결: 네이티브 경로는 beforetoggle(열림)에서 위치를 잡은 직후 attach()하고, 자리를 못 잡으면 열지도 붙이지도 않는다', () => {
+  const source = read('js/menus.js');
+  const handler = source.match(/menu\.addEventListener\("beforetoggle", e => \{([\s\S]*?)\n      \}\);/);
+  assert.ok(handler, 'beforetoggle 처리기가 있다');
+  const [openBranch, closeBranch] = handler[1].split('} else');
+  assert.match(openBranch, /if \(!place\(\)\) \{ e\.preventDefault\(\); return; \}\s*setExpanded\(true\);\s*(\/\/[^\n]*\s*)*attach\(\);/,
+    '열림: place() 실패 → 열지 않고 돌아간다(붙이기 전에). 성공 → aria-expanded 갱신 → attach()');
+  assert.match(closeBranch, /setExpanded\(false\);\s*detach\(\);/, '닫힘: 바로 뗀다');
+  // toggle은 포커스를 첫 항목으로 옮기는 일(onOpened)만 한 박자 늦게 한다 — attach는 거기에도 남아 있어도 되지만(이미 붙었으면 아무 일 없다) 거기에만 있으면 안 된다
+  assert.match(source, /menu\.addEventListener\("toggle", e => \{ if \(e\.newState === "open"\) onOpened\(\); else detach\(\); \}\);/);
+  assert.match(source, /function attach\(\) \{\s*if \(attached\) return;/, 'attach는 두 번 불려도 안전하다(이미 붙어 있으면 그대로)');
+});

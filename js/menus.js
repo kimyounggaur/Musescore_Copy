@@ -142,11 +142,15 @@
     }
 
     if (native) {
+      // toggle 이벤트는 열린 뒤 한 박자(약 10~20ms) 늦게 온다. 그 사이에 들어온 Esc는 처리기가 아직 없어 메뉴가 열린 채 남았고(브라우저 기본 동작도
+      // 닫지 않는다), 그 사이의 창 크기 변화는 위치를 다시 잡지 못했다. 그래서 처리기는 열리는 순간(beforetoggle)에 붙이고 닫는 순간에 바로 뗀다.
+      // toggle에서는 포커스를 첫 항목으로 옮기는 일(onOpened)만 한다 — 보이게 열린 뒤라야 포커스가 가기 때문이다.
       menu.addEventListener("beforetoggle", e => {
         if (e.newState === "open") {
           if (!place()) { e.preventDefault(); return; }
           setExpanded(true);
-        } else { setExpanded(false); detach(); } // toggle 이벤트는 한 박자 늦게 오므로, 닫는 순간 바로 떼어 다음 Esc를 가로채지 않게 한다
+          attach();
+        } else { setExpanded(false); detach(); }
       });
       menu.addEventListener("toggle", e => { if (e.newState === "open") onOpened(); else detach(); });
     } else {
