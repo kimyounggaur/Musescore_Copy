@@ -43,6 +43,8 @@
     const h = Array.from(b, n => n.toString(16).padStart(2, "0")).join("");
     return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
   }
+  // 마디 수: v2 데이터에는 최상위 measures가 없으므로 첫 보표의 마디 목록을 센다(옛 모양이면 measures).
+  function measureCountOf(data) { return (data?.parts?.[0]?.staves?.[0]?.measures || data?.measures || []).length; }
   function snapshot(score) {
     const data = C.toJSON(score);
     data.meta = { ...data.meta };
@@ -153,7 +155,7 @@
       blocked: false };
   }
   async function send(job, actor, force = false) {
-    const fields = { title: titleOf(job.data.meta.title), data: job.data, measures: (job.data.measures || []).length };
+    const fields = { title: titleOf(job.data.meta.title), data: job.data, measures: measureCountOf(job.data) };
     if (!job.id) {
       try {
         return await result(actor.db.from(TABLE).insert({ ...fields, id: job.insertId, owner: actor.owner }).select(COLUMNS).single(), actor);

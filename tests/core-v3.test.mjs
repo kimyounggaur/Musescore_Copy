@@ -61,9 +61,13 @@ test('events getter/setter and serialized legacy aliases remain compatible', () 
   mm.voices[0] = [{ ...rest, id: C.newId() }]; C.invalidate(score);
   assert.equal(mm.events, mm.voices[0]);
   assert.equal(JSON.stringify(mm).includes('"events"'), false);
-  const saved = C.toJSON(score);
+  const saved = C.toJSON(score, { format: 1 });   // 구버전 호환 출력(P7-B1): legacy 별칭은 { format: 1 }에서만 나온다
   assert.deepEqual(saved.measures[0].events, saved.measures[0].voices[0]);
   assert.equal(JSON.stringify(saved).includes('__cache'), false);
+  const v2 = C.toJSON(score);                     // 기본은 v2: 별칭·최상위 measures 없음
+  assert.equal('measures' in v2, false);
+  assert.equal(v2.schema, 2);
+  assert.equal('events' in v2.parts[0].staves[0].measures[0], false);
   const legacy = { timeSig: { num: 3, den: 4 }, keySig: 0, measures: [{ events: [{ id: 'e900000', type: 'rest', dur: { n: 3, d: 4 }, notes: [] }] }] };
   const loaded = C.fromJSON(legacy);
   assert.equal(C.findEvent(loaded, 'e900000').voice, 1);

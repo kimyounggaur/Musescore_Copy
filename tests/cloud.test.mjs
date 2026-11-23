@@ -386,3 +386,21 @@ test('확인을 기다리는 동안 더 새로운 열기가 시작되면 먼저 
   assert.equal((await second)?.meta.title, '둘째 악보'); release();
   assert.equal(await first, null); assert.deepEqual(installed, ['둘째 악보']);
 });
+
+// P7-B1: 저장 형식 v2에는 최상위 measures가 없다. 클라우드 행의 measures 칸(목록의 "N마디")은 첫 보표의 마디 수로 센다.
+test('v2 모양 악보(최상위 measures 없음)를 클라우드에 저장해도 행의 measures 칸은 실제 마디 수', async () => {
+  const h = await harness();
+  const staff = { id: 's1', measures: [{ voices: [[{ id: 'e1', type: 'rest', dur: { n: 1, d: 1, dots: 0 }, notes: [] }]] }, { voices: [[]] }, { voices: [[]] }] };
+  h.C.setScore({ meta: { title: 'v2 모양' }, schema: 2, parts: [{ id: 'p1', staves: [staff] }] });
+  h.edit('v2 모양 저장');
+  assert.equal('measures' in h.C.state.score, false, '준비한 악보에는 최상위 measures가 없다');
+  const row = await h.SF.cloud.saveCurrent();
+  assert.equal(h.db.rows.get(row.id).measures, 3);
+});
+test('옛 모양 악보(최상위 measures)의 마디 수 계산은 그대로', async () => {
+  const h = await harness();
+  h.C.setScore({ meta: { title: '옛 모양' }, measures: [{}, {}], parts: [] });
+  h.edit('옛 모양 저장');
+  const row = await h.SF.cloud.saveCurrent();
+  assert.equal(h.db.rows.get(row.id).measures, 2);
+});

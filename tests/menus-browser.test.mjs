@@ -79,7 +79,7 @@ for (const [width, height] of [[1200, 800], [900, 800], [375, 667], [360, 640]])
       await page.waitForFunction(() => document.querySelector('#file-menu').matches(':popover-open'));
       let g = await geometry(page);
       assert.equal(g.expanded, 'true');
-      assert.equal(g.items, 19, `role="menuitem" 항목: 고정 13 + 내보내기 2(SVG·PNG) + 클라우드 4(저장·내 악보·공유·사본) = 19 (${g.items})`);
+      assert.equal(g.items, 20, `role="menuitem" 항목: 고정 14(구버전 호환으로 저장 포함, P7-B1) + 내보내기 2(SVG·PNG) + 클라우드 4(저장·내 악보·공유·사본) = 20 (${g.items})`);
       assert.equal(g.checkboxes, 1, '자동 클라우드 저장 체크박스는 menuitemcheckbox');
       assert.equal(g.withoutMiClass, 0, '모든 항목이 .mi 스타일을 쓴다(내보내기·클라우드 항목 포함)');
       if (width <= 900) assert.ok(g.minItemHeight >= 40, `좁은 화면에서는 항목 높이가 40px 이상이어야 손가락으로 누르기 쉽다 (${g.minItemHeight})`);

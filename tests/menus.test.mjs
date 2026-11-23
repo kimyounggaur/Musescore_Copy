@@ -63,7 +63,7 @@ test('P6-1 마크업: 파일 메뉴 항목은 모두 <button type="button" role=
   const body = fileMenu[1];
   assert.equal(/<div class="mi"/.test(body), false, 'div.mi 없음');
   const items = [...body.matchAll(/<button\b[^>]*class="mi"[^>]*>/g)].map(m => m[0]);
-  assert.equal(items.length, 13, `파일 메뉴 고정 항목 ${items.length}개 (클라우드·내보내기 항목은 실행 중에 더해진다)`);
+  assert.equal(items.length, 14, `파일 메뉴 고정 항목 ${items.length}개 (구버전 호환으로 저장 포함 — P7-B1. 클라우드·내보내기 항목은 실행 중에 더해진다)`);
   for (const tag of items) {
     assert.match(tag, /type="button"/, tag);
     assert.match(tag, /role="menuitem"/, tag);
@@ -71,7 +71,7 @@ test('P6-1 마크업: 파일 메뉴 항목은 모두 <button type="button" role=
   }
   // data-act 이름은 그대로 — app.js·테스트가 이 값을 쓴다
   const acts = items.map(tag => tag.match(/data-act="([^"]+)"/)[1]);
-  for (const act of ['new', 'open', 'recent', 'save', 'musicxml', 'midi', 'print', 'manual-quick', 'manual-user', 'demo-butterfly', 'demo-star', 'demo-airplane', 'demo-rhythm']) assert.ok(acts.includes(act), act);
+  for (const act of ['new', 'open', 'recent', 'save', 'save-legacy', 'musicxml', 'midi', 'print', 'manual-quick', 'manual-user', 'demo-butterfly', 'demo-star', 'demo-airplane', 'demo-rhythm']) assert.ok(acts.includes(act), act);
 });
 
 test('P6-1 마크업: menus.js는 app.js보다 먼저 불러온다', () => {

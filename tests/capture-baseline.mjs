@@ -28,7 +28,7 @@ for (const name of ['butterfly', 'star', 'airplane', 'rhythm', 'quartet64']) {
     SF.core.setScore(s); SF.app.update({ noSave: true });
     const begin = performance.now();
     for (let i = 0; i < 20; i++) SF.engrave.render(s);
-    return { json: SF.core.toJSON(s), xml: SF.io.exportMusicXML(s), midi: Array.from(SF.playback.exportMidi(s)), ms: performance.now() - begin };
+    return { json: SF.core.toJSON(s, { format: 1 }), xml: SF.io.exportMusicXML(s), midi: Array.from(SF.playback.exportMidi(s)), ms: performance.now() - begin };
   }, name);
   if (!pngOnly) await writeFile(`${dir}/${name}.scoreforge.json`, JSON.stringify(data.json, null, 2));
   if (name !== 'quartet64') {

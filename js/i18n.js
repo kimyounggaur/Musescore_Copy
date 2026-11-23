@@ -58,6 +58,8 @@
     openIcon | 📂 열기 | 📂 Open
     save | 저장 (.json) | Save (.json)
     saveIcon | 💾 저장 (.json) | 💾 Save (.json)
+    saveLegacyIcon | 💾 구버전 호환으로 저장 | 💾 Save for older versions
+    saveLegacyNote | 옛 버전 앱에서 열 파일 | For opening in older app versions
     musicxml | MusicXML 내보내기 | Export MusicXML
     musicxmlIcon | 🎼 MusicXML 내보내기 | 🎼 Export MusicXML
     musescore | MuseScore용 | For MuseScore
@@ -408,6 +410,7 @@
   `);
   group("toast", `
     saved | 악보 파일을 내려받았어요 | Score file downloaded
+    savedLegacy | 구버전 호환 형식으로 악보 파일을 내려받았어요 | Score file downloaded in the older-version format
     pianoHigh | 고음질 피아노(약 19MB)를 쓰도록 바꿨어요. 다음 재생부터 적용돼요 | Switched to the high-quality piano (about 19 MB). It applies from the next playback
     pianoBasic | 기본 피아노로 바꿨어요. 다음 재생부터 적용돼요 | Switched to the standard piano. It applies from the next playback
     autosaved | 이 기기에 자동 저장했어요 | Saved automatically on this device

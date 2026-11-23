@@ -220,7 +220,7 @@ test('P2-B ② 열기만 해서는 기록이 없고, 첫 편집 뒤 저장하면
   const id = h.docId(), rows = await h.list(); assert.equal(rows.length, 1);
   const rec = await h.load(id);
   assert.equal(rec.title, '첫 편집'); assert.equal(rec.origin, 'demo'); assert.equal(rec.revision, h.C.state.revision);
-  assert.equal(rec.schema, 1); assert.equal(rec.measures, 1); assert.equal(rec.cloudId, null); assert.ok(rec.bytes > 100);
+  assert.equal(rec.schema, 2); assert.equal(rec.measures, 1); assert.equal(rec.cloudId, null); assert.ok(rec.bytes > 100);
   assert.equal(rec.data.meta.docId, id); assert.ok(rec.createdAt > 0 && rec.updatedAt >= rec.createdAt);
   assert.equal(await h.SF.store.kvGet('lastDocId'), id); assert.equal(h.tab.getItem(TAB_KEY), id);
   assert.equal(h.SF.session.activeId(), id); assert.equal(h.SF.session.savedLabel(), '파일로 저장한 적 없어요');
@@ -282,7 +282,10 @@ test('P2-B ⑥ 옛 자동 저장(localStorage v1)은 한 번만 문서로 옮기
   const rows = await first.list(); assert.equal(rows.length, 1);
   const rec = await first.load('legacy-v1');
   assert.equal(rec.origin, 'legacy'); assert.equal(rec.updatedAt, 1700000000000); assert.equal(rec.revision, 7); assert.equal(rec.title, '옛 작업');
-  assert.equal(JSON.stringify(rec.data.measures), JSON.stringify(JSON.parse(payload).score.measures));   // 내용 동일
+  const staffMeasures = data => data.parts[0].staves[0].measures;                                       // v2 데이터에는 최상위 measures가 없다(P7-B1)
+  assert.ok(staffMeasures(rec.data).length > 0);
+  assert.equal(rec.measures, staffMeasures(rec.data).length);                                           // 최근 작업 창의 "N마디"(v2에서도 0이 아니다)
+  assert.equal(JSON.stringify(staffMeasures(rec.data)), JSON.stringify(staffMeasures(JSON.parse(payload).score)));   // 내용 동일
   assert.equal(first.local.getItem(LEGACY_KEY), payload);                                              // 원본 유지
   assert.ok(await first.SF.store.kvGet('migrated.v1'));
   // 두 번째 부팅(같은 저장소, 새 탭)

@@ -151,10 +151,10 @@
     } });
   }
 
-  function saveScore() {
-    IO.saveJSON(C.state.score);
+  function saveScore(opts = {}) {
+    IO.saveJSON(C.state.score, opts);
     savedRevision = C.state.revision;
-    toast("악보 파일을 내려받았어요");
+    toast(opts.legacy ? "구버전 호환 형식으로 악보 파일을 내려받았어요" : "악보 파일을 내려받았어요");
   }
   function setReadOnly(value) {
     C.state.readOnly = !!value; ui.readOnly = !!value;
@@ -718,6 +718,8 @@
         SF.recent?.open();
       } else if (act === "save") {
         saveScore();
+      } else if (act === "save-legacy") {
+        saveScore({ legacy: true });
       } else if (act === "musicxml") {
         IO.download(IO.safeName(score.meta.title) + ".musicxml", IO.exportMusicXML(score), "application/vnd.recordare.musicxml+xml");
         toast("MusicXML로 내보냈어요 — MuseScore에서 열 수 있어요");
