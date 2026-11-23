@@ -1,0 +1,56 @@
+# CI — PR마다, 그리고 master에 들어갈 때마다 검사를 돌린다. (설계서 Step 3-3 · 프롬프트북 P3-3)
+#  unit    : 문법 검사 · Node 단위 테스트 · 배포 파일(precache-manifest, 버전, 서비스 워커)이 최신인지
+#  browser : 번들 Chromium + 운영과 같은 보안 헤더(SF_HEADERS=1)로 tests/*.test.mjs 전체. 새 브라우저 테스트가 자동으로 포함된다.
+# 액션 메이저 버전(v4)은 gh로 최신을 확인하지 못한 채 쓴 값이다 — 적용 시점에 최신 메이저로 올릴 것(docs/REFACTOR_LOG.md '사람이 해야 할 일').
+# Playwright 버전은 로컬 검증에 쓴 것과 같게 고정한다(docs/REFACTOR_LOG.md '환경').
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [master]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run check
+      - run: npm test
+      - name: release files are up to date
+        run: |
+          node tests/prepare-release.mjs
+          git diff --exit-code -- precache-manifest.json js/version.js sw.js
+  browser:
+    needs: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm i --no-save playwright@1.65.1
+      - run: npx playwright install --with-deps chromium
+      - name: start static server with production headers
+        run: |
+          SF_HEADERS=1 npm run serve > serve.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8000/ >/dev/null && break; sleep 1; done
+      - name: browser tests
+        run: node --test --test-concurrency=1 tests/*.test.mjs
+        env:
+          PLAYWRIGHT_MODULE: ${{ github.workspace }}/node_modules/playwright
+          SF_BLOCK_SAMPLES: "1"
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-output
+          path: |
+            output/playwright/
+            serve.log
