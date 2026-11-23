@@ -58,7 +58,17 @@
 | 2026-11-23 | P1-4 | refactor/p1-4-csp | 완료 | 운영 CSP 값은 샌드박스에서 확인 못 함(P0-3 미완료) | CSP script-src 'self'만, CDN 예비 경로 3곳 제거, audioio-v3 바꿔치기 단언 추가. SF_HEADERS=1에서 CSP 위반 0·폰트 OK·재생 호출 OK. npm test 114/113/1, ui-v3 13/13(1회는 기존 간헐 실패 #8) |
 | 2026-11-23 | P1-5 | refactor/p1-5-xss-e2e | 완료 | 없음 | 악성 파일 E2E(시나리오 2개) 통과. 취약 상태(수정 되돌림)에서는 2개 모두 실패함을 확인. tests/fixtures/make-xss-fixture.mjs로 파일 생성 |
 
+## 릴리스 준비 기록
+(로컬에서 버전 올리기·검증까지만 했다. push·PR·병합·배포는 하지 않았다.)
+
+| 날짜 | 버전 | Phase 브랜치 | 포함 Step | 검증 | 상태 |
+|---|---|---|---|---|---|
+| 2026-11-23 | 3.0.2 | phase/p1-security | P1-1~P1-5 | check 21 · npm test 115/113/2 · 브라우저(SF_HEADERS=1) 16/16 · 오프라인 검증 통과(캐시 42개, CSP 위반 0) | 로컬 준비 완료 — push 대기 |
+
 ## 사람이 해야 할 일 (자동 진행에서 건너뜀)
 - [ ] P0-2 공유 동결: Supabase SQL Editor에서 공개 악보·문자열 템포 질의 2건 실행, **개수만** 이 파일에 기록. Phase 1 배포 전까지 새 공유 링크 만들지 않기.
 - [ ] P0-3 운영 헤더: `curl.exe -sI https://musescore-copy.vercel.app/` 결과를 docs/PRODUCTION_HEADERS.md의 "운영 값"에 채우기.
 - [ ] 재생 메모리 기준(설계서 부록 D-3): 실제 브라우저에서 A·B·C1~C3 측정해 tests/baseline/PERF.md 표에 채우기.
+- [ ] **Phase 1 릴리스(3.0.2)**: `phase/p1-security`를 처음으로 push → PR → 곧바로 병합(공개~배포 간격 최소화). 배포 뒤 `curl.exe -sI https://musescore-copy.vercel.app/`로 CSP의 script-src가 'self'뿐인지, 앱 콘솔 오류 0, `SF.VERSION === "3.0.2"`, 기존 설치본에 업데이트 알림이 뜨는지 확인.
+- [ ] 배포 확인 뒤 `.git/info/exclude`에서 설계서 줄을 지우고 `docs/scoreforge-refactor-design.md`를 커밋.
+- [ ] 외부 공유 재개 공지.
