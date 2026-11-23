@@ -161,6 +161,29 @@ start()
 
 **테스트**: tests/schema.test.mjs(checkShape — 기준 악보 5곡 통과, `dur { n: 0, d: 0 }`·voices 누락·parts 문자열 등 거부, 모듈 구조) · tests/boot.test.mjs(복원·격리·pending·경합·잠금 놓기, Node) · tests/boot-browser.test.mjs(손상 기록 → 데모+토스트 → 다시 새로고침 시 조용 · 정상 문서가 있으면 그 문서 · 렌더 예외 · pending → 대화상자 세 갈래 · 최근 작업 ⚠️). 기존 테스트는 구조 고정 한 줄(3→1)만 바뀌고 나머지 기대값은 그대로.
 
+## Phase 검토 기록 (R-1 — 코드는 고치지 않고 점검만)
+
+### Phase 2 작업 보존 검토 (2026-11-23, phase/p2-work-safety)
+범위: P2-A~P2-E. 검토 중 DoD ③을 한 번에 증명하는 테스트가 없어 **테스트만** 추가했다(코드 변경 없음).
+
+| # | Phase 2 DoD | 결과 | 증거 |
+|---|---|---|---|
+| 1 | 교체 경로 보호(설계서 7개 → 실제 9개+1) | ✅ | tests/session.test.mjs "구조 고정: setScore 직접 호출 개수"·"교체 경로는 모두 SF.session.replaceScore 또는 handleLoadedScore를 거친다" / tests/session-browser.test.mjs "악보 교체 보호: 경로마다 확인이 뜨고 취소하면 그대로, 깨끗하면 그냥 교체"(경로별 취소·Esc·바깥 클릭·읽기 전용), "시작 화면 새 악보·데모" |
+| 2 | 두 탭이 서로의 작업을 덮어쓰지 않고, 같은 문서는 한쪽만 편집 | ✅ | tests/lock.test.mjs P2-D ①②⑧⑲(같은 문서 둘째 탭 읽기 전용·다른 문서 둘 다 편집·같은 파일 동시 열기·교체 통로 밖 저장도 남의 문서는 안 덮음) / tests/lock-browser.test.mjs "첫 탭은 문서를 쥐고…"·"최근 작업에서 다른 탭이 편집 중인 악보를 열면 읽기 전용"·"서로 다른 문서는 두 탭이 동시에 편집"·Web Locks 없는 대체 경로 / P2-B 악보별 보관(session.test P2-B ②·⑬) |
+| 3 | 공유 링크 → 사본 만들기 뒤에도 이전 로컬 작업이 최근 작업에 남음 | ✅(테스트 추가) | tests/session.test.mjs "Phase 2 DoD ③ 공유 링크 열기 → 사본으로 편집해도 이전 로컬 작업은 최근 작업에 그대로 남는다"(새로 추가) + P2-B ⑨·⑫ + cloud.test "클라우드 열기·로컬 사본은 교체 통로에 reason·readOnly·stale·confirmed를 넘긴다" |
+| 4 | 손상된 저장본이 있어도 첫 로드에서 사용 가능한 화면 | ✅ | tests/boot-browser.test.mjs "손상된 저장본(dur 0/0)만 있으면 → 데모 + 안내 토스트…"·"정상 문서가 있으면 손상된 문서는 건너뛰고…"·"모양 검사는 통과해도 그리다 예외가 나면…" / tests/boot.test.mjs P2-E ①~③ / tests/schema.test.mjs |
+| 5 | 옛 자동 저장 이전 확인, 기존 테스트 전부 통과 | ✅ | tests/session.test.mjs P2-B ⑥(한 번만 옮기고 원본 유지, 두 번 부팅해도 문서 1개)·⑥′(이전 실패해도 원본 유지) / npm test 254건: 236 통과·0 실패·18 건너뜀(브라우저 전용, 아래 별도 실행) |
+
+CLAUDE.md 금지 항목 점검
+- `window.confirm`·`window.prompt` 없음(js/cloud.js의 `confirm`·`prompt`는 master에도 있던 자체 비동기 대화상자 함수). app.js 1,110줄(1,600줄 이하). vendor/ 변경 없음. master 대비 새 외부 URL 없음.
+- innerHTML 사용 줄 수(engrave.js 제외) master 29 → 30: 늘어난 1건은 js/safe-html.js의 설명 주석이며 사용처가 아니다. 새 UI(최근 작업 ⚠️ 행·대화상자·토스트)는 textContent로만 채운다.
+- 테스트 삭제·skip·완화 없음: master 대비 tests에서 사라진 assert 2줄은 모두 같은 뜻의 대체(자동 저장 확인을 localStorage v1 → IndexedDB 기록의 revision 일치로, 회귀 페이지 열기에 pageOptions·preparePage 추가). 기존 테스트 수정은 session.test의 "app.js 직접 setScore 개수" 3→1(P2-E 항목 6이 허락) 하나뿐.
+
+P2 집중 점검: 교체 경로 9개+1 ✅ · 옛 자동 저장 이전 1회성·원본 유지 ✅ · 두 탭 시나리오(Node+브라우저) ✅ · 손상 문서 부팅(Node+브라우저, 변이 36건 전부 잡힘) ✅ · 사본이 이전 작업을 덮지 않음 ✅
+
+전체 검증: npm run check 27개 OK · npm test 254건(236 통과·0 실패·18 건너뜀) · 브라우저(SF_HEADERS=1) 78/78 · 오프라인 검증 48파일·CSP 위반 0·오류 0.
+판정: ❌ 없음 → **R-2 가능**(로컬 준비까지만 한다).
+
 ## 릴리스 준비 기록
 (로컬에서 버전 올리기·검증까지만 했다. push·PR·병합·배포는 하지 않았다.)
 

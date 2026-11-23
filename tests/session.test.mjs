@@ -398,6 +398,26 @@ test('P2-B ⑫ 공유 보기(읽기 전용)는 기록을 만들지 않는다', a
   assert.equal((await h.list()).length, 0); assert.equal(h.SF.session.savedLabel(), '');
 });
 
+// Phase 2 DoD ③ — 공유 링크로 열었다가 사본을 만들어도 이전 로컬 작업이 최근 작업에 그대로 남는다(처음부터 끝까지 한 번에).
+test('Phase 2 DoD ③ 공유 링크 열기 → 사본으로 편집해도 이전 로컬 작업은 최근 작업에 그대로 남는다', async () => {
+  const h = boot();
+  await h.replace(h.titled('내 작업'), { origin: 'new' }); h.edit('이전 로컬 작업'); assert.equal(await h.flush(), true);
+  const A = h.docId(), before = await h.load(A);
+  const shared = await h.replace(h.titled('공유받은 악보'), { origin: 'cloud', readOnly: true });          // 공유 링크로 열기(변경이 있어도 묻지 않고 보관)
+  assert.ok(shared !== false && shared !== undefined);
+  assert.equal(h.docId(), undefined, '공유 보기는 문서가 없다');
+  assert.equal((await h.list()).length, 1, '공유 보기가 기록을 만들지 않고, 이전 작업은 1건으로 남아 있다');
+  const copy = h.C.fromJSON(h.C.toJSON(h.C.state.score)); delete copy.meta.cloudId;
+  await h.replace(copy, { origin: 'copy', confirmed: true });                                                // [로컬 사본 만들기]
+  assert.notEqual(h.docId(), A); h.edit('사본에서 편집'); assert.equal(await h.flush(), true);
+  const records = await h.list();
+  assert.equal(records.length, 2); assert.equal(JSON.stringify(records.map(r => r.title).sort()), JSON.stringify(['사본에서 편집', '이전 로컬 작업'].sort()));   // 다른 vm 컨텍스트의 배열이라 JSON으로 비교
+  const after = await h.load(A);
+  assert.equal(after.title, '이전 로컬 작업'); assert.equal(after.createdAt, before.createdAt);
+  assert.equal(JSON.stringify(after.data), JSON.stringify(before.data), '이전 작업의 내용은 한 글자도 바뀌지 않았다');
+  assert.equal((await h.load(h.docId())).origin, 'copy');
+});
+
 test('P2-B ⑬ 늦게 끝난 오래된 저장이 더 새로운 저장 표시를 덮어쓰지 않고, 기록은 마지막 내용', async () => {
   const h = boot();
   await h.replace(h.titled('처음'), { origin: 'new' });
