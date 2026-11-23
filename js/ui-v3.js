@@ -203,7 +203,6 @@
   function init(api) {
     A=api;transport();settingsExtras();bindTouch();
     A.$("#canvas").tabIndex=0;
-    A.$$("#file-menu .mi").forEach(el=>{el.tabIndex=0;el.setAttribute("role","menuitem");el.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();el.click();}});});
     for(const [id,run]of [["btn-trill",()=>ornament("trill")],["btn-mordent",()=>ornament("mordent")],["btn-turn",()=>ornament("turn")],["btn-ottava-up",()=>ottava(12)],["btn-ottava-down",()=>ottava(-12)],["btn-measure-insert",()=>measureAction("before")],["btn-measure-delete",()=>measureAction("range")],["btn-measure-options",showMeasureProperties]])A.$("#"+id).addEventListener("click",run);
     for(const [id,label]of Object.entries({before:"앞에 마디 삽입",after:"뒤에 마디 삽입",delete:"이 마디 삭제",range:"선택 마디 삭제",split:"마디 나누기",join:"마디 합치기",pickup:"못갖춘마디"}))SF.keymap.registerCommand({id:`measure-${id}`,label,run:()=>measureAction(id)});
     A.$("#canvas").addEventListener("click",e=>{

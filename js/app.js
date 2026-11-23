@@ -696,15 +696,11 @@
   /* ---------------- 메뉴/다이얼로그 ---------------- */
   function bindMenu() {
     const menu = $("#file-menu");
-    $("#btn-file").addEventListener("click", (e) => {
-      e.stopPropagation();
-      menu.classList.toggle("open");
-    });
-    document.addEventListener("click", () => menu.classList.remove("open"));
+    // 열기·닫기·위치·키보드·바깥 누름은 menus.js가 맡는다. 항목을 누르면 menus.js가 먼저 메뉴를 닫고, 아래 동작이 이어진다.
+    SF.menus.setup({ button: $("#btn-file"), menu });
     menu.addEventListener("click", async (e) => {
       const item = e.target.closest("[data-act]");
       if (!item) return;
-      menu.classList.remove("open");
       const act = item.dataset.act;
       const score = C.state.score;
       if (act === "new") {

@@ -20,6 +20,7 @@
   "js/keymap.js",
   "js/lock-ui.js",
   "js/lock.js",
+  "js/menus.js",
   "js/palette.js",
   "js/panels.js",
   "js/playback.js",

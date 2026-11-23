@@ -534,14 +534,16 @@
         ["내 악보…", "cloud-list", openList],
         ["공유 링크 만들기", "cloud-share", shareCurrent]
       ]) {
-        const btn = button(label, () => { menu.classList.remove("open"); return fn(); }, "mi");
-        btn.dataset.action = action; btn.style.width = "100%"; btn.style.textAlign = "left";
+        // 메뉴는 menus.js가 여닫는다 — 동작보다 먼저 닫아야 항목이 연 대화상자에서 포커스를 빼앗지 않는다.
+        const btn = button(label, () => { if (SF.menus) SF.menus.close(menu); return fn(); }, "mi");
+        btn.dataset.action = action; btn.setAttribute("role", "menuitem");
         group.append(btn);
       }
       const label = element("label", "자동 클라우드 저장 ", "mi");
       autoInput = element("input"); autoInput.type = "checkbox"; autoInput.checked = state.autoSave;
+      autoInput.setAttribute("role", "menuitemcheckbox");
       autoInput.addEventListener("change", () => setAutoSave(autoInput.checked)); label.append(autoInput); group.append(label);
-      copyButton = button("사본 만들기", makeLocalCopy, "mi"); copyButton.dataset.action = "cloud-copy"; group.append(copyButton);
+      copyButton = button("사본 만들기", makeLocalCopy, "mi"); copyButton.dataset.action = "cloud-copy"; copyButton.setAttribute("role", "menuitem"); group.append(copyButton);
       menu.append(group);
     }
     statusEl = button("클라우드 저장 준비", () => state.dirty ? saveCurrent() : openList());
