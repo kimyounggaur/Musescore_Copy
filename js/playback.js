@@ -250,21 +250,25 @@
     const key = partId + ":" + sampleKey(instrument);
     const cached = sampleInstruments.get(key);
     if (cached && !cached.failed) return cached.promise;
-    const rec = { instrument: null, ready: false, failed: false, promise: null };
+    if (cached) disposeRec(cached); // 실패한 이전 시도가 남긴 악기를 정리하고 다시 만든다
+    const rec = { instrument: null, ready: false, failed: false, released: false, promise: null };
     rec.promise = (async () => {
       const mod = await loadSmplrModule();
       const kind = sampleKey(instrument);
       const build = async () => {
+        if (rec.released) return; // 차례를 기다리는 사이 악보에서 빠졌다 — 만들지 않는다(버스도 만들지 않음)
         const inst = createSampleInstrument(mod, instrument, partId);
         rec.instrument = inst;
         await (inst.ready || inst.load || Promise.resolve(inst));
       };
       await (SAMPLE_MAP[kind].kind === "splendid" ? inTurn(kind, build) : build());
+      if (rec.released) return rec; // 로딩 중에 해제됨(악기는 releaseUnused가 이미 dispose) — 준비 표시를 하지 않는다
       rec.ready = true;
       setSampleStatus("ready", "샘플 준비", `${(SAMPLE_MAP[sampleKey(instrument)] || SAMPLE_MAP.piano).label} 샘플 음원 준비 완료`);
       return rec;
     })().catch(err => {
       rec.failed = true;
+      if (rec.released) return rec; // 해제하려고 dispose한 악기의 뒤늦은 오류는 알리지 않는다
       setSampleStatus("fallback", "신스 사용", "샘플 음원을 불러오지 못해 내장 신스로 재생합니다.");
       console.warn("[ScoreForge] smplr sample load failed:", err);
       return rec;
@@ -275,6 +279,47 @@
 
   function warmSamplesForScore(score) {
     return Promise.all(score.parts.map(part => ensureSampleInstrument(part.instrument, part.id)));
+  }
+
+  /* ---------------- 수명 관리 ---------------- */
+  let releasePending = false; // 재생 중에 불려 미뤄 둔 정리가 있다
+
+  function disposeRec(rec) {
+    rec.released = true;
+    const inst = rec.instrument;
+    rec.instrument = null;
+    try { inst?.dispose?.(); } catch (err) { console.warn("[ScoreForge] sample instrument dispose failed:", err); }
+  }
+
+  /* 지금 악보가 쓰지 않는 샘플 악기·loader·믹서 버스를 메모리에서 내린다(백로그 #3: 악보를 바꿀 때마다 인스턴스가 쌓이던 문제).
+   * - 키(파트ID:악기)가 악보의 파트·악기와 맞지 않는 인스턴스를 dispose한다. 건반 미리 듣기('preview')는 남긴다.
+   * - 어느 인스턴스도 쓰지 않는 kind의 loader는 버려 디코딩된 버퍼를 GC에 넘긴다.
+   * - 악보에 없는 파트의 버스는 연결을 끊고 지운다(악기만 바뀐 파트의 버스는 신스도 쓰므로 남긴다).
+   * 재생·재생 준비 중이면 하지 않고 멈출 때(stop)로 미룬다 — 쓰는 중인 악기를 dispose하면 곡 도중에 샘플이 끊겨 신스로 바뀐다.
+   * 돌려주는 값: 지금 정리했으면 true, 미뤘으면 false. */
+  function releaseUnused(score = C.state.score) {
+    if (!score) return false;
+    if (player.playing || player.loading) { releasePending = true; return false; }
+    releasePending = false;
+    const partIds = new Set(score.parts.map(part => part.id));
+    const wanted = new Set(score.parts.map(part => part.id + ":" + sampleKey(part.instrument)));
+    for (const [key, rec] of sampleInstruments) {
+      if (key.startsWith("preview:") || wanted.has(key)) continue;
+      disposeRec(rec);
+      sampleInstruments.delete(key);
+    }
+    const used = new Set([...sampleInstruments.keys()].map(key => key.slice(key.indexOf(":") + 1)));
+    for (const kind of [...loaders.keys()]) if (!used.has(kind)) { loaders.delete(kind); loadTurns.delete(kind); }
+    for (const [partId, bus] of partBuses) {
+      if (partId === "preview" || partIds.has(partId)) continue;
+      try { bus.input.disconnect(); bus.pan?.disconnect(); } catch (err) { /* 이미 끊김 */ }
+      partBuses.delete(partId);
+    }
+    return true;
+  }
+
+  function debugStats() {
+    return { instances: sampleInstruments.size, loaders: loaders.size, buses: partBuses.size };
   }
 
   function delay(ms) {
@@ -848,6 +893,7 @@
   async function play(fromSec = 0, opts = {}) {
     stop(false);
     const token = ++player.startToken, score = C.state.score, ac = audio();
+    releaseUnused(score); // 악기를 바꾸거나 파트를 뺀 뒤 첫 재생 준비 — 멈춘 직후라 지금 정리해도 안전하다
     player.score = score; player.compiled = compile(score, opts);
     if (opts.rate !== undefined) player.rate = Math.max(0.5, Math.min(2, +opts.rate || 1));
     if (opts.loop !== undefined) setLoop(opts.loop);
@@ -892,6 +938,7 @@
     if (player.playing) player.startOffset = pausePos();
     player.playing = false; player.loading = false; silence();
     if (notify && wasPlaying) player.onState?.(false);
+    if (releasePending) releaseUnused(); // 재생 중이라 미뤄 둔 정리
   }
 
   /* 미리듣기(클릭/입력 피드백) */
@@ -964,5 +1011,6 @@
     setRate, setLoop, seek, updateMixer, partBuses, buildTempoMap,
     getSampleStatus, setSampleStatusHandler, ensureSampleInstrument, buildPlaybackPlan,
     limitedStorage, // 테스트용: 동시 요청 제한 유틸
+    releaseUnused, debugStats,
   };
 })(window.SF);

@@ -659,6 +659,7 @@
     ui.selection = null; ui.selAnchor = null; ui.cursorId = null; ui.lastPitch = null;
     ui.speedy = false; ui.speedyStep = null; clearSpeedyHeld();
     stopPlayback();
+    P.releaseUnused(C.state.score); // 새 악보에 없는 악기·믹서 버스를 메모리에서 내림(재생은 바로 위에서 멈춤)
     update();
     if (opts.report && opts.report.length) showImportReport(opts.name, score, opts.report);
     else if (opts.toast !== false && !opts.boot) toast(opts.toast || `"${score.meta.title || opts.name}" 불러왔어요`);
