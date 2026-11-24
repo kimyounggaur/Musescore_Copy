@@ -571,8 +571,13 @@
     });
     window.addEventListener("online", () => drain());
     window.addEventListener("offline", () => { if (state.dirty) status("오프라인 · 최신 악보 저장 대기 중"); });
+    // 한글 입력 상태(e.key가 "Process"·"ㄴ")에서도 Ctrl+Shift+S가 먹도록 keymap과 같은 판정(combo)을 쓴다.
+    // keymap이 없는 환경이면 예전처럼 e.key로 판정한다(e.key가 없는 이벤트에도 던지지 않는다).
+    const isCloudSaveKey = event => SF.keymap?.combo
+      ? SF.keymap.combo(event) === "Ctrl+Shift+S"
+      : (event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && String(event.key).toLowerCase() === "s";
     document.addEventListener("keydown", event => {
-      if ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.key.toLowerCase() === "s") {
+      if (isCloudSaveKey(event)) {
         event.preventDefault(); event.stopImmediatePropagation(); runUI(saveCurrent);
       }
     }, true);

@@ -58,12 +58,34 @@
   for (const direction of ["Up","Down","Left","Right"]) for (const modifier of ["","Ctrl+","Shift+"]) KEYMAP.push({id:`move-${modifier}${direction}`,label:`${modifier === "Ctrl+" ? "옥타브·마디 " : modifier === "Shift+" ? "범위 " : ""}${({Up:"위",Down:"아래",Left:"이전",Right:"다음"})[direction]}`,keys:[`${modifier}Arrow${direction}`],action:"arrow",args:[direction,modifier],mode:"all"});
   const extras = new Map();
   function registerCommand(command) { if (command?.id && command?.label && typeof command.run === "function") extras.set(command.id, command); }
+  /* 한글 입력기(IME)가 켜져 있으면 e.key가 "Process"나 "ㅁ"처럼 라틴 글자가 아니고, macOS에서 옵션키를 누르면 "å"가 된다.
+     그럴 때만 자판 위치(e.code)로 어떤 키인지 알아낸다. e.key가 ASCII 한 글자(글자·기호 모두)면 그 글자를 그대로 쓰므로
+     Dvorak·AZERTY·QWERTZ 사용자가 눈에 보이는 글자로 단축키를 쓰는 기존 동작은 그대로다. */
+  const CODE_PUNCT = {   // e.code → [Shift 없이, Shift와 함께] 나오는 글자(미국 자판 기준). key가 "Process"·"Dead"일 때만 쓴다.
+    Comma: [",", "<"], Period: [".", ">"], Slash: ["/", "?"], Minus: ["-", "_"], Equal: ["=", "+"], Semicolon: [";", ":"],
+    Quote: ["'", "\""], BracketLeft: ["[", "{"], BracketRight: ["]", "}"], Backslash: ["\\", "|"], Backquote: ["`", "~"],
+    NumpadAdd: ["+", "+"], NumpadSubtract: ["-", "-"], NumpadDecimal: [".", "."], NumpadDivide: ["/", "/"], NumpadMultiply: ["*", "*"]
+  };
+  const SYMBOLIC = ["<", ">", "+", "_", "?"];          // 글자 자체에 Shift가 들어 있어 "Shift+"를 따로 붙이지 않는 기호
+  const IME_KEYS = new Set(["Process", "Dead", "Unidentified"]);   // 입력기가 가로채서 글자를 알 수 없는 e.key
+  /** 눌린 키의 바탕 글자: 글자는 대문자, 숫자·기호·이름 있는 키는 그대로. 한글 입력 상태에서도 같은 값이 나온다. */
+  function baseKey(e) {
+    const key = typeof e.key === "string" ? e.key : "", code = typeof e.code === "string" ? e.code : "";
+    if (/^(Digit|Numpad)[0-9]$/.test(code)) return code.slice(-1);                          // 숫자는 예전부터 자판 위치 기준
+    if (key === " ") return "Space";
+    if (key.length === 1 && key.charCodeAt(0) < 128) return key.toUpperCase();              // ASCII 한 글자: 눈에 보이는 글자 기준(기존 동작)
+    if (key.length > 1 && !IME_KEYS.has(key)) return key;                                   // Enter·Escape·ArrowUp·F11 같은 이름 있는 키
+    if (code === "Space") return "Space";
+    if (/^Key[A-Z]$/.test(code)) return code.slice(3);                                      // ㅁ·ф·å·Process → 자판 위치의 글자
+    if (key.length === 1) return key;                                                       // 그 밖의 한 글자(ö·ß 등 자판 고유 글자): 위치로 바꾸지 않고 그대로
+    if (Object.prototype.hasOwnProperty.call(CODE_PUNCT, code)) return CODE_PUNCT[code][e.shiftKey ? 1 : 0];   // Process·Dead의 기호
+    return key;
+  }
   function combo(e) {
-    let key = e.key === " " ? "Space" : e.key.length === 1 ? e.key.toUpperCase() : e.key;
-    if (/^(Digit|Numpad)[0-9]$/.test(e.code)) key = e.code.slice(-1);
-    const symbolic = ["<", ">", "+", "_", "?"].includes(e.key);
+    const key = baseKey(e), symbolic = SYMBOLIC.includes(key);
     return `${e.ctrlKey || e.metaKey ? "Ctrl+" : ""}${e.altKey ? "Alt+" : ""}${e.shiftKey && !symbolic ? "Shift+" : ""}${key}`;
   }
+  const DRUM_KEYS = new Map(Object.entries({ K: "kick", S: "snare", H: "closed-hihat", O: "open-hihat", C: "crash" }));
   function create(A) {
     const { C, ui, $, $$, P } = A;
     let pulseTimer;
@@ -139,7 +161,7 @@
         const external=[...extras.values()].find(x=>(x.keys||[]).includes(key));
         if(external) { e.preventDefault(); run(external); return; }
         if(ui.inputMode && C.isPercussionRef(A.activeRef()) && !e.ctrlKey && !e.metaKey && !e.altKey) {
-          const drum={K:"kick",S:"snare",H:"closed-hihat",O:"open-hihat",C:"crash"}[e.key.toUpperCase()];
+          const drum=DRUM_KEYS.get(baseKey(e));
           if(drum) {e.preventDefault();A.inputDrum(drum);return;}
         }
         const item=KEYMAP.find(x=>x.keys.includes(key)&&(x.mode==="all"||x.mode===(ui.speedy?"speedy":"normal")));
@@ -171,5 +193,5 @@
     }
     return { bindKeys, bindShortcutOverlay, bindCommandPalette, openCommandPalette, closeShortcutOverlay, isShortcutOverlayOpen };
   }
-  SF.keymap = { KEYMAP, create, combo, registerCommand };
+  SF.keymap = { KEYMAP, create, combo, baseKey, registerCommand };
 })(window.SF);
