@@ -31,6 +31,7 @@ try {
   assert.ok(cached.some(url => url.endsWith('/vendor/supabase.js')));
   assert.ok(cached.some(url => url.endsWith('/js/cloud.js')));
   assert.ok(cached.some(url => url.endsWith('/privacy.html')) && cached.some(url => url.endsWith('/css/privacy.css')), '개인정보 처리 안내도 사전 캐시에 있다');
+  assert.ok(cached.some(url => url.endsWith('/licenses.html')), '라이선스 고지도 사전 캐시에 있다');
   assert.equal(cached.some(url => url.includes('.supabase.co')), false);
   await context.setOffline(true);
   await page.reload({ waitUntil: 'load' });
@@ -46,7 +47,13 @@ try {
   assert.match(await privacy.locator('h1').innerText(), /개인정보 처리 안내/);
   assert.equal(await privacy.locator('#privacy-version').innerText(), await page.evaluate(() => SF.auth.privacyVersion));
   await privacy.close();
-  const result = { origin: base, version: await page.evaluate(() => SF.VERSION), offlineReload: true, privacyOffline: true, savedScoreRestored: true, localVendorLoaded: await page.evaluate(() => !!window.supabase), playbackStarted: true, cachedFiles: cached.length, csp, errors };
+  // 라이선스 고지(P9-5)도 오프라인에서 열리고 글꼴 라이선스(OFL) 전문이 들어 있다
+  const licenses = await context.newPage();
+  await licenses.goto(`${base}/licenses.html`, { waitUntil: 'load' });
+  assert.match(await licenses.locator('h1').innerText(), /제3자 구성 요소 고지/);
+  assert.match(await licenses.locator('#lic-ofl + pre').innerText(), /SIL OPEN FONT LICENSE Version 1\.1/);
+  await licenses.close();
+  const result = { origin: base, version: await page.evaluate(() => SF.VERSION), offlineReload: true, privacyOffline: true, licensesOffline: true, savedScoreRestored: true, localVendorLoaded: await page.evaluate(() => !!window.supabase), playbackStarted: true, cachedFiles: cached.length, csp, errors };
   await mkdir('output/playwright/v3', { recursive: true });
   await page.screenshot({ path: 'output/playwright/v3/offline.png' });
   await writeFile('output/playwright/v3/offline.json', JSON.stringify(result, null, 2));

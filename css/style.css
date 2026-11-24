@@ -1688,6 +1688,10 @@ button { font:inherit; }
 .shortcut-list { display:grid; grid-template-columns:1fr 1fr; gap:2px 18px; padding:12px; max-height:62vh; overflow:auto; }
 .shortcut-row { display:flex; align-items:center; justify-content:space-between; gap:12px; border-bottom:1px solid var(--line); padding:8px; font-size:12px; }
 .shortcut-row kbd { white-space:nowrap; }
+.about { margin:10px 12px 2px; padding-top:8px; border-top:1px solid var(--line); font-size:12.5px; color:var(--text-dim); }
+.about h3 { margin:0 0 4px; font-size:13px; color:var(--text); }
+.about p { margin:2px 0; }
+.about a { color:var(--text); text-decoration:underline; text-underline-offset:2px; }   /* --select는 어두운·분홍 테마에서 글자 대비가 모자라 밑줄로 링크임을 보인다 */
 .shortcut-row.pulse { background:var(--select); color:#fff; animation:key-pulse .55s ease-out; }
 @keyframes key-pulse { from { box-shadow:inset 0 0 0 3px var(--accent); } to { box-shadow:inset 0 0 0 0 transparent; } }
 #dlg-command { max-width:calc(100vw - 24px); }
