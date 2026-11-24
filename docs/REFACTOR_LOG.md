@@ -468,6 +468,29 @@ CLAUDE.md 금지 항목 점검
 전체 검증: npm run check 28개 OK · npm test 480건(409 통과·0 실패·71 건너뜀) · CI 명령 재현(tests/*.test.mjs 전체, SF_HEADERS=1, SF_BLOCK_SAMPLES=1, --test-concurrency=1) 546/546 · 3.0.1 기준 앱 호환 검증 7/7. 오프라인 검증·verify-deploy는 R-2에서 3.5.0으로 한다.
 판정: ❌ 없음, ⏳ 사람 확인 3건((P7-A1) 실제 곡 .mid 가져오기 시간·모양 · (P7-B1) 실제 기기에서 저장 v2·구버전 호환 저장 · (P7-B2) 큰 악보 실행 취소·휴대폰 메모리) → 로컬 릴리스 준비는 가능, **병합 전에 사람이 위 세 가지를 확인**한다. 알려 둔 한계: 실제 곡 파일의 가져오기 시간은 못 쟀다(합성 곡 1만 음 0.5초) · 아주 큰 악보에서는 되돌릴 수 있는 횟수가 200번보다 줄어든다(피아노 100마디 약 91번) · 그리기용 임시 값(`__acc`)이 저장 파일과 실행 취소 기록에 약 5% 들어간다(Phase 9 정리 후보).
 
+### Phase 8 정확성·견고성·계정 검토 (2026-11-25, phase/p8-robustness)
+범위: P8-1~P8-5(phase/p7-import-save 이후 커밋 26개: Step 커밋 21 + 병합 5, 파일 57개 +7,061/−144줄). 점검은 코드를 고치지 않고 했다.
+
+| # | Phase 8 DoD | 결과 | 증거 |
+|---|---|---|---|
+| 1 | 8-1 테스트 6종, 8-2 퍼징 500건, 8-3 combo 표 8건 통과 | ✅ | **8-1** tests/core-v3.test.mjs:432(C +2 → D · F#m7 D장조 +2 → G#m7 · Bb/D −3 → G/B · N.C. 그대로)·:453(저장했다 다시 읽어도 유지 — v2와 format 1 모두, raw까지)·:463(자동 다이어그램은 다시 만들고 직접 만든 것은 보존, 개수 반환) = 설계서의 6종 / 더해서 :479(쉼표 위 코드·타악기)·:497(chords:false·0반음)·:508(실행 취소 한 번)·:522(방향키는 코드 불변)·:529(중간 조표 변경)·:537(0반음 철자 불변)·:553(12음×임시표×질×조 15개×반음 14가지 전수 97,020건) / 브라우저 tests/chord-transpose-browser.test.mjs:71·:186. 이번 점검에서 다시 돌림: 코드 기호 시험 10/10. **8-2** tests/schema.test.mjs:586 퍼징 500건(시드 20261123, 손상 7종류): 검사기는 던지지 않고 입력을 바꾸지 않으며 받아들인 악보는 core·그리기·재생·MIDI·MusicXML을 예외 없이 통과, 6.1초(한도 30초). schema.test.mjs 40/40 · 브라우저 tests/schema-browser.test.mjs:51. **8-3** tests/keymap.test.mjs:18 설계서 표 8건(한글·AZERTY·macOS Option·기호·숫자) + :130 회귀(KEYMAP 키 문자열 99개가 라틴 자판 이벤트에서 그대로 나오고, 한글 입력·자모·Option·Cmd 이벤트 228개로 만들어도 같은 문자열) · keymap 12/12 · 브라우저 tests/ime-keys-browser.test.mjs:66(CDP로 한글 입력 상태와 같은 신뢰된 keydown) |
+| 2 | 비밀번호 재설정 실제 메일로 1회 확인, (D1 후) 탈퇴 시 관련 행 0건 | ⏳ 사람 | 앱 쪽 흐름은 자동으로 확인: tests/account.test.mjs:111(재설정 메일 주소 `<origin>/?auth=recovery`)·:121(복구 링크 해석: 성공·만료·없음·관계없는 주소) · tests/account-browser.test.mjs의 c 구간(재설정 요청 본문·복구 링크로 돌아오면 새 비밀번호 창 → 6자 미만 거절 → 갱신 요청) · tests/delete-account.test.mjs 12건(Edge Function 핸들러를 Node에서: 출처 검사·401·405·500·204·서비스 키가 응답·로그·저장소에 없음). **실제 메일 1회와 탈퇴 뒤 행 0건**(supabase/functions/delete-account/README.md의 읽기 전용 조회)은 실제 Supabase에서만 되므로 사람 몫이다 — (P8-4) ①~④, (P8-5) ⑦ |
+| 3 | 정책·한도 SQL 테스트 통과, 검증 기록 커밋 | ✅ 로컬 PostgreSQL 16 · ⏳ Supabase 스테이징 | supabase/tests/scores_rls.sql(관리자도 남의 악보 조회 불가·집계·200/201번째·정확히 50MiB와 +1바이트·이름 바꾸기와 공유는 한도를 안 탐)을 tests/supabase-sql.test.mjs:146에서 일회용 PostgreSQL 16에 v4를 적용한 뒤 실행해 PASS. 같은 파일 18/18: 대조군 :139(v3에서는 관리자가 읽어서 이 시험이 실패) · 멱등 :157 · 롤백이 v3 지문과 같음 :164 · 왕복 :174 · 낯선 정책 :180 · 표·함수 없음 :192 · 표식이 다름 :204 · 권한 어긋남 복구 :218 · 이미 한도를 넘은 회원 :242 · 동시 삽입 :279 · 회원별 따로 세기 :298 · 비용 스크립트 :308. docs/SUPABASE_V4_VERIFICATION.md 커밋(에이전트 칸 ✅, 사람 실행 칸 ☐ — Supabase 스테이징에서 채움) |
+
+P8 집중 점검
+- 퍼징 500건 ✅ — 위 1.
+- combo 8건 + 회귀 ✅ — 위 1(설계서 표 8건 + 99개 키 회귀 + 라틴 자판 기존 동작 기준선: 고치기 전에도 통과한 회귀 2건).
+- SQL 파일과 테스트 ✅ — supabase/scoreforge_v4.sql(멱등)·scoreforge_v4_rollback.sql(v3 지문과 같게 복원)·supabase/tests/(RLS·지문·비용) + 임시 PG 시험 18건. 최악 비용(200개×249,000자)은 마지막 저장 66.0ms·data 고쳐 쓰기 105.0ms(상의 기준 1000ms). 운영 DB·Supabase에는 접속하지 않았고 서비스 키는 어떤 파일에도 없다(tests/delete-account.test.mjs의 저장소 전체 검사).
+- 탈퇴 기능 플래그 상태 ✅ — js/config.js:10 `SF_FEATURES = { deleteAccount: false }`(출하 값 꺼짐). 어느 코드·설정도 켜지 않는다(tests/account.test.mjs:238). 켜는 길은 분리 뒤 전환 도구의 --enable-delete-account 하나이고, 시험은 "켜져 있으면 CSP가 새 프로젝트 하나로 좁혀져 있어야" 통과시킨다(:226). Edge Function은 배포하지 않았다.
+- 변이 검사(일부러 망가뜨려 시험이 잡는지): P8-1 27건(25건 잡힘·2건 같은 결과) · P8-2 118건(117건·1건) · P8-3 50건(49건·1건) · P8-4 76건(73건·3건) · P8-5 60건(처음 51건 → 시험 8건을 더한 뒤 59건·1건 같은 결과).
+
+CLAUDE.md 금지 항목 점검
+- `window.confirm`·`window.prompt` 없음(js/cloud.js의 confirm·prompt는 SF.ui 대화상자를 부르는 기존 래퍼). js/app.js 1,121줄(1,600줄 이하). 새 `innerHTML` 사용 0줄(engrave.js 제외 30곳 → 30곳). 새 외부 주소 0(추가된 줄의 http 글자는 js/config.js 주석 속 안내문과 privacy.html 파비콘 data URI 안의 SVG 이름공간뿐). vendor/ 변경 0. 지워진 파일 0.
+- 테스트 삭제·skip·완화 없음: 기존 시험 파일에서 지워진 assert 줄은 4개 파일의 6줄뿐이고 전부 같은 자리에서 같거나 더 강한 assert로 바뀌었다(account-menu-browser −2/+2 · menus −1/+1 · release −1/+1 · boot −2/+10). 이유는 P8-2(검사가 값을 고쳐서 열게 되어 "검사 통과 뒤 core 예외"를 따로 만들어야 함·세션 검사 호출 구조)와 P8-4(관리자 로그인 버튼 제거·privacy.html 추가)가 요구한 변경으로 각 단계의 기록과 일치한다. 지워진 `test(`는 제목만 바뀐 1건(최상위 6개 → 7개)이고, 값·도우미만 바뀐 곳(boot-browser·session·release-lib·verify-offline)에서도 assert는 줄지 않았다. P8-5에서 바꾼 기존 기대(관리자 열람, 탈퇴 플래그 가드)는 P8-5 행에 이유와 함께 적었다. 추가된 `.skip`·`.only` 0.
+
+전체 검증: npm run check 28개 OK · npm test 670건(561 통과·0 실패·109 건너뜀) · 일회용 PostgreSQL 16 시험 18/18(SF_PG_BIN 지정) · CI 명령 재현(tests/*.test.mjs 전체, SF_HEADERS=1, SF_BLOCK_SAMPLES=1, --test-concurrency=1) 756건(755 통과·0 실패·1 건너뜀 — PG 시험은 SF_PG_BIN 없이 건너뜀) · 오프라인 검증(3.5.0) 통과(캐시 51개·CSP 위반 0). 3.6.0의 오프라인 검증·verify-deploy는 R-2에서 한다.
+판정: ❌ 없음, ⏳ 사람 확인 있음 → 로컬 릴리스 준비는 가능, **병합(= 배포) 전에 사람이 정할 것**: ①(P8-4) 실제 Supabase에서 재설정 메일·리다이렉트 허용 목록·메일 문구 ②(P8-5) 새 프로젝트 만들기·v4 적용·스테이징 검증·전환 도구 실행(탈퇴 켜기는 분리 뒤) ③ **순서 주의**: privacy.html의 관리자 열람 문장은 v4가 서비스 DB에 적용돼야 사실이 된다(파일에는 [확정 필요] 표시가 남아 있고 초안이라고 적혀 있다). v4 적용 전에 3.6.0을 배포하면 그 문장이 아직 사실이 아니라는 점을 알고 배포하는 것이다 — 가능하면 분리·v4 적용 뒤에 배포하거나, 그 전에 배포한다면 해당 문장을 사람이 확정하기 전까지 게시본으로 보지 말 것. 알려 둔 한계: 로컬 PostgreSQL은 Supabase가 아니라서(PostgREST·Auth·Advisor 없음) 검증 문서 5장의 "사람 실행" 칸이 필요하다 · 한도에 막힌 뒤 더 고치면 상태 줄이 "저장 대기 중"으로 보이지만 자동 저장은 멈춘 상태다(충돌 때와 같은 기존 동작, 문서화) · 이미 가입한 회원은 개인정보 동의 기록이 없다((P8-4) ⑥).
+
 ## 릴리스 준비 기록
 (로컬에서 버전 올리기·검증까지만 했다. push·PR·병합·배포는 하지 않았다.)
 
