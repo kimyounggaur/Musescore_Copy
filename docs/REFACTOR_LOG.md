@@ -457,6 +457,48 @@ start()
 
 **자체 승인**: 위 계획대로 진행한다. 코드·파일만 만들고 배포·공개는 하지 않는다.
 
+### P9-3 내보내기 개선 (2026-11-25 승인)
+**목표**: ①여러 쪽 SVG·PNG를 쪽마다 따로 내려받지 않고 ZIP 파일 하나로 받는다(한 쪽이면 지금처럼 파일 하나). ②MusicXML에 부제·작사가·저작권을 내보내고, 가져올 때도 함께 읽는다. ③PDF는 인쇄 경로를 그대로 두고 권장 설정 안내 문구를 다듬는다(직접 PDF를 만들지는 않는다 — 설계서도 라이브러리가 필요해 보류). ④파일 메뉴를 새로·열기·최근 작업·저장 / 내보내기 / 설명서 / 데모 순서로 정리한다.
+
+**조사 결과(이 저장소에서 본 것)**
+- js/export-ui.js `download()`는 쪽마다 `A.IO.download`를 따로 불러 `이름-1.svg`, `이름-2.svg`…를 연달아 내려받는다. 브라우저가 연속 내려받기를 막거나 허락을 묻는 경우가 있다. PNG는 `png()`가 Blob을 돌려준다.
+- 파일 메뉴: SVG·PNG 항목은 export-ui.js `init`이 `menu.append`로 붙여서 메뉴 맨 끝(데모 뒤)에 나오고, 그 뒤에 클라우드 묶음이 붙는다. MusicXML·MIDI·인쇄만 저장 아래 고정 위치에 있다. 고정 항목은 14개(tests/menus.test.mjs), 실행 중 항목 합계는 20개(tests/menus-browser.test.mjs)다.
+- MusicXML 머리말(io.js 내보내기)은 `<work-title>`·`<creator type="composer">`·`<software>`뿐이다. 악보 메타의 subtitle·lyricist·copyright(UI 입력과 조판은 이미 있고 schema.js가 200자로 자른다)는 MusicXML을 거치면 사라진다. 가져오기(`createScore` 호출 부근)는 제목(work-title → movement-title)과 작곡가만 읽는다.
+- 이미 .mxl 읽기(io.js `readMxl`, SF.io로 공개)가 있어 ZIP을 읽는 쪽은 있으나 쓰는 쪽이 없다. 이 환경에는 python3(zipfile)·unzip·xmllint가 있어 만든 ZIP·XML을 독립 도구로 검사할 수 있다.
+- MuseScore 쪽 동작(musescore.org 포럼 보고를 읽은 것이고, 이 환경에서는 MuseScore를 실행할 수 없어 직접 확인하지 못했다): 저작권은 identification/rights, 작사가는 creator type="lyricist"(없으면 poet)에서 가져온다. 첫 쪽 credit-words가 하나라도 있으면 그 글들을 제목 틀에 가져오고, 없으면 identification 정보로 기본 머리말을 만든다. movement-title이 있으면 제목으로 쓰면서 work-title을 덮어쓴다 → 부제를 movement-title에 넣으면 진짜 제목이 가려질 수 있다. MusicXML에서 부제를 나타내는 표준 방법은 `<credit-type>subtitle</credit-type>`뿐이다.
+
+**만들 것**
+| 파일 | 내용 |
+|---|---|
+| js/zip.js (신규) | `SF.zip.create(entries, options)` → Uint8Array. 무압축(stored) ZIP: 로컬 헤더·중앙 디렉터리·끝 기록, CRC32(`SF.zip.crc32`, 이어 계산 가능), 이름 UTF-8 플래그(bit 11), DOS 시각(options.date, 1980~2107로 맞춤), 입력 검사(이름 모양·중복·개수 65,535·크기 4GB, 지원하지 않는 자료형) |
+| js/export-ui.js | `planFiles(format, name, count)`(파일 이름 계획, 순수 함수) · 여러 쪽이면 ZIP 하나(`이름-svg.zip`·`이름-png.zip`, 안은 `이름-1.svg`…, 쪽 수가 10 이상이면 0을 채움) · 한 쪽이면 지금과 같음 · 인쇄 안내 문구 · SVG·PNG 메뉴 항목을 MIDI 바로 뒤에 끼워 넣음 |
+| js/io.js | MusicXML 내보내기: creator lyricist·rights(값이 있을 때만), 부제가 있으면 credit 묶음(title·subtitle·composer·lyricist). 가져오기: 부제(credit-type subtitle)·작사가(lyricist, 없으면 poet)·저작권(rights, 여러 개는 " / "로 이음), 각각 200자로 자름 |
+| index.html | `#file-menu`에 `내보내기` 구역 제목, `<script src="js/zip.js">`(export-ui.js보다 앞) |
+| js/i18n.js | 새 문구 행(구역 제목·ZIP 완료 알림 2·크기 초과 오류) · 인쇄 안내 행 문구 교체 |
+| sw.js · precache-manifest.json · js/version.js | `node tests/prepare-release.mjs`로 다시 만듦(캐시 44 → 45개, 버전 올리기는 R-2) |
+| 시험 (신규 3) | tests/zip.test.mjs · tests/export-p93.test.mjs(Node) · tests/export-p93-browser.test.mjs(브라우저) |
+
+**설계서와 다르게 하는 점(미리 밝힘)**
+ⓐ "내보내기 하위 메뉴"는 옆으로 펼치는 중첩 메뉴가 아니라 이 메뉴가 이미 쓰는 "제목 달린 묶음"(설명서·데모와 같은 방식)으로 한다 — 6-1의 popover 구조·↑↓ 키 이동·모바일 터치를 그대로 두기 위해서다(중첩 popover는 새 키보드 규칙과 시험이 따로 필요).
+ⓑ 부제는 `<movement-title>`에 넣지 않고 credit-type subtitle로만 쓴다(위 조사). 부제가 있을 때는 머리말을 credit만으로 만드는 프로그램에서 제목·작곡가·작사가가 빠지지 않도록 같은 credit 묶음(title·composer·lyricist)을 함께 쓴다. 부제가 없으면 credit을 쓰지 않으므로 지금 출력과 같다(시험으로 확인).
+ⓒ 클라우드 묶음(저장·내 악보·공유 링크·자동 저장·사본)은 설계서 순서에 없어서 위치를 바꾸지 않는다(메뉴 맨 끝). "저장" 바로 아래로 옮길지는 🧑에 남긴다.
+ⓓ PDF 직접 생성은 하지 않는다(설계서와 같음).
+
+**기존 시험 중 바꿔야 하는 기대**: 없다. 고정 항목 14개·실행 중 항목 20개·마지막 항목 도달은 그대로다(위치만 바뀜). 인쇄 안내 행(i18n `export.printHelp`)의 글자가 바뀌지만 이 글자를 쓰는 시험은 없다(저장소 전체 검색으로 확인).
+
+**테스트**(먼저 쓴다)
+- Node(tests/zip.test.mjs): ①CRC32 표준 값 — "" = 0, "123456789" = cbf43926, "a" = e8b7be43, 영어 문장 = 414fa339, 'a' 100만 개 = dc25bfbc, 이어 계산 ②직접 만든 독립 파서(시험 안, 비트 단위 CRC)로 로컬 헤더·중앙 디렉터리·끝 기록의 서명·버전·플래그(0x0800)·방식 0·CRC·크기·오프셋·이름·빈틈 없음·길이 일치 ③한글·이모지 이름, 0바이트 파일, 0~255 모든 바이트, 1MB 자료, 문자열 입력(UTF-8) ④DOS 시각 해석과 1980·2107 범위 맞춤 ⑤이름 거절: 빈 이름·절대 경로·`..`·`.`·역슬래시·드라이브 글자·제어 문자·끝 `/`·너무 긴 이름·중복(대소문자 무시)·문자열 아님, 개수 한도 경계(65,535 허용·65,536 거절)와 크기 한도(시험용 한도 값으로) ⑥입력을 바꾸지 않고 출력이 입력과 독립 ⑦python3 zipfile `testzip()`·내용 해시, `unzip -t`·`unzip -p`로 교차 검사(도구가 없으면 건너뜀) ⑧앱의 `SF.io.readMxl`이 만든 ZIP에서 컨테이너·악보 XML을 읽어 같은 음표 순서를 돌려줌.
+- Node(tests/export-p93.test.mjs): ①`planFiles`: 한 쪽은 `이름.svg`, 여러 쪽은 `이름-svg.zip` + `이름-1.svg`…, 9쪽까지 한 자리·10쪽부터 두 자리·100쪽부터 세 자리, 제어 문자 바꿈, 형식별 이름 ②MusicXML 내보내기 머리말: 값이 없으면 지금 출력과 바이트까지 같음(새 요소·credit 없음), 값이 있으면 요소 순서(work → identification[creator composer, creator lyricist, rights, encoding] → credit들 → part-list)·credit 순서와 credit-type 글·XML 이스케이프(`& < > "` ' 이모지)·부제가 없을 때 credit 없음·공백뿐인 값은 생략 ③python3 ElementTree·xmllint로 짜임이 올바른 XML인지(없으면 건너뜀) ④index.html: `내보내기` 구역 제목이 첫 `<hr>`과 MusicXML 항목 사이에 있고 고정 항목 14개 그대로, zip.js가 export-ui.js보다 먼저 불러짐 ⑤i18n: 새 행의 한국어 글이 소스(export-ui.js·io.js·index.html)에 있는 글과 같고 영어로 바뀌며 한글이 안 남음, 인쇄 안내 행 ⑥소스 규칙: 새 `innerHTML` 없음.
+- 브라우저(tests/export-p93-browser.test.mjs): ①MusicXML 왕복(실제 DOMParser): 부제·작사가·저작권(한글·`&<>"'`·이모지·200자 넘는 글) → 내보내기 → 가져오기 → 같은 값, 빈 값은 가져오면 필드 없음, 값 앞뒤 공백은 잘림 ②가져오기 모양: rights 여러 개는 " / "로 이음, lyricist가 poet보다 우선·lyricist 없으면 poet, credit-type이 대소문자·공백이 달라도(`Subtitle`) 읽고 credit-type이 여럿인 credit(`page number`+`subtitle`)·credit-words가 여럿인 credit도 읽음, subtitle이 아닌 credit은 무시, movement-title은 부제로 읽지 않음(work-title이 있어도), 200자로 자르되 서로게이트 쌍을 쪼개지 않음 ③MuseScore식 파일(work-title·movement-title·creator·rights·credit 섞임)에서 제목이 그대로 ④파일 메뉴 순서(DOM 순서 전체: 새로·열기·최근·저장·구버전 저장 / 구역 제목 내보내기·MusicXML·MIDI·SVG·PNG·인쇄 / 설명서 / 데모 / 클라우드 묶음)와 영어로 바꿨을 때 구역 제목 `Export`, ↑↓ 키가 새 순서를 따라감 ⑤실제 내려받기(Playwright download): 여러 쪽 악보에서 SVG·PNG가 ZIP 하나로 내려오고(파일 이름·안의 이름·쪽 수·SVG는 exportPages와 같은 글·PNG는 서명과 크기 2480×3508·300dpi pHYs), 시험의 독립 파서·python3·unzip 모두 통과, 한 쪽 악보는 ZIP 없이 파일 하나(기존 동작), 이전처럼 알림 문구가 나옴.
+- 기존 시험: tests/menus.test.mjs·menus-browser.test.mjs·export-hits-browser.test.mjs·i18n.test.mjs·io.test.mjs·audioio 시험이 그대로 통과해야 한다(수정 없음).
+- 변이 검사: CRC 다항식·초기값·마지막 XOR·표 만들기·바이트 갱신 / 서명 상수·리틀엔디언 쓰기·버전·플래그 0x0800(로컬·중앙 각각)·방식·크기(로컬·중앙)·오프셋 누적·끝 기록의 개수·크기·위치 / UTF-8 이름 길이 / DOS 시각·범위 맞춤 / 이름 검사 각 조건·중복·한도 경계 / 문자열→UTF-8 / planFiles(채움 자리수·ZIP 조건·이름 모양·제어 문자) / 한 쪽일 때 ZIP 만들지 않음 / MusicXML 요소 순서·생략 조건·이스케이프·credit 조건·credit 순서·글 / 가져오기 선택자·poet 대체·이음 글·자르기·credit-type 비교 / 메뉴 끼워 넣기 위치(append로 되돌림·print 앞뒤) / i18n 행.
+
+**위험과 대비**: ①ZIP이 어떤 프로그램에서만 안 열림 → 독립 파서·python zipfile·unzip으로 검사하고, 운영체제 기본 압축 해제는 🧑 ②한글 이름이 깨짐(옛 윈도) → UTF-8 플래그를 쓰고 시험, 오래된 도구는 🧑에 알림 ③큰 PNG 여러 장이 메모리를 많이 씀 → 쪽을 차례로 만들고 한 번만 묶는다(기존도 쪽마다 Blob을 만들었다) ④부제가 있는 악보를 다른 프로그램이 다르게 보여 줌 → 부제가 없으면 출력이 그대로임을 시험으로 고정하고 🧑에 확인 요청 ⑤메뉴 순서 변경이 익숙한 위치를 바꿈 → 항목 이름·단축키·명령 팔레트는 그대로 ⑥이름에 제어 문자가 들어 있으면 ZIP 이름 검사에서 거절됨 → planFiles가 바꿔서 막고 시험.
+
+**사람이 해야 할 일(보고용)**: ①여러 쪽 악보를 SVG·PNG로 내보낸 ZIP이 Windows 탐색기·macOS·휴대폰 기본 압축 해제로 열리고 한글 파일 이름이 맞는지 확인 ②부제·작사가·저작권을 채운 악보의 MusicXML을 MuseScore(또는 쓰는 다른 악보 프로그램)에서 열어 머리말·악보 정보에 보이는지 확인(부제가 있을 때만 credit이 들어간다) ③클라우드 묶음을 "저장" 바로 아래로 옮길지 결정 ④한 쪽짜리 악보도 ZIP으로 받고 싶은지 결정(지금은 한 쪽이면 파일 하나).
+
+**자체 승인**: 위 계획대로 진행한다. 코드·파일만 만들고 배포·공개는 하지 않는다.
+
 ## Phase 검토 기록 (R-1 — 코드는 고치지 않고 점검만)
 
 ### Phase 2 작업 보존 검토 (2026-11-23, phase/p2-work-safety)
