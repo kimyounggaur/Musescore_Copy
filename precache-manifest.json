@@ -34,6 +34,7 @@
   "js/ui-dialog.js",
   "js/ui-v3.js",
   "js/version.js",
+  "licenses.html",
   "manifest.webmanifest",
   "manual/assets/01-main-workspace.png",
   "manual/assets/02-score-settings.png",

@@ -873,6 +873,7 @@
     });
     $("#midi-select").addEventListener("change", () => connectMidiInput($("#midi-select").value));
     $("#btn-help").addEventListener("click", () => $("#dlg-help").showModal());
+    $("#about-version").textContent = SF.VERSION || "";   // 도움말 창의 "정보" 구역(P9-5)
     $("#btn-zoom-in").addEventListener("click", () => { ui.zoom = Math.min(2.4, ui.zoom + 0.15); applyZoom(); });
     $("#btn-zoom-out").addEventListener("click", () => { ui.zoom = Math.max(0.5, ui.zoom - 0.15); applyZoom(); });
 

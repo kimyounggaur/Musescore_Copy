@@ -330,6 +330,11 @@
     rhythm | 리듬 연습 | Rhythm practice
     rhythmHint | 8분음표·점음표·빔 예제 | Eighth notes, dotted notes, and beams
   `);
+  group("about", `
+    title | 정보 | About
+    versionLabel | ScoreForge · 버전 | ScoreForge · Version
+    licenses | 라이선스 고지 | Licenses and credits
+  `);
   group("help", `
     title | 도움말 · 단축키 | Help · Keyboard shortcuts
     imageAlt | 도움말 단축키 다이얼로그 이미지 | Help and keyboard shortcuts dialog image
