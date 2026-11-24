@@ -337,6 +337,39 @@ start()
 
 **자체 승인**: 위 계획대로 진행한다. 운영 DB에는 접속하지 않고, 분리 자체는 사람 작업으로 남긴다.
 
+### P9-5 라이선스 고지 (2026-11-25 승인)
+**목표**: 글꼴·라이브러리·음원의 라이선스 고지를 갖추고 앱 안에서 볼 수 있게 한다. 음원별 "재배포·자체 호스팅 가능 여부" 표를 만들어 P9-4의 입력으로 쓴다. 저장소 `LICENSE`는 사람이 정할 일이라 **만들지 않는다**(🧑 — 사람이 해야 할 일과 docs/DECISIONS.md D5에 선택지를 적는다).
+
+**조사 결과(웹·패키지 정보로 확인한 것 — 출처는 THIRD_PARTY_NOTICES.md에 적는다)**
+- Bravura 1.392(Steinberg, 2021): 글꼴 파일의 이름표(name ID 0)에 저작권 문구와 SIL OFL 1.1 전문이 들어 있다 → `fonts/OFL.txt`는 그 문구를 그대로 쓴다.
+- supabase-js 2.114.0: MIT(vendor/supabase-LICENSE). 번들 안에 같은 버전의 하위 패키지 5개(auth·postgrest·realtime·storage·functions — 모두 MIT)와 @supabase/phoenix 0.4.5(MIT)·iceberg-js 0.8.1(MIT)·tslib 2.8.1(0BSD)이 들어 있다(각 package.json의 license 필드). smplr 1.0.0: MIT(upstream에 별도 파일이 없어 package.json 선언 기준 — vendor/smplr/LICENSE에 이미 그렇게 적혀 있음).
+- 음원 ① Soundfont(gleitz.github.io, smplr 기본 키트 MusyngKite — 기본 피아노·일렉피아노·뮤직박스·오르간·스트링·플루트·클래식 기타·8비트): gleitz 저장소 README는 CC BY-SA 3.0이라고 적지만, 원본 Musyng Kite(제작자 Sarcyan)는 "여러 사람의 샘플과 본인 작업을 모은 것"이라고 제작자가 답했다는 포럼 글이 있고, 다른 목록에는 "개인 사용, 더 강한 제한 없이 재배포" 또는 "비상업"으로 적혀 표기가 엇갈린다 → **재배포 가능 여부 불명 → P9-4에서 자체 호스팅은 하지 않는다.**
+- 음원 ② Splendid Grand Piano(smpldsnds.github.io, 설정에서 고르는 고음질 피아노): sfzinstruments 목록과 smpldsnds 저장소 설명 모두 "Public Domain"(제작 AKAI) → 출처 기재 기준으로 재배포 가능.
+- 음원 ③ goldst.dev: smplr가 `loadLoopData`를 켤 때만 부르는 주소이고(vendor/smplr/index.mjs) 앱은 켜지 않는다 → 실제로는 요청되지 않는다(P9-4에서 허용 목록 정리 후보).
+
+**만들 것**
+| 파일 | 내용 |
+|---|---|
+| fonts/OFL.txt (신규) | Bravura 글꼴 파일에 들어 있는 저작권 문구 + SIL OFL 1.1 전문(글꼴과 함께 배포). 시험이 글꼴 파일 안의 문구와 같은지 확인 |
+| THIRD_PARTY_NOTICES.md (신규) | ①앱과 함께 배포하는 구성 요소(Bravura·supabase-js·smplr, 버전·저작권자·라이선스·파일·전문 위치) ②외부에서 불러오는 음원 표(출처·제작자·라이선스·재배포 가능 여부·자체 호스팅 판단) ③확인 필요 목록. 법률 자문이 아니라는 한 줄 |
+| licenses.html (신규, 생성물) + tests/gen-licenses.mjs (신규) | THIRD_PARTY_NOTICES.md와 라이선스 전문 3개(OFL·supabase·smplr)를 정적 HTML로 만든다. 이유: `.md`는 브라우저·배포 서버에 따라 내려받기로 처리될 수 있고 오프라인에서도 열려야 한다. css/privacy.css를 그대로 쓴다. 손으로 고치지 않고 생성하며, 시험이 "저장소의 licenses.html == 생성 결과"를 확인 |
+| index.html · js/app.js · js/i18n.js · css/style.css | 도움말 창(#dlg-help) 아래에 "정보" 구역 — 버전(SF.VERSION), [라이선스 고지](licenses.html), [개인정보 처리 안내](privacy.html). 새 상단 버튼·새 대화상자는 만들지 않는다. 영어 문구 3개(about.*) |
+| tests/release-lib.mjs · tests/release.test.mjs · package.json · sw.js · precache-manifest.json | 최상위 사전 캐시 목록에 licenses.html 추가(오프라인에서도 열림), `npm run release` 맨 앞 단계에 gen-licenses 추가, prepare-release로 sw.js 해시·목록 재생성 |
+| tests/licenses.test.mjs (신규) · tests/verify-offline.mjs | 아래 "테스트" 참고. verify-offline에는 licenses.html 오프라인 열기 확인을 privacy.html과 같은 방식으로 추가 |
+| docs/DECISIONS.md · docs/REFACTOR_LOG.md | D5 저장소 LICENSE(미정, 사람) 행, 이 계획·결과, 사람이 해야 할 일 `(P9-5)` |
+
+**설계서와 다르게 하는 점(미리 밝힘)**: ⓐ "앱 '정보' 창"을 새 대화상자로 만들지 않고 기존 도움말 창의 한 구역으로 둔다 — 9-1이 화면 요소를 줄이는 방향이라 상단 버튼·대화상자를 늘리지 않기 위해서다(링크·버전은 같은 내용). ⓑ 고지 파일 3종 중 `LICENSE`는 만들지 않는다(사람 결정). 대신 `licenses.html`을 더한다. ⓒ 프롬프트북은 `LICENSE` 때문에 "멈추고 묻는다"지만 사용자 지시(묻지 말고 자체 승인)에 따라 선택지를 문서에 남기고 진행한다.
+
+**기존 시험 중 바꿔야 하는 기대(설계가 요구하는 변경)**: ①tests/release.test.mjs의 "최상위 7개(privacy.html 포함)" 목록 시험 → 8개(licenses.html 추가) ②같은 파일의 `npm run release` 문자열 기대에 gen-licenses 단계가 끼어든다. 둘 다 약화가 아니라 새 파일·새 단계를 반영하는 것이다. 결과 행에서 확정해 적는다.
+
+**테스트**(먼저 쓴다): ①fonts/OFL.txt가 글꼴 파일(WOFF2)의 name ID 0과 같다(WOFF2 표 디렉터리를 읽는 작은 함수를 시험 안에 두고 brotli는 node:zlib) — 글꼴을 바꾸면서 고지를 안 고치면 실패 ②THIRD_PARTY_NOTICES.md: 구성 요소 표의 버전이 vendor/manifest.json의 supabase-js·smplr 버전과 같고, 라이선스·전문 위치가 실제 파일을 가리키며(존재 확인), 글꼴 버전이 글꼴 파일의 name ID 5와 같다 ③음원 표가 sw.js `SAMPLE_HOSTS`의 모든 호스트를 포함하고 각 행에 재배포 판단 칸이 비어 있지 않다 ④"확인 필요" 목록이 있고, 지어낸 연락처·이메일이 없다 ⑤licenses.html == 생성 결과, OFL·MIT 전문 포함, 인라인 스크립트·외부 주소 없음 ⑥index.html 정보 구역: 링크 2개·버전 칸, 영어 번역(`SF.i18n.audit().untranslated`에 정보 구역 없음) ⑦브라우저(좁은 폭 포함): 도움말 창을 열면 버전이 `SF.VERSION`과 같고 두 링크가 눌리며, licenses.html이 CSP(vercel.json 헤더)에서 오류 없이 열린다. 변이 검사로 시험이 정말 잡는지 확인한다(버전 표 한 칸 틀리게, OFL 한 글자 틀리게, 링크 주소 틀리게, 생성기 출력 어긋나게).
+
+**위험과 대비**: ①OFL·MIT 문구를 잘못 옮김 → 글꼴에서 기계적으로 뽑고(손으로 안 옮김) 시험이 비교 ②조사 결과를 사실처럼 단정함 → 표에는 "출처 기재 기준"·"확인 필요"를 그대로 적고, 확인 못 한 것은 지어내지 않음 ③licenses.html이 오래된 채 배포 → 생성 시험 + release 단계 ④precache 변경으로 sw.js 해시 바뀜 → prepare-release 후 같이 커밋하고 verify-offline·verify-deploy 확인 ⑤도움말 창이 좁은 화면에서 넘침 → 브라우저 시험에서 375px 폭 확인.
+
+**사람이 해야 할 일(보고용)**: 저장소 `LICENSE` 선택(예: MIT처럼 누구나 쓰고 고쳐 배포 가능 / 소스 비공개 "모든 권리 보유" 표기 / GPL류처럼 고쳐 배포하면 소스 공개 의무), THIRD_PARTY_NOTICES.md "확인 필요" 항목(Musyng Kite 원본 이용 조건·Splendid 원 제작자 문서·하위 패키지별 저작권 문구·데모 곡 출처) 확인.
+
+**자체 승인**: 위 계획대로 진행한다. 코드·파일만 만들고 배포·공개는 하지 않는다.
+
 ## Phase 검토 기록 (R-1 — 코드는 고치지 않고 점검만)
 
 ### Phase 2 작업 보존 검토 (2026-11-23, phase/p2-work-safety)
