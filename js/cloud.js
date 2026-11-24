@@ -427,6 +427,20 @@
     for (const row of data || []) if (ids.includes(row.owner)) counts[row.owner] = Number(row.score_count);
     return counts;
   }
+  // 탈퇴(P8-4d)한 계정이 이 브라우저에 남긴 것만 지운다: 그 계정의 저장 대기 작업, 읽어 둔 목록, 열려 있는 악보의 클라우드 식별 정보.
+  // 다른 계정의 대기 작업과 악보 내용 자체(로컬 악보)는 건드리지 않는다. 서버에는 아무것도 보내지 않는다(서버 쪽 삭제는 Edge Function의 일).
+  function purgeOwner(owner) {
+    if (typeof owner !== "string" || !UUID.test(owner)) return 0;
+    const activeJob = active && queue.get(active.key);
+    let removed = 0;
+    for (const [key, job] of queue) if (job.owner === owner) { queue.delete(key); removed++; }
+    for (const [id, row] of rows) if (row.owner === owner) rows.delete(id);
+    const own = Boolean(active && active.owner === owner);
+    if (own) { active.id = null; active.version = null; active.owner = null; writeMetadata({}); }
+    if (own || (activeJob && activeJob.owner === owner)) { state.dirty = false; status("클라우드 저장 준비"); }
+    storeQueue();
+    return removed;
+  }
 
   function element(tag, text, className) {
     const el = document.createElement(tag);
@@ -588,5 +602,5 @@
   }
   SF.cloud = { state, init, list, save, saveCurrent, load, remove, rename, setPublic, loadShared,
     open: id => openScore(id), openShared: slug => openScore(slug, true), openList, shareCurrent,
-    makeLocalCopy, setAutoSave, onScoreLoaded, onAuthChanged, drain, countByOwner };
+    makeLocalCopy, setAutoSave, onScoreLoaded, onAuthChanged, drain, countByOwner, purgeOwner };
 })(window.SF);

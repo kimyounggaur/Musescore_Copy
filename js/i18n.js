@@ -664,6 +664,24 @@
     passwordChanged | 비밀번호를 바꿨어요 | Password changed
     passwordKept | 비밀번호는 바꾸지 않았어요 | The password was not changed
     passwordFailed | 비밀번호를 바꾸지 못했어요. 재설정 메일을 다시 요청해 주세요. | Could not change the password. Request a new reset email.
+    deleteAccount | 회원 탈퇴 | Delete account
+    deleteHelp | 계정과 클라우드에 저장한 악보가 모두 지워지고 되돌릴 수 없어요. 계속하려면 비밀번호를 입력하세요. | Your account and all scores saved in the cloud will be deleted, and this cannot be undone. Enter your password to continue.
+    enterPassword | 비밀번호를 입력하세요. | Enter your password.
+    wrongPassword | 비밀번호가 맞지 않아요. 다시 입력하세요. | That password is not correct. Enter it again.
+    deleteConfirmTitle | 정말 탈퇴할까요? | Really delete your account?
+    deleteConfirmHelp | 되돌릴 수 없어요. 계속하려면 아래 칸에 "탈퇴"라고 입력하세요. | This cannot be undone. To continue, type "DELETE" in the box below.
+    deleteConfirmLabel | 확인 문구 | Confirmation word
+    deleteConfirmMismatch | "탈퇴"를 그대로 입력하세요. | Type "DELETE" exactly.
+    deleteNeedLogin | 로그인한 뒤에 탈퇴할 수 있어요. | You can delete your account after signing in.
+    deleteCancelled | 탈퇴를 취소했어요. | Account deletion was cancelled.
+    deleteBadPassword | 비밀번호가 맞지 않아 탈퇴를 진행하지 못했어요. | The password was not correct, so the account was not deleted.
+    deleteChanged | 로그인한 계정이 바뀌었어요. 탈퇴를 진행하지 않았어요. 다시 시도해 주세요. | The signed-in account changed. Nothing was deleted. Please try again.
+    deleteDone | 탈퇴가 끝났어요. 이 기기의 로컬 악보는 그대로 남아 있어요. | Your account was deleted. Scores saved locally on this device are unchanged.
+    deleteExpired | 로그인이 만료됐어요. 다시 로그인한 뒤 시도해 주세요. | Your sign-in expired. Sign in again and retry.
+    deleteBlocked | 이 주소에서는 탈퇴를 처리할 수 없어요. | Account deletion is not available from this address.
+    deleteMissing | 탈퇴 기능을 아직 쓸 수 없어요. | Account deletion is not available yet.
+    deleteFailed | 탈퇴를 처리하지 못했어요. 잠시 뒤에 다시 시도해 주세요. | Could not delete the account. Please try again in a little while.
+    deleteNetwork | 네트워크에 연결하지 못했어요. 탈퇴가 처리됐는지 확인하지 못했어요. 잠시 뒤 다시 로그인해 확인해 주세요. | Could not connect to the network. We could not confirm whether the account was deleted. Sign in again in a little while to check.
     saveFirst | Supabase 연결 정보를 먼저 저장하세요. | Save the Supabase connection details first.
     configSuffix | {message} 먼저 Supabase 연결 정보를 저장하세요. | {message} Save the Supabase connection details first.
     needCredentials | 이메일과 비밀번호를 입력하세요. | Enter your email and password.

@@ -38,6 +38,7 @@ where email = 'admin@example.com';
 - 일반 회원은 자기 프로필만 조회할 수 있습니다.
 - `role = 'admin'`인 회원만 전체 회원 목록을 조회할 수 있습니다.
 - 관리자 승격은 브라우저 UI가 아니라 Supabase SQL Editor에서만 수행합니다.
+- 회원 탈퇴 Edge Function(`functions/delete-account/`)은 **D1(프로젝트 분리) 전에는 배포하지 않습니다.** 같은 프로젝트를 쓰는 레슨 앱 데이터까지 지워질 수 있기 때문입니다. 앱의 탈퇴 버튼도 `js/config.js`의 `SF_FEATURES.deleteAccount`가 꺼져 있는 동안 숨겨집니다. 배포·확인 절차는 [`functions/delete-account/README.md`](./functions/delete-account/README.md)를 보세요.
 
 ## 4. 클라우드 저장·목록·공유
 

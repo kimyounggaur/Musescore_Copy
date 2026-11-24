@@ -54,13 +54,17 @@ const SESSION_KEY = 'sb-cgoafcjvnbzozxbbyfle-auth-token';   // supabase-js가 �
 function authMock(options = {}) {
   const state = { role: 'member', email: 'member@example.com', profileFails: false, ...options };
   const user = () => ({ id: USER_ID, aud: 'authenticated', role: 'authenticated', email: state.email, app_metadata: {}, user_metadata: { display_name: '테스터' }, created_at: '2026-01-01T00:00:00Z' });
-  const session = () => ({ access_token: 'aaa.bbb.ccc', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 3600, refresh_token: 'refresh-1', user: user() });
+  const session = (accessToken = 'aaa.bbb.ccc') => ({ access_token: accessToken, token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 3600, refresh_token: 'refresh-1', user: user() });
   const cors = { 'access-control-allow-origin': '*' };
   const json = (route, status, body) => route.fulfill({ status, contentType: 'application/json', headers: cors, body: JSON.stringify(body) });
   const handler = async (route, call) => {
     const url = new URL(call.url);
     const path = url.pathname;
-    if (path === '/auth/v1/token' && url.searchParams.get('grant_type') === 'password') { await json(route, 200, session()); return true; }
+    if (path === '/auth/v1/token' && url.searchParams.get('grant_type') === 'password') {
+      // state.password가 정해져 있으면(탈퇴 시험의 재인증) 그 값만 통과시킨다. 정해지지 않았으면 예전처럼 모두 통과.
+      if (state.password !== undefined && !(call.body && call.body.password === state.password)) { await json(route, 400, { code: 400, error_code: 'invalid_credentials', msg: 'Invalid login credentials' }); return true; }
+      await json(route, 200, session(state.reauthToken)); return true;
+    }
     if (path === '/auth/v1/user') { await json(route, 200, user()); return true; }
     if (path === '/auth/v1/logout') { await route.fulfill({ status: 204, headers: cors }); return true; }
     if (path === '/rest/v1/profiles') {
@@ -423,4 +427,211 @@ test('P8-4c ?auth=recovery만 있고 토큰이 없으면 조용히 주소만 정
     assert.equal(await page.evaluate(() => document.querySelector('#dlg-auth').open), false);
     assert.equal(await promptOpen(page), false);
   }, { path: '/?auth=recovery&keep=1' });
+});
+
+// ───────── d. 탈퇴(플래그가 꺼진 채로 출하, 시험에서만 켠다) ─────────
+const OTHER_ID = '33333333-3333-4333-8333-333333333333';
+const QUEUE_KEY = 'scoreforge.cloud.queue.v1';
+const PASSWORD = 'right-pass-1';
+// 페이지가 열리기 전에 실행: 세션 심기 · (선택) 플래그 켜기 · (선택) 오프라인으로 보이게 해 저장 대기 작업이 서버로 나가지 않게 하기
+function deleteInit({ key, session, flag, offline }) {
+  if (session) localStorage.setItem(key, JSON.stringify(session));
+  if (flag) window.SF_FEATURES = { deleteAccount: true };
+  if (offline) Object.defineProperty(navigator, 'onLine', { get: () => false });
+}
+const fnCalls = calls => calls.filter(c => /\/functions\/v1\/delete-account/.test(c.url) && c.method === 'POST');
+const reauthCalls = calls => calls.filter(c => c.method === 'POST' && /\/auth\/v1\/token/.test(c.url) && /grant_type=password/.test(c.url));
+const logoutCalls = calls => calls.filter(c => /\/auth\/v1\/logout/.test(c.url));
+// authMock + Edge Function 가짜(functionStatus: 응답 코드, 'network'는 연결 실패)
+function deleteMock({ functionStatus = 204, functionBody = '', ...options } = {}) {
+  const mock = authMock({ password: PASSWORD, ...options });
+  const handler = async (route, call, calls) => {
+    if (new URL(call.url).pathname === '/functions/v1/delete-account') {
+      if (functionStatus === 'network') { await route.abort('failed'); return true; }
+      // 실제 함수의 성공 응답처럼 본문이 없으면 content-type도 없다(있으면 supabase-js가 빈 본문을 JSON으로 읽다 실패한다)
+      await route.fulfill({ status: functionStatus, headers: { 'access-control-allow-origin': '*', ...(functionBody ? { 'content-type': 'application/json' } : {}) }, body: functionBody });
+      return true;
+    }
+    return mock.handler(route, call, calls);
+  };
+  return { ...mock, handler };
+}
+const flagInit = (mock, extra = {}) => ({ init: deleteInit, initArg: { key: SESSION_KEY, session: mock.session(), flag: true, ...extra }, handler: mock.handler });
+const signedInAs = page => page.waitForFunction(id => SF.auth.state.session?.user?.id === id, USER_ID);
+const promptTitle = page => page.evaluate(() => document.querySelector('#dlg-prompt h2')?.textContent || '');
+const promptNote = page => page.evaluate(() => document.querySelector('#dlg-prompt p')?.textContent || '');
+const answerPrompt = async (page, value) => {
+  await page.waitForFunction(() => document.querySelector('#dlg-prompt')?.open);
+  await page.fill('#prompt-value', value);
+  await page.click('#dlg-prompt button[type=submit]');
+};
+const waitPromptTitle = (page, title) => page.waitForFunction(t => document.querySelector('#dlg-prompt h2')?.textContent === t, title);
+const startDelete = async page => { await page.click('#btn-delete-account'); await waitPromptTitle(page, '회원 탈퇴'); };
+const appReady = async page => {
+  await page.waitForSelector('#svg-host .ev');
+  await page.waitForFunction(() => SF.engrave.isFontReady());
+};
+// 저장 대기 작업을 하나 만들고(편집), 다른 계정의 것도 하나 끼워 넣은 뒤 다시 읽는다. 이 계정의 것만 지워지는지 보기 위한 준비.
+async function queueTwoOwners(page) {
+  await signedInAs(page);
+  await page.evaluate(() => SF.core.mutate('시험 편집', score => { score.meta.title = '탈퇴 시험 악보'; }));
+  await page.waitForFunction(key => JSON.parse(localStorage.getItem(key) || '[]').length === 1, QUEUE_KEY);
+  await page.evaluate(([key, other]) => {
+    const jobs = JSON.parse(localStorage.getItem(key));
+    localStorage.setItem(key, JSON.stringify([...jobs, { ...jobs[0], key: crypto.randomUUID(), insertId: crypto.randomUUID(), owner: other }]));
+  }, [QUEUE_KEY, OTHER_ID]);
+  await page.reload({ waitUntil: 'networkidle' });
+  await appReady(page);
+  await signedInAs(page);
+  assert.deepEqual(await queueOwners(page), [USER_ID, OTHER_ID], '두 계정의 대기 작업이 준비됐다');
+}
+const queueOwners = page => page.evaluate(key => JSON.parse(localStorage.getItem(key) || '[]').map(job => job.owner), QUEUE_KEY);
+
+test('P8-4d 플래그가 꺼진 채로 출하된다: 로그인해도 탈퇴 버튼이 안 보이고, 코드로 불러도 요청이 한 건도 가지 않는다', { skip, timeout: 90000 }, async () => {
+  const mock = deleteMock();
+  await withPage(async (page, calls) => {
+    await signedInAs(page);
+    assert.equal(await page.evaluate(() => window.SF_FEATURES.deleteAccount), false, '출하 값');
+    assert.equal(await visible(page, '#btn-logout'), true, '로그인 상태');
+    assert.equal(await visible(page, '#btn-delete-account'), false);
+    const before = calls.length;
+    assert.deepEqual(await page.evaluate(() => SF.auth.deleteAccount()), { ok: false, reason: 'disabled' });
+    await page.evaluate(() => document.querySelector('#btn-delete-account').click());   // 숨겨진 버튼도 코드로는 누를 수 있다
+    await new Promise(resolve => setTimeout(resolve, 300));
+    assert.equal(await promptOpen(page), false, '대화상자가 열리지 않는다');
+    assert.equal(calls.length, before, '요청이 한 건도 없다');
+    assert.equal(fnCalls(calls).length, 0);
+    assert.equal(reauthCalls(calls).length, 0);
+  }, { init: deleteInit, initArg: { key: SESSION_KEY, session: mock.session() }, handler: mock.handler });
+});
+
+test('P8-4d 주소(?deleteAccount=1…)나 localStorage 값으로는 켜지지 않는다', { skip, timeout: 90000 }, async () => {
+  const mock = deleteMock();
+  await withPage(async (page, calls) => {
+    await signedInAs(page);
+    assert.equal(await page.evaluate(() => SF.auth.deleteEnabled()), false);
+    assert.equal(await visible(page, '#btn-delete-account'), false);
+    assert.deepEqual(await page.evaluate(() => SF.auth.deleteAccount()), { ok: false, reason: 'disabled' });
+    assert.equal(fnCalls(calls).length + reauthCalls(calls).length, 0);
+  }, { path: '/?deleteAccount=1&features=deleteAccount&dev=1',
+    init: ({ key, session }) => {
+      localStorage.setItem(key, JSON.stringify(session));
+      for (const name of ['scoreforge.deleteAccount', 'scoreforge.features', 'scoreforge.features.deleteAccount', 'SF_FEATURES']) localStorage.setItem(name, '1');
+    }, initArg: { key: SESSION_KEY, session: mock.session() }, handler: mock.handler });
+});
+
+test('P8-4d (플래그를 켠 시험) 로그인했을 때만 버튼이 보이고, 누르면 비밀번호 창이 열리며, 어느 단계에서 취소해도 아무것도 지우지 않는다', { skip, timeout: 90000 }, async () => {
+  const mock = deleteMock();
+  await withPage(async (page, calls) => {
+    assert.equal(await visible(page, '#btn-delete-account'), false, '로그인 전에는 숨김');
+    await signIn(page, 'member@example.com', PASSWORD);
+    await page.waitForFunction(() => !document.querySelector('#btn-delete-account').hidden);
+    assert.equal(await visible(page, '#btn-delete-account'), true);
+    assert.equal(await page.textContent('#btn-delete-account'), '회원 탈퇴');
+    const base = reauthCalls(calls).length;
+
+    await startDelete(page);                                  // 1) 비밀번호 창
+    assert.equal(await page.getAttribute('#prompt-value', 'type'), 'password');
+    assert.equal(await page.getAttribute('#prompt-value', 'autocomplete'), 'current-password');
+    assert.match(await promptNote(page), /되돌릴 수 없어요/);
+    await page.click('#dlg-prompt button[type=submit]');      // 빈 칸은 통과하지 못한다
+    assert.match(await page.textContent('#prompt-error'), /비밀번호를 입력하세요/);
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('#dlg-prompt'));
+    await page.waitForFunction(() => /탈퇴를 취소했어요/.test(document.querySelector('#toast').textContent));
+    assert.equal(reauthCalls(calls).length, base, '비밀번호 창에서 취소하면 재인증 요청도 없다');
+
+    await startDelete(page);                                  // 2) 확인 문구 창에서 취소
+    await answerPrompt(page, PASSWORD);
+    await waitPromptTitle(page, '정말 탈퇴할까요?');
+    assert.equal(reauthCalls(calls).length, base + 1, '비밀번호 확인은 한 번');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('#dlg-prompt'));
+    assert.equal(fnCalls(calls).length, 0, '함수를 부르지 않았다');
+    assert.equal(logoutCalls(calls).length, 0, '로그아웃도 하지 않았다');
+    assert.ok(await page.evaluate(() => SF.auth.state.session), '로그인 상태 그대로');
+    assert.equal(await visible(page, '#btn-delete-account'), true);
+  }, { init: deleteInit, initArg: { flag: true }, handler: mock.handler });
+});
+
+test('P8-4d (플래그를 켠 시험) 비밀번호를 3번 틀리면 안내와 함께 끝나고 함수는 부르지 않는다', { skip, timeout: 90000 }, async () => {
+  const mock = deleteMock();
+  await withPage(async (page, calls) => {
+    await signedInAs(page);
+    await page.waitForFunction(() => !document.querySelector('#btn-delete-account').hidden);
+    await startDelete(page);
+    await answerPrompt(page, 'wrong-1');
+    await page.waitForFunction(() => /비밀번호가 맞지 않아요/.test(document.querySelector('#dlg-prompt p')?.textContent || ''));
+    assert.equal(await promptTitle(page), '회원 탈퇴', '같은 창을 다시 보여 준다');
+    await answerPrompt(page, 'wrong-2');
+    await until(() => reauthCalls(calls).length === 2, '재인증 요청 2건');
+    await page.waitForFunction(() => /비밀번호가 맞지 않아요/.test(document.querySelector('#dlg-prompt p')?.textContent || ''));
+    await answerPrompt(page, 'wrong-3');
+    await page.waitForFunction(() => !document.querySelector('#dlg-prompt'));
+    await page.waitForFunction(() => /비밀번호가 맞지 않아 탈퇴를 진행하지 못했어요/.test(document.querySelector('#toast').textContent));
+    assert.equal(reauthCalls(calls).length, 3);
+    assert.equal(fnCalls(calls).length, 0);
+    assert.ok(await page.evaluate(() => SF.auth.state.session), '로그인 상태 그대로');
+  }, flagInit(mock));
+});
+
+test('P8-4d (플래그를 켠 시험) 성공하면: 확인 문구 검사 → 재인증한 토큰으로 함수 호출 → 이 기기 로그아웃 → 이 계정의 대기 작업만 삭제', { skip, timeout: 120000 }, async () => {
+  const mock = deleteMock({ reauthToken: 'reauth.token.value' });
+  await withPage(async (page, calls) => {
+    await queueTwoOwners(page);
+    await page.waitForFunction(() => !document.querySelector('#btn-delete-account').hidden);
+    const scoreBefore = await page.evaluate(() => JSON.stringify(SF.core.toJSON(SF.core.state.score)));
+    await startDelete(page);
+    await answerPrompt(page, PASSWORD);
+    await waitPromptTitle(page, '정말 탈퇴할까요?');
+    assert.match(await promptNote(page), /"탈퇴"/);
+    await answerPrompt(page, '탈퇴하기');                      // 정확히 "탈퇴"가 아니면 막힌다
+    await page.waitForFunction(() => /탈퇴/.test(document.querySelector('#prompt-error')?.textContent || ''));
+    assert.equal(await promptOpen(page), true);
+    assert.equal(fnCalls(calls).length, 0, '틀린 확인 문구로는 함수를 부르지 않는다');
+    await answerPrompt(page, '탈퇴');
+
+    await until(() => fnCalls(calls).length === 1, '함수 호출 1건');
+    await until(() => logoutCalls(calls).length === 1, '로그아웃 요청 1건');
+    await page.waitForFunction(() => SF.auth.state.session === null);
+    const fn = fnCalls(calls)[0];
+    assert.equal(fn.headers.authorization, 'Bearer reauth.token.value', '방금 비밀번호로 확인한 계정의 토큰');
+    assert.equal(fn.body === null || fn.body === '' || fn.body === undefined, true, `지울 대상을 본문으로 지정하지 않는다: ${JSON.stringify(fn.body)}`);
+    assert.equal(new URL(fn.url).search, '', '쿼리로도 지정하지 않는다');
+    assert.match(logoutCalls(calls)[0].url, /scope=local/, '다른 기기를 끊는 global이 아니다');
+    const sequence = calls.filter(c => reauthCalls([c]).length || fnCalls([c]).length || logoutCalls([c]).length).map(c => (reauthCalls([c]).length ? 'reauth' : fnCalls([c]).length ? 'function' : 'logout'));
+    assert.deepEqual(sequence, ['reauth', 'function', 'logout'], '순서: 비밀번호 확인 → 탈퇴 요청 → 이 기기 로그아웃');
+    assert.deepEqual(await queueOwners(page), [OTHER_ID], '이 계정의 대기 작업만 사라지고 다른 계정의 것은 남는다');
+    assert.equal(await page.evaluate(key => localStorage.getItem(key), SESSION_KEY), null, '이 기기의 로그인 정보가 지워졌다');
+    assert.equal(await visible(page, '#btn-delete-account'), false);
+    assert.equal(await visible(page, '#btn-member-login'), true, '로그인 전 화면으로 돌아왔다');
+    assert.match(await page.textContent('#auth-status'), /로그인 전/);
+    await page.waitForFunction(() => /탈퇴가 끝났어요/.test(document.querySelector('#toast').textContent));
+    assert.match(await toastText(page), /로컬 악보는 그대로/);
+    assert.equal(await page.evaluate(() => JSON.stringify(SF.core.toJSON(SF.core.state.score))), scoreBefore, '열려 있던 악보 내용은 그대로');
+  }, flagInit(mock, { offline: true }));
+});
+
+test('P8-4d (플래그를 켠 시험) 함수 호출이 실패하면(401·서버 오류·연결 실패) 로그인과 대기 작업을 그대로 두고 알맞은 문구를 보인다', { skip, timeout: 180000 }, async () => {
+  for (const [functionStatus, functionBody, expected] of [
+    [401, '{"error":"unauthorized"}', /로그인이 만료됐어요/],
+    [500, '{"error":"delete_failed","detail":"SECRET-INTERNAL-DETAIL"}', /탈퇴를 처리하지 못했어요/],
+    ['network', '', /네트워크에 연결하지 못했어요/],
+  ]) {
+    const mock = deleteMock({ functionStatus, functionBody });
+    await withPage(async (page, calls) => {
+      await queueTwoOwners(page);
+      await page.waitForFunction(() => !document.querySelector('#btn-delete-account').hidden);
+      await startDelete(page);
+      await answerPrompt(page, PASSWORD);
+      await waitPromptTitle(page, '정말 탈퇴할까요?');
+      await answerPrompt(page, '탈퇴');
+      await page.waitForFunction(re => new RegExp(re).test(document.querySelector('#toast').textContent), expected.source);
+      assert.doesNotMatch(await toastText(page), /SECRET-INTERNAL-DETAIL|delete_failed/, '서버가 준 상세는 보이지 않는다');
+      assert.equal(logoutCalls(calls).length, 0, `${functionStatus}: 로그아웃하지 않았다`);
+      assert.ok(await page.evaluate(() => SF.auth.state.session), `${functionStatus}: 로그인 상태 그대로`);
+      assert.deepEqual(await queueOwners(page), [USER_ID, OTHER_ID], `${functionStatus}: 대기 작업 그대로`);
+      assert.equal(await visible(page, '#btn-delete-account'), true, '다시 시도할 수 있다');
+    }, flagInit(mock, { offline: true }));
+  }
 });

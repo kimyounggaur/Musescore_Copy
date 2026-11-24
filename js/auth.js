@@ -4,6 +4,7 @@
   const C = SF.core;
   const $ = selector => document.querySelector(selector);
   const toast = message => SF.app.toast(message);
+  const longToast = message => SF.app.toast(message, { duration: 6000 });   // 꼭 읽어야 하는 알림(탈퇴 결과 등)
   const htmlEsc = SF.html.esc;
   const SUPABASE_URL_KEY = "scoreforge.supabase.url";
   const SUPABASE_KEY_KEY = "scoreforge.supabase.publishableKey";
@@ -313,6 +314,7 @@
     const memberLogin = $("#btn-member-login");
     const adminPage = $("#btn-admin-page");
     const logout = $("#btn-logout");
+    const deleteButton = $("#btn-delete-account");
     if (signup) signup.hidden = signedIn;
     if (memberLogin) memberLogin.hidden = signedIn;
     // P8-4b: 관리자도 일반 로그인을 쓴다. "관리자 페이지"는 로그인한 관리자에게만 보인다.
@@ -321,6 +323,7 @@
       adminPage.classList.toggle("on", admin);
     }
     if (logout) logout.hidden = !signedIn;
+    if (deleteButton) deleteButton.hidden = !(signedIn && deleteEnabled());   // P8-4d: 플래그가 꺼진 동안은 로그인해도 숨김
     window.dispatchEvent(new CustomEvent("scoreforge:auth", { detail: { userId: authState.session?.user?.id || null } }));
     if (SF.cloud?.state.initialized) SF.cloud.onAuthChanged();
     applyConnectionChrome();
@@ -517,6 +520,114 @@
     }
   }
 
+  // ───────── P8-4d 회원 탈퇴 ─────────
+  // 레슨 앱과 Supabase 프로젝트를 나누기 전(D1)에는 사용자를 지우면 레슨 앱 데이터까지 지워질 수 있다. 그래서 js/config.js의
+  // SF_FEATURES.deleteAccount가 true가 되기 전에는 버튼도 숨기고 deleteAccount()도 아무 요청 없이 돌아온다.
+  // 플래그는 그 파일(또는 배포·시험이 먼저 정한 값)에서만 읽는다 — 주소·localStorage로는 켜지지 않는다.
+  // 절차: 비밀번호 다시 입력 → "탈퇴" 입력 → Edge Function 호출(비밀번호로 확인한 계정의 토큰에 고정) → 이 기기 로그아웃 → 이 계정의 저장 대기 작업만 삭제.
+  const DELETE_WORDS = ["탈퇴", "delete"];   // 영어 화면에서도 쓸 수 있게 DELETE도 받는다
+  function deleteEnabled() {
+    const flags = window.SF_FEATURES;
+    return Boolean(flags && flags.deleteAccount === true);
+  }
+  function deleteErrorMessage(err) {
+    const status = Number(err && err.context && err.context.status);
+    if (err && err.name === "FunctionsHttpError") {
+      if (status === 401) return "로그인이 만료됐어요. 다시 로그인한 뒤 시도해 주세요.";
+      if (status === 403) return "이 주소에서는 탈퇴를 처리할 수 없어요.";
+      if (status === 404) return "탈퇴 기능을 아직 쓸 수 없어요.";
+      if (status === 429) return "요청이 너무 잦아요. 잠시 뒤에 다시 시도하세요.";
+    }
+    if ((err && err.name === "FunctionsFetchError") || /failed to fetch|networkerror|load failed|network request failed/i.test(String((err && err.message) || ""))) {
+      return "네트워크에 연결하지 못했어요. 탈퇴가 처리됐는지 확인하지 못했어요. 잠시 뒤 다시 로그인해 확인해 주세요.";
+    }
+    return "탈퇴를 처리하지 못했어요. 잠시 뒤에 다시 시도해 주세요.";   // 서버가 준 문장은 보이지 않는다
+  }
+  const isWrongPassword = err => /invalid_credentials/i.test(String((err && err.code) || "")) || /invalid login credentials/i.test(String((err && err.message) || ""));
+  // 비밀번호를 다시 입력받아 지금 계정의 비밀번호인지 확인한다(최대 3번). 확인되면 { session }, 그만두거나 실패하면 { reason }.
+  async function reauthenticate(client, user) {
+    let problem = "";
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const password = await SF.ui.promptDialog({
+        title: "회원 탈퇴",
+        message: problem || "계정과 클라우드에 저장한 악보가 모두 지워지고 되돌릴 수 없어요. 계속하려면 비밀번호를 입력하세요.",
+        label: "비밀번호",
+        type: "password",
+        autocomplete: "current-password",
+        danger: true,
+        confirmText: "다음",
+        validate: value => (value ? "" : "비밀번호를 입력하세요."),
+      });
+      if (password === null) return { reason: "cancelled" };
+      const { data, error } = await client.auth.signInWithPassword({ email: user.email, password });
+      if (!error) return { session: data && data.session };
+      if (!isWrongPassword(error)) return { reason: "error", message: authErrorMessage(error) };
+      problem = "비밀번호가 맞지 않아요. 다시 입력하세요.";
+    }
+    return { reason: "password" };
+  }
+  let deleteRunning = false;
+  async function deleteAccount() {
+    if (!deleteEnabled()) return { ok: false, reason: "disabled" };
+    if (deleteRunning) return { ok: false, reason: "busy" };
+    const user = authState.session && authState.session.user;
+    const client = getSupabaseClient({ requireConfig: false });
+    if (!client || !user || !user.id || !user.email) {
+      toast("로그인한 뒤에 탈퇴할 수 있어요.");
+      return { ok: false, reason: "signed-out" };
+    }
+    if (!SF.ui || typeof SF.ui.promptDialog !== "function") return { ok: false, reason: "unavailable" };
+    deleteRunning = true;
+    try {
+      let verified;
+      try {
+        const checked = await reauthenticate(client, user);
+        if (checked.reason === "cancelled") { toast("탈퇴를 취소했어요."); return { ok: false, reason: "cancelled" }; }
+        if (checked.reason === "password") { longToast("비밀번호가 맞지 않아 탈퇴를 진행하지 못했어요."); return { ok: false, reason: "password" }; }
+        if (checked.reason) { longToast(checked.message); return { ok: false, reason: "error" }; }
+        verified = checked.session;
+        if (!verified || !verified.access_token || !verified.user || verified.user.id !== user.id) {
+          longToast("로그인한 계정이 바뀌었어요. 탈퇴를 진행하지 않았어요. 다시 시도해 주세요.");
+          return { ok: false, reason: "account-changed" };
+        }
+        const word = await SF.ui.promptDialog({
+          title: "정말 탈퇴할까요?",
+          message: '되돌릴 수 없어요. 계속하려면 아래 칸에 "탈퇴"라고 입력하세요.',
+          label: "확인 문구",
+          autocomplete: "off",
+          danger: true,
+          confirmText: "회원 탈퇴",
+          validate: value => (DELETE_WORDS.includes(String(value).trim().toLowerCase()) ? "" : '"탈퇴"를 그대로 입력하세요.'),
+        });
+        if (word === null) { toast("탈퇴를 취소했어요."); return { ok: false, reason: "cancelled" }; }
+      } catch (err) {
+        longToast(deleteErrorMessage(err));
+        return { ok: false, reason: "error" };
+      }
+      // 요청은 방금 비밀번호로 확인한 계정의 토큰으로 보낸다. 그 사이 다른 탭이 로그인을 바꿔도 다른 계정을 지우지 않는다.
+      let response;
+      try {
+        response = await client.functions.invoke("delete-account", { method: "POST", headers: { Authorization: `Bearer ${verified.access_token}` } });
+      } catch (err) {
+        response = { error: err };
+      }
+      if (response && response.error) {
+        longToast(deleteErrorMessage(response.error));
+        return { ok: false, reason: "error" };
+      }
+      // 서버에서는 이미 지워졌다. 이 기기의 흔적을 정리한다 — 한 단계가 실패해도 나머지는 계속한다.
+      try { await client.auth.signOut({ scope: "local" }); } catch {}
+      try { if (SF.cloud && typeof SF.cloud.purgeOwner === "function") SF.cloud.purgeOwner(user.id); } catch {}
+      authState.session = null;
+      authState.profile = null;
+      updateAuthChrome();
+      longToast("탈퇴가 끝났어요. 이 기기의 로컬 악보는 그대로 남아 있어요.");
+      return { ok: true };
+    } finally {
+      deleteRunning = false;
+    }
+  }
+
   function formatAdminDate(value) {
     if (!value) return "";
     try {
@@ -602,6 +713,7 @@
     $("#btn-member-login").addEventListener("click", () => openAuthDialog("member"));
     $("#btn-admin-page").addEventListener("click", openAdminPage);
     $("#btn-logout").addEventListener("click", signOutAuth);
+    $("#btn-delete-account").addEventListener("click", () => { deleteAccount(); });
     $("#btn-save-supabase-config").addEventListener("click", saveSupabaseConfigFromDialog);
     $("#btn-clear-supabase-config").addEventListener("click", clearSupabaseConfig);
     $("#btn-reset-default-connection").addEventListener("click", useDefaultConnection);
@@ -636,5 +748,6 @@
   }
   SF.auth = { state: authState, getClient: getSupabaseClient, openDialog: openAuthDialog, bindAuth, init: initSupabaseAuth, renderAdminPage, isPublicKey,
     isDevMode, devModeFrom, hasCustomConnection, customConnectionFrom,
-    errorMessage: authErrorMessage, recoveryRedirectFrom, recoveryReturnFrom };
+    errorMessage: authErrorMessage, recoveryRedirectFrom, recoveryReturnFrom,
+    deleteAccount, deleteEnabled, deleteErrorMessage };
 })(window.SF);
