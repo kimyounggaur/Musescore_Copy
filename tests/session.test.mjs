@@ -166,14 +166,14 @@ function webStorage() {
   const map = new Map();
   return { map, getItem: key => (map.has(key) ? map.get(key) : null), setItem: (key, value) => { map.set(key, String(value)); }, removeItem: key => { map.delete(key); } };
 }
-/** options: answers(대화상자 답), backend(공유할 메모리 백엔드), backendOptions, localStorage, sessionStorage, noStore */
+/** options: answers(대화상자 답), backend(공유할 메모리 백엔드), backendOptions, localStorage, sessionStorage, noStore, schema(P8-2 검사 SF.schema도 올린다) */
 function boot(options = {}) {
   const context = vm.createContext({ console, setTimeout, clearTimeout, structuredClone, TextEncoder, crypto: globalThis.crypto });
   context.window = context;
   context.document = { getElementById: () => null, querySelectorAll: () => [], querySelector: () => null };
   context.localStorage = options.localStorage || webStorage();
   context.sessionStorage = options.sessionStorage || webStorage();
-  for (const name of ['safe-html', 'core', 'engrave', 'playback', 'io', 'store'])
+  for (const name of ['safe-html', 'core', ...(options.schema ? ['schema'] : []), 'engrave', 'playback', 'io', 'store'])
     vm.runInContext(readFileSync(`js/${name}.js`, 'utf8'), context, { filename: `${name}.js` });
   const SF = context.SF, C = SF.core;
   const backend = options.backend || SF.storeTesting.memoryBackend(options.backendOptions);
@@ -535,4 +535,97 @@ test('P2-C ⑤ 보관할 수 없는 상태(저장 공간 부족)에서는 openDo
   assert.equal(await h.SF.session.openDoc(a, { reason: '최근 작업 열기' }), 'canceled');
   assert.equal(h.dialogs.length, 1); assert.match(h.dialogs[0].message, /^최근 작업 열기 전에/);
   assert.equal(h.docId(), b); assert.equal(h.C.state.score.meta.title, 'B 작업');
+});
+
+/* =====================================================================
+ * P8-2 보관 기록을 읽을 때도 파일·클라우드와 같은 검사(SF.schema)를 거친다 —
+ * 고칠 수 있는 값은 고쳐서 열고(어떤 항목을 고쳤는지 결과 창으로 알린다), 고칠 수 없으면 읽을 수 없는 기록으로 다룬다.
+ * 위쪽 시험은 schema.js 없이 올려(예전 방식) 그대로 통과한다 — 여기서만 { schema: true }로 올린다.
+ * ===================================================================== */
+const fixableData = (h, title) => { const data = h.C.toJSON(h.titled(title)); data.tempo = 5000; return data; };   // 템포가 범위 밖(10~999) — 고쳐서 열 수 있다
+const docRecord = (id, title, data, extra = {}) => ({ id, title, createdAt: 1, updatedAt: 2, revision: 1, origin: 'new', cloudId: null, measures: 1, bytes: 1, schema: 2, data, ...extra });
+const tooLongData = h => {                                                                                   // 마디 2,001개 — 고칠 수 없어 거절한다
+  const data = h.C.toJSON(h.titled('너무 긴 악보')), measures = data.parts[0].staves[0].measures;
+  while (measures.length < 2001) measures.push(structuredClone(measures[0]));
+  return data;
+};
+
+test('P8-2 session ① openDoc: 최근 작업의 기록에 고칠 값이 있으면 고쳐서 열고, 고친 항목을 결과 창으로 알린다(고칠 게 없으면 알리지 않는다)', async () => {
+  const h = boot({ schema: true });
+  await h.SF.store.saveDoc(docRecord('fix-me', '고칠 값이 든 기록', fixableData(h, '고칠 값이 든 기록')));
+  await h.SF.store.saveDoc(docRecord('clean', '깨끗한 기록', h.C.toJSON(h.titled('깨끗한 기록'))));
+  assert.equal(await h.SF.session.openDoc('fix-me', { reason: '최근 작업 열기' }), 'opened');
+  const fixed = h.installs.at(-1);
+  assert.equal(fixed.opts.reportKind, 'fixes'); assert.equal(fixed.opts.report.length, 1);
+  assert.match(fixed.opts.report[0], /\(1건\)$/); assert.equal(fixed.opts.name, '고칠 값이 든 기록');
+  assert.equal(fixed.opts.docId, 'fix-me'); assert.equal(fixed.score.tempo, 999, '범위 안으로 맞춘 악보가 열린다');
+  assert.equal((await h.load('fix-me')).data.tempo, 5000, '보관 기록은 편집 전까지 그대로다');
+  assert.equal(await h.SF.session.openDoc('clean', { reason: '최근 작업 열기' }), 'opened');
+  const clean = h.installs.at(-1);
+  assert.equal(clean.opts.report, undefined); assert.equal(clean.opts.reportKind, undefined);
+});
+
+test('P8-2 session ② 같은 악보의 자동 저장본을 고르면 그 기록에서 고친 항목만 알리고, 파일 그대로 열 때는 알리지 않는다', async () => {
+  const X = '11111111-2222-4333-8444-555555555555';
+  const run = async answer => {
+    const h = boot({ schema: true });
+    const stored = fixableData(h, '자동 저장본'); stored.meta.docId = X;
+    await h.SF.store.saveDoc(docRecord(X, '자동 저장본', stored));
+    const file = h.titled('파일에 든 제목'); file.meta.docId = X;
+    h.answers.push(answer);
+    assert.equal(await h.replace(file, { origin: 'file' }), true);
+    return h.installs.at(-1);
+  };
+  const chosen = await run('autosave');
+  assert.equal(chosen.score.meta.title, '자동 저장본'); assert.equal(chosen.opts.reportKind, 'fixes');
+  assert.equal(chosen.opts.report.length, 1); assert.match(chosen.opts.report[0], /\(1건\)$/);
+  const asFile = await run('file');
+  assert.equal(asFile.score.meta.title, '파일에 든 제목'); assert.equal(asFile.opts.report, undefined);
+});
+
+test('P8-2 session ③ 옛 자동 저장(v1)을 문서로 옮길 때도 검사해서 고쳐 옮기고, 그 부팅에서만 고친 항목을 알린다(다음 부팅은 조용하다)', async () => {
+  const maker = boot(), data = maker.C.toJSON(maker.titled('옛 작업')); data.tempo = 5000;
+  const payload = JSON.stringify({ savedAt: 1700000000000, revision: 7, score: data });
+  const first = boot({ schema: true }); first.local.setItem(LEGACY_KEY, payload);
+  const restored = await first.SF.session.restoreOnBoot();
+  assert.equal(restored.meta.docId, 'legacy-v1'); assert.equal(restored.tempo, 999);
+  const fixes = first.SF.session.bootInfo().fixes;
+  assert.equal(fixes.length, 1); assert.match(fixes[0], /\(1건\)$/);
+  assert.equal((await first.load('legacy-v1')).data.tempo, 999, '문서로 옮긴 기록은 이미 고친 값이다');
+  assert.equal(first.local.getItem(LEGACY_KEY), payload, '원본은 그대로 둔다');
+  const second = boot({ schema: true, backend: first.backend, localStorage: first.local });
+  await second.SF.session.restoreOnBoot();
+  assert.deepEqual([...second.SF.session.bootInfo().fixes], [], '이미 고쳐서 옮긴 문서는 다시 알리지 않는다');
+});
+
+test('P8-2 session ④ 부팅 때 읽은 기록에 고칠 값이 있으면 bootInfo().fixes로 알리고, 고칠 수 없는 기록은 이유 코드와 함께 격리한다', async () => {
+  const h = boot({ schema: true });
+  await h.SF.store.saveDoc(docRecord('fix-me', '고칠 값이 든 기록', fixableData(h, '고칠 값이 든 기록'), { updatedAt: 10 }));
+  await h.SF.store.kvSet('lastDocId', 'fix-me');
+  const opened = await h.SF.session.restoreOnBoot();
+  assert.equal(opened.meta.title, '고칠 값이 든 기록'); assert.equal(opened.tempo, 999);
+  assert.equal(h.SF.session.bootInfo().fixes.length, 1);
+  // 고칠 수 없는 기록 — 열지 않고 격리하며, 거절한 이유(코드)가 그대로 남는다
+  const broken = boot({ schema: true });
+  await broken.SF.store.saveDoc(docRecord('too-long', '너무 긴 악보', tooLongData(broken), { updatedAt: 10 }));
+  await broken.SF.store.kvSet('lastDocId', 'too-long');
+  assert.equal(await broken.SF.session.restoreOnBoot(), null);
+  const info = broken.SF.session.bootInfo();
+  assert.equal(info.quarantined.length, 1); assert.equal(info.quarantined[0].code, 'TOO_MANY_MEASURES');
+  const kept = await broken.load('too-long');
+  assert.equal(kept.quarantined, true); assert.equal(kept.quarantineError.code, 'TOO_MANY_MEASURES'); assert.match(kept.quarantineError.message, /2,000/);
+  assert.equal(kept.data.parts[0].staves[0].measures.length, 2001, '기록 자체는 지우지 않는다(최근 작업에서 내려받을 수 있다)');
+  assert.equal(await broken.SF.session.openDoc('too-long'), 'unreadable');
+});
+
+test('P8-2 session ⑤ io.loadAutosave(fixes): 저장소를 쓰지 못할 때의 예전 자동 저장 읽기도 검사해서, 고친 줄을 넘긴 목록에 담는다', async () => {
+  const maker = boot(), data = maker.C.toJSON(maker.titled('예전 방식 자동 저장')); data.tempo = 5000;
+  const h = boot({ schema: true }); h.local.setItem(LEGACY_KEY, JSON.stringify({ savedAt: 1700000000000, revision: 3, score: data }));
+  const fixes = [], score = h.SF.io.loadAutosave(fixes);
+  assert.equal(score.meta.title, '예전 방식 자동 저장'); assert.equal(score.tempo, 999);
+  assert.equal(fixes.length, 1); assert.match(fixes[0], /\(1건\)$/);
+  assert.equal(h.SF.io.loadAutosave().tempo, 999, 'fixes를 안 넘겨도 읽힌다');
+  // 고칠 수 없는 기록은 읽지 못한 것으로 친다(앱은 데모로 시작한다)
+  h.local.setItem(LEGACY_KEY, JSON.stringify({ savedAt: 1, revision: 1, score: tooLongData(h) }));
+  const none = []; assert.equal(h.SF.io.loadAutosave(none), null); assert.deepEqual([...none], []);
 });

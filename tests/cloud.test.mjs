@@ -119,6 +119,7 @@ async function harness(options = {}) {
     ui: { confirmDialog: async opts => { prompts.push(opts); return confirms.shift() ?? false; },
       promptDialog: async opts => { prompts.push(opts); return answers.shift() ?? null; } },
   };
+  if (options.schema) SF.schema = options.schema;   // P8-2: 실제 schema.js를 끼워 넣는 시험용(기본은 없음 — 다른 시험은 그대로)
   const scope = { SF, document, console, URL, TextEncoder, Uint8Array, crypto: webcrypto,
     navigator: { onLine: options.online !== false }, location: { href: 'https://scoreforge.example/app?code=secret#access_token=secret' },
     localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) },
@@ -403,4 +404,55 @@ test('옛 모양 악보(최상위 measures)의 마디 수 계산은 그대로', 
   h.edit('옛 모양 저장');
   const row = await h.SF.cloud.saveCurrent();
   assert.equal(h.db.rows.get(row.id).measures, 2);
+});
+
+// P8-2: 클라우드에서 열 때도 파일 열기와 같은 검사(SF.schema.validate)를 거친다 — 고칠 수 있는 값은 고쳐서 열고(결과 창 문구와 함께 넘김),
+// 고칠 수 없으면 ScoreFormatError로 거절한다. 서버의 원본 행은 열기만으로 바뀌지 않는다.
+const schemaSource = readFileSync(new URL('../js/schema.js', import.meta.url), 'utf8');
+function realSchema() {
+  const sandbox = { SF: {} }; sandbox.window = sandbox;
+  vm.runInNewContext(schemaSource, sandbox, { filename: 'schema.js' });
+  return sandbox.SF.schema;
+}
+const v2Data = (extra = {}) => ({ format: 'scoreforge-1', meta: { title: '저장된 악보' }, schema: 2,
+  parts: [{ id: 'p1', staves: [{ id: 's1', measures: [{ voices: [[{ id: 'e1', type: 'rest', dur: { n: 1, d: 1, dots: 0 }, notes: [], full: true }]] }] }] }], ...extra });
+const spyLoaded = h => { const calls = [], stub = h.SF.app.handleLoadedScore; h.SF.app.handleLoadedScore = (...args) => { calls.push(args); return stub(...args); }; return calls; };
+
+test('P8-2 클라우드 열기: 값이 틀린 악보는 고쳐서 열고 고친 항목을 결과 창으로 넘긴다(원본 행은 그대로)', async () => {
+  const h = await harness({ schema: realSchema() });
+  h.seed(ID, { data: v2Data({ tempo: 5000 }) });
+  const calls = spyLoaded(h);
+  const opened = await h.SF.cloud.open(ID);
+  assert.equal(opened.tempo, 999);
+  assert.deepEqual([...calls[0][3]], ['템포를 10~999 범위로 맞췄어요 (1건)']);   // [...] — schema.js는 다른 vm 영역이라 배열 prototype이 다르다
+  assert.equal(calls[0][4].reportKind, 'fixes');
+  assert.equal(h.db.rows.get(ID).data.tempo, 5000, '서버 행은 열기만으로 바뀌지 않는다');
+});
+
+test('P8-2 클라우드 열기: 공유 링크로 연 악보도 같은 검사를 거친다(읽기 전용 + 고친 항목)', async () => {
+  const h = await harness({ schema: realSchema() }); h.switchUser(null);
+  h.seed(ID, { is_public: true, share_slug: 'AbC_123-xyZ9', data: v2Data({ tempo: 1 }) });
+  const calls = spyLoaded(h);
+  const opened = await h.SF.cloud.openShared('AbC_123-xyZ9');
+  assert.equal(opened.tempo, 10);
+  assert.deepEqual([...calls[0][3]], ['템포를 10~999 범위로 맞췄어요 (1건)']);
+  assert.deepEqual([calls[0][4].reportKind, calls[0][4].readOnly], ['fixes', true]);
+});
+
+test('P8-2 클라우드 열기: 정상 악보는 고친 항목 없이 열린다(결과 창 문구를 넘기지 않음)', async () => {
+  const h = await harness({ schema: realSchema() });
+  h.seed(ID, { data: v2Data() });
+  const calls = spyLoaded(h);
+  await h.SF.cloud.open(ID);
+  assert.deepEqual([...calls[0][3]], []);
+  assert.equal('reportKind' in calls[0][4], false);
+});
+
+test('P8-2 클라우드 열기: 고칠 수 없는 악보는 ScoreFormatError로 거절하고 지금 악보는 그대로', async () => {
+  const h = await harness({ schema: realSchema() });
+  const bad = v2Data(); bad.parts[0].staves = 'x';
+  h.seed(ID, { data: bad });
+  const before = h.C.state.score, calls = spyLoaded(h);
+  await assert.rejects(h.SF.cloud.open(ID), { name: 'ScoreFormatError', code: 'STAVES_NOT_ARRAY', path: 'parts[0].staves' });
+  assert.equal(h.C.state.score, before); assert.equal(calls.length, 0);
 });

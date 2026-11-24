@@ -297,8 +297,14 @@
     clean.meta = { ...clean.meta, title: titleOf(title) };
     for (const key of [...META_KEYS, ...LOCAL_META_KEYS]) delete clean.meta[key];
     snapshot(clean); // Enforce the client-side limit before normalizing.
-    return C.fromJSON(clean);
+    // 파일 열기와 같은 검사(P8-2): 고칠 수 있는 값은 고쳐서 열고(installScore가 결과 창으로 알린다), 고칠 수 없으면 ScoreFormatError로 거절한다.
+    const checked = SF.schema?.validate ? SF.schema.validate(clean) : null;
+    if (checked?.fatal) throw checked.fatal;
+    const score = C.fromJSON(checked ? checked.score : clean);
+    if (checked && checked.fixes.length) fixedLines.set(score, SF.schema.fixLines(checked.summary));
+    return score;
   }
+  const fixedLines = new WeakMap();   // decode가 자동으로 고친 악보 → 고친 항목 문구(installScore가 한 번 읽는다)
   async function load(id) {
     validateId(id);
     const actor = await requireUser();
@@ -323,7 +329,8 @@
     if (!SF.app.setReadOnly || !SF.app.handleLoadedScore) throw error("INTEGRATION_REQUIRED", "악보 열기 연결이 준비되지 않았어요.");
     suppressChange = true;
     try {
-      const ok = await SF.app.handleLoadedScore(score, score.meta.title, null, [], { readOnly, ...opts });
+      const fixed = fixedLines.get(score) || [];
+      const ok = await SF.app.handleLoadedScore(score, score.meta.title, null, fixed, { readOnly, ...(fixed.length ? { reportKind: "fixes" } : {}), ...opts });
       if (ok) onScoreLoaded(C.state.score);
       return ok;
     } finally { suppressChange = false; }
