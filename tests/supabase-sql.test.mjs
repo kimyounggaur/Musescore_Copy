@@ -11,7 +11,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,6 +29,7 @@ const SQL = {
   rls: file('supabase/tests/scores_rls.sql'),
   fingerprint: file('supabase/tests/scoreforge_fingerprint.sql'),
   otherApps: file('supabase/tests/other_apps_fingerprint.sql'),
+  quotaCost: file('supabase/tests/quota_cost.sql'),
 };
 
 // ── 파일만 보는 검사(PostgreSQL 없이도 실행) ─────────────────────────────────────────────────────────
@@ -57,6 +58,15 @@ test('P8-5 v4.sql 멱등 표지: 객체를 만드는 문장은 모두 create or 
   assert.ok(!/public\.scores'?\s+is\s+'ScoreForge scores/.test(v4) && !/comment on table/i.test(v4), 'v3가 소유 표시로 쓰는 표 comment는 건드리지 않는다');
   const select = /create policy scoreforge_scores_select[^;]*;/.exec(v4);
   assert.ok(select && /\(select auth\.uid\(\)\) = owner/.test(select[0]) && !/is_admin/.test(select[0]), '선택 정책은 소유자만(관리자 조건 없음)');
+});
+
+test('P8-5 quota_cost.sql: 항상 오류로 끝나 아무것도 남기지 않고, 운영에서 실행하지 말라고 적혀 있다', () => {
+  const text = read('supabase/tests/quota_cost.sql');
+  assert.match(text, /운영 DB에서는 실행하지 마세요/);
+  assert.match(text, /raise exception using errcode = 'P0001', message = format\(\s*'QUOTA COST \(rolled back\)/, '결과는 되돌려지는 오류 문구에 담는다');
+  assert.ok(!/\bcommit\b/i.test(text), 'commit이 없다');
+  assert.ok(!/service_role|sb_secret_|eyJ[A-Za-z0-9_-]{20,}/.test(text), '서비스 키 같은 문자열이 없다');
+  assert.ok(text.trimEnd().endsWith('$quota_cost$;'), '문장 하나로 끝난다');
 });
 
 // ── 일회용 PostgreSQL 위에서 실제로 실행 ─────────────────────────────────────────────────────────────
@@ -218,6 +228,16 @@ test('P8-5 SQL을 일회용 PostgreSQL에서 실행한다 (v3 기준선 → v4 �
       sql('perowner', `insert into public.scores(owner,title,data) values ('${b}','first','{}')`);
       assert.match(psql('perowner', { sql: `insert into public.scores(owner,title,data) values ('${a}','x','{}')` }).err, /SCOREFORGE_QUOTA_COUNT/);
       assert.equal(sql('perowner', `select count(*) from public.scores where owner = '${b}'`).trim(), '1');
+    });
+
+    await t.test('quota_cost.sql: 작은 크기로 돌리면 시간 숫자를 오류 문구로 알려 주고 시험용 회원·악보를 남기지 않는다', () => {
+      clone('costdb', 'v4');
+      const small = path.join(dir, 'quota_cost_small.sql');
+      writeFileSync(small, read('supabase/tests/quota_cost.sql').replace('row_chars integer := 249000;', 'row_chars integer := 3000;'));
+      const r = psql('costdb', { file: small });
+      assert.notEqual(r.status, 0, '일부러 오류로 끝난다');
+      assert.match(r.err, /QUOTA COST \(rolled back\): rows=200 row_chars=3000 total_bytes=\d+ \| fill_199_inserts_ms=\d+ \| last_insert_ms=[\d.]+ \| update_data_ms=[\d.]+ \| rename_only_ms=[\d.]+/);
+      assert.equal(sql('costdb', `select (select count(*) from public.scores) || '|' || (select count(*) from auth.users where email like 'sf-quota-cost-%')`).trim(), '0|0', '아무것도 남지 않는다');
     });
   } finally {
     stopCluster();

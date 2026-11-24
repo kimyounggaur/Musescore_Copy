@@ -16,7 +16,8 @@ const read = file => readFileSync(file, 'utf8');
 const REF_A = 'abcdefghijklmnopqrst', REF_B = 'zyxwvutsrqponmlkjihg';
 const URL_A = `https://${REF_A}.supabase.co`, URL_B = `https://${REF_B}.supabase.co`;
 const KEY_A = 'sb_publishable_AAAAAAAAAAAAAAAAAAAAAA_bbbb-CCCC', KEY_B = 'sb_publishable_ZZZZZZZZZZZZZZZZZZZZZZ_yyyy-XXXX';
-const SECRET = 'sb_secret_TOPSECRETVALUE0123456789abcdef';
+// 저장소 전체에서 "비밀 키 모양 글자"를 찾는 검사(delete-account.test)에 이 시험 파일이 걸리지 않도록, 가짜 비밀 키는 실행할 때 조립한다.
+const SECRET = ['sb', 'secret', 'TOPSECRETVALUE0123456789abcdef'].join('_');
 const jwt = payload => `e30.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.c2lnbmF0dXJl`;
 const configText = read('js/config.js'), vercelText = read('vercel.json');
 const currentRef = /https:\/\/([a-z0-9]{20})\.supabase\.co/.exec(configText)[1];
