@@ -209,6 +209,28 @@ test('P8-4a 사용자 지정 연결에 로그인돼 있어도 [기본값으로]�
   }, { init: seed, initArg: { custom: CUSTOM } });
 });
 
+test('P8-4a [기본값으로] 뒤에는 기본 연결로 다시 시작해, 기본 연결에 남아 있던 로그인을 읽어 온다', { skip, timeout: 90000 }, async () => {
+  const seed = ({ custom, defaultKey }) => {
+    localStorage.setItem('scoreforge.supabase.url', custom.url);
+    localStorage.setItem('scoreforge.supabase.publishableKey', custom.key);
+    const now = Math.floor(Date.now() / 1000);
+    const session = email => ({ access_token: 'aaa.bbb.ccc', refresh_token: 'refresh-1', token_type: 'bearer', expires_in: 3600, expires_at: now + 3600,
+      user: { id: '11111111-1111-4111-8111-111111111111', aud: 'authenticated', email, app_metadata: {}, user_metadata: {}, created_at: '2026-01-01T00:00:00Z' } });
+    localStorage.setItem('sb-example-custom-auth-token', JSON.stringify(session('custom@example.com')));
+    localStorage.setItem(defaultKey, JSON.stringify(session('default@example.com')));
+  };
+  await withPage(async page => {
+    await page.waitForFunction(() => SF.auth.state.session?.user?.email === 'custom@example.com');
+    assert.equal(await page.evaluate(() => SF.auth.hasCustomConnection()), true);
+    await page.evaluate(() => SF.auth.openDialog('member'));
+    await page.click('#btn-reset-default-connection');
+    // 화면 글자는 프로필을 읽은 뒤에야 바뀐다 — 세션만 보고 바로 읽지 말고 화면이 바뀔 때까지 기다린다.
+    await page.waitForFunction(() => /default@example\.com/.test(document.querySelector('#auth-status').textContent) && /기본 연결로 돌아왔어요/.test(document.querySelector('#auth-message').textContent));
+    assert.equal(await page.evaluate(() => SF.auth.state.session?.user?.email), 'default@example.com');
+    assert.equal(await page.evaluate(() => SF.auth.hasCustomConnection()), false);
+  }, { init: seed, initArg: { custom: CUSTOM, defaultKey: SESSION_KEY } });
+});
+
 // ───────── b. 관리자 버튼 ─────────
 test('P8-4b 로그인 전에는 "관리자 로그인"이 없고 "관리자 페이지"도 보이지 않는다', { skip, timeout: 90000 }, async () => {
   await withPage(async page => {
@@ -416,9 +438,10 @@ test('P8-4c 만료됐거나 이미 쓴 링크(#error=…)로 돌아오면 로그
     assert.equal(await visible(page, '#btn-forgot-password'), true, '바로 메일을 다시 받을 수 있다');
     const here = new URL(page.url());
     assert.equal(here.searchParams.has('auth'), false);
+    assert.equal(here.searchParams.has('code'), false, '쓸 수 없게 된 인증 코드도 주소에서 지운다');
     assert.equal(here.hash, '');
     assert.equal(putUser(calls).length, 0);
-  }, { path: '/?auth=recovery#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired' });
+  }, { path: '/?auth=recovery&code=stale-code#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired' });
 });
 
 test('P8-4c ?auth=recovery만 있고 토큰이 없으면 조용히 주소만 정리하고, 다른 주소 값은 지키며 창은 열지 않는다', { skip, timeout: 90000 }, async () => {

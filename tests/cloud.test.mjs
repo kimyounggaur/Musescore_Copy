@@ -559,3 +559,20 @@ test('P8-4d purgeOwner: 공유로 연 다른 사람의 악보는 건드리지 �
   assert.equal(h.C.state.score.meta.cloudOwner, OTHER, '다른 계정의 악보 식별 정보는 그대로');
   assert.equal(h.C.state.score.meta.cloudId, ID);
 });
+
+test('P8-4d purgeOwner: 그 계정의 저장 대기 작업을 지우면 "저장 대기"도 끝나고, 엉뚱한 값(null·undefined)으로는 지금 저장 대기 표시를 건드리지 않는다', async () => {
+  const h = await harness({ online: false }); h.edit('대기 작업');
+  assert.equal(h.SF.cloud.state.dirty, true, '지우기 전에는 저장 대기');
+  for (const bad of [null, undefined]) { h.SF.cloud.purgeOwner(bad); assert.equal(h.SF.cloud.state.dirty, true, `${bad} 로는 그대로`); }
+  assert.equal(h.SF.cloud.purgeOwner(OWNER), 1);
+  assert.equal(h.SF.cloud.state.dirty, false, '이 계정의 대기 작업이 사라졌으니 저장할 것도 없다');
+  assert.equal(h.SF.cloud.state.status, '클라우드 저장 준비');
+});
+
+test('P8-4d purgeOwner: 목록에서 읽어 둔 그 계정의 행 버전도 비워서, 지운 계정의 행을 옛 버전으로 고치려 하지 않는다', async () => {
+  const h = await harness(); h.seed();
+  await h.SF.cloud.list();
+  h.SF.cloud.purgeOwner(OWNER);
+  await assert.rejects(h.SF.cloud.remove(ID), { code: 'CONFLICT' }, '옛 버전을 쓰지 않고 목록을 다시 불러오라고 한다');
+  assert.equal(h.db.rows.has(ID), true, '가짜 DB의 행은 그대로(서버 쪽 삭제는 이 함수의 일이 아니다)');
+});

@@ -54,7 +54,7 @@ test('P8-4a 개발 모드 판정: ?dev=1 또는 localStorage scoreforge.dev = "1
   assert.equal(devModeFrom('', 'true'), true);
   assert.equal(devModeFrom('', 'TRUE'), true);
   for (const search of ['', '?dev', '?dev=', '?dev=0', '?dev=true', '?dev=11', '?xdev=1', '?x=dev%3D1', '?dev%3D1']) assert.equal(devModeFrom(search, null), false, `search ${JSON.stringify(search)}`);
-  for (const stored of [null, undefined, '', '0', 'false', 'yes', '2', ' ']) assert.equal(devModeFrom('', stored), false, `stored ${JSON.stringify(stored)}`);
+  for (const stored of [null, undefined, '', '0', 'false', 'yes', '2', ' ', '10', '11', '1 ', 'untrue', 'true1']) assert.equal(devModeFrom('', stored), false, `stored ${JSON.stringify(stored)}`);
   assert.equal(devModeFrom(undefined, undefined), false);
   assert.equal(devModeFrom(null, null), false);
 });
@@ -126,6 +126,10 @@ test('P8-4c 복구 링크로 돌아온 주소 해석: 성공 토큰·실패(만�
   assert.deepEqual({ ...expired }, { recovery: true, failed: true, hasTokens: false });
   assert.deepEqual({ ...recoveryReturnFrom(base + '?auth=recovery') }, { recovery: true, failed: false, hasTokens: false });
   assert.deepEqual({ ...recoveryReturnFrom(base + '?auth=recovery&code=abc') }, { recovery: true, failed: false, hasTokens: true }, '코드 방식(PKCE)도 토큰으로 본다');
+  for (const [fragment, why] of [['error_code=otp_expired', 'error_code만 있어도 실패'], ['error_description=Link+expired', 'error_description만 있어도 실패'], ['error=access_denied', 'error만 있어도 실패']]) {
+    assert.deepEqual({ ...recoveryReturnFrom(`${base}?auth=recovery#${fragment}`) }, { recovery: true, failed: true, hasTokens: false }, why);
+  }
+  assert.deepEqual({ ...recoveryReturnFrom(base + '?auth=recovery&code=abc#error=access_denied') }, { recovery: true, failed: true, hasTokens: false }, '실패 표시가 함께 오면 토큰이 있어도 성공으로 보지 않는다');
   for (const other of [base, base + '?share=abc', base + '?auth=other#access_token=x', base + '#access_token=x', 'not a url', '', null, undefined]) {
     assert.deepEqual({ ...recoveryReturnFrom(other) }, { recovery: false, failed: false, hasTokens: false }, String(other));
   }
@@ -169,7 +173,7 @@ function appHarness({ features = { deleteAccount: true }, user = { id: USER_ID, 
   const session = (id = USER_ID) => ({ access_token: `token-for-${id}`, user: { id, email: 'member@example.com' } });
   const client = {
     auth: {
-      onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
+      onAuthStateChange: callback => { log.authCallback = callback; return { data: { subscription: { unsubscribe() {} } } }; },
       signInWithPassword: async args => { log.calls.push(['signInWithPassword', args]); return signIn ? signIn(args, session) : { data: { session: session(), user: session().user }, error: null }; },
       signOut: async options => { log.calls.push(['signOut', options]); if (signOut) return signOut(options); return { error: null }; },
     },
@@ -188,7 +192,7 @@ function appHarness({ features = { deleteAccount: true }, user = { id: USER_ID, 
   };
   if (features !== NO_FEATURES) window.SF_FEATURES = features;
   const context = {
-    window, atob, URLSearchParams, URL, document: { querySelector: () => null },
+    window, atob, URLSearchParams, URL, document: { querySelector: () => null }, setTimeout: (fn, ms) => setTimeout(fn, ms),
     CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init && init.detail; } },
     localStorage: storage || { getItem: () => null, setItem() {}, removeItem() {} },
     location: location || { search: '', href: 'https://app.example/', origin: 'https://app.example', protocol: 'https:' },
@@ -202,6 +206,16 @@ function appHarness({ features = { deleteAccount: true }, user = { id: USER_ID, 
   return { auth, log, client, window, session };
 }
 const names = log => log.calls.map(call => call[0]);
+
+test('P8-4c PASSWORD_RECOVERY 이벤트가 와도 인증 콜백 안에서는 새 비밀번호 창을 열지 않고, 콜백이 끝난 뒤(다음 틱)에 연다', async () => {
+  const h = appHarness({ answers: [null] });
+  assert.equal(typeof h.log.authCallback, 'function', 'getClient가 인증 상태 콜백을 등록한다');
+  h.log.authCallback('PASSWORD_RECOVERY', { user: { id: USER_ID, email: 'member@example.com' } });
+  assert.equal(h.log.prompts.length, 0, '콜백 안에서 곧바로 열면 라이브러리 안에서 Supabase를 부르는 교착 위험이 있다');
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(h.log.prompts.length, 1, '다음 틱에 새 비밀번호 창');
+  assert.equal(h.log.prompts[0].title, '새 비밀번호 설정');
+});
 const texts = log => log.toasts.map(toast => (Array.isArray(toast) ? toast[0] : toast));   // 오래 보이는 알림은 [문구, { duration }]로 기록된다
 
 test('P8-4d 기능 플래그: js/config.js의 SF_FEATURES.deleteAccount는 기본이 false이고, 미리 정해 둔 값은 덮어쓰지 않는다', () => {
