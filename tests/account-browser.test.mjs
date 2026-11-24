@@ -66,6 +66,7 @@ function authMock(options = {}) {
       await json(route, 200, session(state.reauthToken)); return true;
     }
     if (path === '/auth/v1/user') { await json(route, 200, user()); return true; }
+    if (path === '/auth/v1/signup') { await json(route, 200, user()); return true; }   // 이메일 확인이 켜져 있는 것처럼 세션 없이 사용자만
     if (path === '/auth/v1/logout') { await route.fulfill({ status: 204, headers: cors }); return true; }
     if (path === '/rest/v1/profiles') {
       if (call.method === 'POST') { await route.fulfill({ status: 201, headers: cors, body: '' }); return true; }
@@ -634,4 +635,101 @@ test('P8-4d (플래그를 켠 시험) 함수 호출이 실패하면(401·서버 
       assert.equal(await visible(page, '#btn-delete-account'), true, '다시 시도할 수 있다');
     }, flagInit(mock, { offline: true }));
   }
+});
+
+// ───────── e. 개인정보 고지·가입 동의 ─────────
+const signupCalls = calls => calls.filter(c => c.method === 'POST' && /\/auth\/v1\/signup/.test(c.url));
+const openSignup = async page => { await page.click('#btn-signup'); await page.waitForFunction(() => document.querySelector('#dlg-auth').open); };
+
+test('P8-4e 필수 동의 체크는 가입 창에만 있고 열 때마다 해제돼 있으며, 개인정보 링크는 로그인·가입 창 모두에 새 탭 링크로 있다', { skip, timeout: 90000 }, async () => {
+  await withPage(async page => {
+    await openLogin(page);
+    assert.equal(await visible(page, '#auth-consent-row'), false, '로그인 창에는 동의 체크가 없다');
+    assert.equal(await visible(page, '#link-privacy'), true);
+    assert.equal(await page.getAttribute('#link-privacy', 'target'), '_blank');
+    assert.match(await page.getAttribute('#link-privacy', 'rel'), /noopener/);
+    assert.equal(await page.getAttribute('#link-privacy', 'href'), 'privacy.html');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('#dlg-auth').open);
+
+    await openSignup(page);
+    assert.equal(await visible(page, '#auth-consent-row'), true);
+    assert.equal(await page.isChecked('#auth-consent'), false, '처음에는 해제');
+    assert.match(await page.textContent('#auth-consent-row'), /\(필수\)/);
+    assert.equal(await visible(page, '#link-privacy'), true, '가입 창에도 링크');
+    assert.equal(await visible(page, '#btn-forgot-password'), false, '(c) 가입 창에는 비밀번호 재설정이 없다');
+    await page.check('#auth-consent');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('#dlg-auth').open);
+    await openSignup(page);
+    assert.equal(await page.isChecked('#auth-consent'), false, '다시 열면 해제 — 동의는 열 때마다 직접 한다');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('#dlg-auth').open);
+    await openLogin(page);
+    assert.equal(await visible(page, '#auth-consent-row'), false);
+  });
+});
+
+test('P8-4e 동의하지 않으면 가입 요청을 보내지 않고 안내하며, 동의하면 동의 버전·시각이 가입 정보에 실려 간다', { skip, timeout: 90000 }, async () => {
+  const mock = authMock();
+  await withPage(async (page, calls) => {
+    const version = await page.evaluate(() => SF.auth.privacyVersion);
+    await openSignup(page);
+    await page.fill('#auth-display-name', '김가입');
+    await page.fill('#auth-email', 'new@example.com');
+    await page.fill('#auth-password', 'secret123');
+    await page.click('#auth-submit');
+    assert.match(await page.textContent('#auth-message'), /개인정보 처리 안내에 동의해 주세요/);
+    assert.equal(await page.evaluate(() => document.querySelector('#auth-message').classList.contains('error')), true);
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'auth-consent', '체크 칸으로 포커스');
+    await new Promise(resolve => setTimeout(resolve, 300));
+    assert.equal(calls.length, 0, '동의 전에는 Supabase 요청이 한 건도 없다');
+    assert.equal(await page.isDisabled('#auth-submit'), false, '버튼이 멈춰 있지 않다(다시 누를 수 있다)');
+
+    await page.check('#auth-consent');
+    await page.click('#auth-submit');
+    await until(() => signupCalls(calls).length === 1, '가입 요청 1건');
+    const body = signupCalls(calls)[0].body;
+    assert.equal(body.email, 'new@example.com');
+    assert.equal(body.password, 'secret123');
+    assert.equal(body.data.display_name, '김가입');
+    assert.equal(body.data.privacy_consent_version, version, '동의한 안내의 버전');
+    assert.match(body.data.privacy_consent_at, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/, '동의 시각(UTC ISO)');
+    assert.ok(Math.abs(Date.parse(body.data.privacy_consent_at) - Date.now()) < 60000, '방금 시각');
+    await page.waitForFunction(() => /회원가입 요청이 완료됐어요/.test(document.querySelector('#auth-message').textContent));
+  }, { handler: mock.handler });
+});
+
+test('P8-4e 로그인에는 동의 체크가 필요 없다(체크 칸 없이 그대로 로그인된다)', { skip, timeout: 90000 }, async () => {
+  const mock = authMock();
+  await withPage(async page => {
+    await signIn(page);
+    await page.waitForFunction(() => SF.auth.state.session?.user?.email === 'member@example.com');
+  }, { handler: mock.handler });
+});
+
+test('P8-4e 개인정보 처리 안내 링크 → 새 탭에서 안내 페이지가 열리고, 앱이 기록하는 동의 버전과 같은 버전이 적혀 있다', { skip, timeout: 90000 }, async () => {
+  await withPage(async page => {
+    const version = await page.evaluate(() => SF.auth.privacyVersion);
+    await openSignup(page);
+    const [popup] = await Promise.all([page.context().waitForEvent('page'), page.click('#link-privacy')]);
+    const problems = [];
+    popup.on('pageerror', error => problems.push(`pageerror ${error.message}`));
+    popup.on('console', message => { if (message.type() === 'error') problems.push(`console ${message.text()}`); });
+    popup.on('requestfailed', request => problems.push(`failed ${request.url()}`));
+    await popup.waitForLoadState('load');
+    assert.match(popup.url(), /\/privacy(\.html)?$/);
+    assert.equal(await popup.locator('h1').count(), 1);
+    assert.equal(await popup.locator('section#ko').isVisible(), true);
+    assert.equal(await popup.locator('section#en').isVisible(), true);
+    assert.equal(await popup.textContent('#privacy-version'), version, '앱이 기록하는 버전과 같다');
+    assert.ok(await popup.locator('.todo').count() >= 4, '확정 전 자리가 눈에 띄게 표시돼 있다');
+    assert.notEqual(await popup.evaluate(() => getComputedStyle(document.querySelector('.todo')).backgroundColor), 'rgba(0, 0, 0, 0)', 'css/privacy.css가 적용됐다');
+    assert.equal(await popup.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true, '가로로 넘치지 않는다');
+    await popup.setViewportSize({ width: 360, height: 700 });
+    assert.equal(await popup.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true, '좁은 화면에서도 가로로 넘치지 않는다');
+    assert.deepEqual(problems, [], '오류·차단된 요청 없음(CSP 포함)');
+    await popup.close();
+    assert.equal(await page.evaluate(() => document.querySelector('#dlg-auth').open), true, '앱의 가입 창은 그대로 열려 있다');
+  });
 });

@@ -1,0 +1,96 @@
+/* 개인정보 처리 안내(privacy.html) 전용 스타일 — 앱 CSS와 따로 쓰는 독립 페이지.
+   외부 글꼴·이미지를 쓰지 않고(CSP·오프라인), 밝은/어두운 시스템 설정을 따른다. */
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --text: #1b1f27;
+  --dim: #5b6472;
+  --line: #d5dbe4;
+  --link: #1a5fd0;
+  --head-bg: #f1f4f9;
+  --todo-bg: #fff3bf;
+  --todo-line: #e0a800;
+  --todo-text: #5c4400;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1d2025;
+    --text: #e8eaee;
+    --dim: #9aa3b2;
+    --line: #3e4450;
+    --link: #8ab4ff;
+    --head-bg: #272b33;
+    --todo-bg: #4a3b05;
+    --todo-line: #c99a00;
+    --todo-text: #ffe28a;
+  }
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.7 system-ui, -apple-system, "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+  overflow-wrap: anywhere;   /* 긴 주소(호스트 이름 등)는 줄 끝에서 끊는다 */
+  word-break: keep-all;      /* 한국어는 낱말(띄어쓰기) 단위로만 줄을 바꾼다 */
+}
+main { max-width: 760px; margin: 0 auto; padding: 20px 16px 56px; }
+a { color: var(--link); }
+a:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 2px; }
+
+header { margin-bottom: 8px; }
+.back { margin: 0 0 12px; font-size: 14px; }
+h1 { margin: 0 0 6px; font-size: 24px; line-height: 1.35; }
+h1 .sub { display: block; margin-top: 2px; font-size: 14px; font-weight: 500; color: var(--dim); }
+.meta { margin: 0; color: var(--dim); font-size: 14px; }
+
+section { margin-top: 28px; padding-top: 4px; border-top: 1px solid var(--line); }
+h2 { margin: 24px 0 8px; font-size: 18px; line-height: 1.4; }
+section > h2:first-child { margin-top: 12px; }
+p { margin: 8px 0; }
+ul { margin: 8px 0; padding-left: 22px; }
+li { margin: 6px 0; }
+
+.table-wrap { margin: 10px 0; overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.55; }
+th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+th { background: var(--head-bg); font-weight: 700; }
+tr:last-child td { border-bottom: 0; }
+th:first-child, td:first-child { min-width: 11em; }   /* 음원 서버 주소가 낱글자로 끊기지 않게 */
+
+/* 아직 사람이 확정하지 않은 값 — 눈에 띄게 표시한다(게시 전에 모두 채우거나 지움) */
+.todo {
+  background: var(--todo-bg);
+  color: var(--todo-text);
+  border: 1px dashed var(--todo-line);
+  border-radius: 4px;
+  padding: 0 4px;
+  font-size: .94em;
+}
+
+@media (max-width: 480px) {
+  main { padding: 14px 12px 40px; }
+  h1 { font-size: 21px; }
+  h2 { font-size: 17px; }
+}
+
+/* 좁은 화면: 표를 행마다 한 장의 카드로 쌓는다(칸 이름은 각 칸의 data-label) */
+@media (max-width: 600px) {
+  .table-wrap { overflow: visible; border: 0; }
+  table, tbody, tr, td { display: block; width: 100%; }
+  th:first-child, td:first-child { min-width: 0; }
+  thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  tr { margin: 0 0 12px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  td, tr:last-child td { padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  td:last-child, tr:last-child td:last-child { border-bottom: 0; }
+  td::before { content: attr(data-label); display: block; margin-bottom: 2px; font-size: 12px; font-weight: 700; color: var(--dim); }
+  td:first-child { background: var(--head-bg); font-weight: 700; }
+}
+
+@media print {
+  body { font-size: 12px; }
+  .back { display: none; }
+  .todo { border-style: solid; }
+}

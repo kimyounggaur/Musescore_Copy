@@ -9,18 +9,23 @@
   const SUPABASE_URL_KEY = "scoreforge.supabase.url";
   const SUPABASE_KEY_KEY = "scoreforge.supabase.publishableKey";
   const DEV_KEY = "scoreforge.dev";
+  // 개인정보 처리 안내(privacy.html)의 버전. 가입할 때 동의한 안내의 버전으로 기록된다.
+  // privacy.html을 고치면 이 값과 그 문서의 <meta name="privacy-version">·#privacy-version을 함께 새 날짜로 바꾼다.
+  const PRIVACY_VERSION = "2026-11-24";
   const AUTH_MODES = {
     signup: {
       title: "회원가입",
       submit: "회원가입",
       message: "이메일과 비밀번호로 새 계정을 만들어요. 이메일 확인이 켜져 있으면 인증 메일 확인 뒤 로그인됩니다.",
       showName: true,
+      consent: true,
     },
     member: {
       title: "회원 로그인",
       submit: "회원 로그인",
       message: "가입한 회원 계정으로 로그인합니다.",
       showName: false,
+      consent: false,
     },
   };
   const authState = {
@@ -434,6 +439,8 @@
     $("#auth-submit").textContent = meta.submit;
     $("#auth-display-name-row").style.display = meta.showName ? "grid" : "none";
     $("#btn-forgot-password").hidden = authState.mode === "signup";
+    $("#auth-consent-row").hidden = !meta.consent;
+    $("#auth-consent").checked = false;   // 이전에 눌러 둔 동의가 남지 않게 매번 새로
     $("#auth-password").autocomplete = meta.showName ? "new-password" : "current-password";
     applyConnectionChrome();
     setAuthMessage(isSupabaseConfigured()
@@ -466,11 +473,22 @@
       setAuthMessage("비밀번호는 6자 이상이어야 합니다.", "error");
       return;
     }
+    if (meta.consent && !$("#auth-consent").checked) {
+      setAuthMessage("가입하려면 개인정보 처리 안내에 동의해 주세요.", "error");
+      $("#auth-consent").focus();
+      return;
+    }
     setAuthBusy(true);
     try {
       const client = getSupabaseClient();
       if (mode === "signup") {
-        const options = { data: { display_name: displayName } };
+        const options = {
+          data: {
+            display_name: displayName,
+            privacy_consent_version: PRIVACY_VERSION,
+            privacy_consent_at: new Date().toISOString(),
+          },
+        };
         if (location.protocol === "http:" || location.protocol === "https:") {
           options.emailRedirectTo = location.href.split("#")[0];
         }
@@ -749,5 +767,5 @@
   SF.auth = { state: authState, getClient: getSupabaseClient, openDialog: openAuthDialog, bindAuth, init: initSupabaseAuth, renderAdminPage, isPublicKey,
     isDevMode, devModeFrom, hasCustomConnection, customConnectionFrom,
     errorMessage: authErrorMessage, recoveryRedirectFrom, recoveryReturnFrom,
-    deleteAccount, deleteEnabled, deleteErrorMessage };
+    deleteAccount, deleteEnabled, deleteErrorMessage, privacyVersion: PRIVACY_VERSION };
 })(window.SF);

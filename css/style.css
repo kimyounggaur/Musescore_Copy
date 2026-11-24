@@ -745,7 +745,11 @@ dialog::backdrop { background: rgba(10, 12, 16, .6); backdrop-filter: blur(2px);
   display: grid;
   gap: 9px;
 }
-.auth-links { display: flex; justify-content: flex-end; }
+.auth-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 14px; }
+/* 가입 창의 필수 동의 체크(P8-4e): 일반 입력 줄(라벨 칸 + 입력 칸)과 달리 체크 + 문구를 한 줄로 */
+.auth-form .auth-consent { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
+.auth-form .auth-consent input { flex: none; width: 18px; height: 18px; margin: 1px 0 0; padding: 0; cursor: pointer; }
+.auth-form .auth-consent span { color: var(--text); font-size: 13px; line-height: 1.45; text-align: left; }
 .auth-link {
   border: 0;
   background: none;

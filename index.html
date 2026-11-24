@@ -268,7 +268,14 @@
         <span>비밀번호</span>
         <input id="auth-password" type="password" minlength="6" placeholder="6자 이상" autocomplete="current-password">
       </label>
-      <div class="auth-links"><button id="btn-forgot-password" type="button" class="auth-link">비밀번호를 잊으셨나요?</button></div>
+      <label id="auth-consent-row" class="auth-consent" hidden>
+        <input id="auth-consent" type="checkbox">
+        <span>개인정보 처리 안내를 읽었고 동의합니다. (필수)</span>
+      </label>
+      <div class="auth-links">
+        <a id="link-privacy" class="auth-link" href="privacy.html" target="_blank" rel="noopener">개인정보 처리 안내</a>
+        <button id="btn-forgot-password" type="button" class="auth-link">비밀번호를 잊으셨나요?</button>
+      </div>
     </section>
 
     <div class="dlg-actions">

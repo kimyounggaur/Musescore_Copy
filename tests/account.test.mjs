@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 
 const read = path => readFileSync(path, 'utf8');
 const html = read('index.html');
@@ -393,6 +393,78 @@ test('P8-4d 오류 문구 변환(deleteErrorMessage): 상태별로 정해진 한
   assert.equal(deleteErrorMessage({ name: 'FunctionsFetchError', message: 'Failed to send a request to the Edge Function' }), network);
   assert.equal(deleteErrorMessage(new TypeError('Failed to fetch')), network);
   for (const odd of [null, undefined, {}, { message: 'internal detail: SELECT * FROM auth.users' }, 'boom', 42]) assert.equal(deleteErrorMessage(odd), generic, String(odd));
+});
+
+// ───────── e. 개인정보 고지·가입 동의 ─────────
+// privacy.html의 문구는 법률 검토 전 초안이다. 시험은 "있어야 할 절이 있고, 모르는 값은 지어내지 않고 표시돼 있으며, 앱이 기록하는 동의 버전과 일치한다"를 고정한다.
+const privacy = existsSync('privacy.html') ? read('privacy.html') : '';
+const privacyVersion = () => loadAuth().privacyVersion;
+
+test('P8-4e 동의 버전: SF.auth.privacyVersion은 날짜 모양(YYYY-MM-DD)이고, privacy.html의 메타·본문 버전과 같다', () => {
+  const version = privacyVersion();
+  assert.match(version, /^\d{4}-\d{2}-\d{2}$/);
+  assert.match(privacy, new RegExp(`<meta name="privacy-version" content="${version}">`), 'privacy.html <meta name="privacy-version">');
+  assert.match(privacy, new RegExp(`id="privacy-version">${version}<`), '본문에 보이는 버전도 같다');
+  assert.match(read('js/auth.js'), /privacy\.html/, 'auth.js 주석에 두 값을 같이 바꾸라고 적어 둔다');
+});
+
+test('P8-4e privacy.html: 한국어·영어 두 구역에 수집 항목·이용 목적·보관과 파기·처리 위탁과 국외 이전·이용자의 권리·문의처가 있다', () => {
+  assert.ok(privacy, 'privacy.html 이 있어야 한다');
+  assert.match(privacy, /<html lang="ko">/);
+  const ko = section(privacy, '<section id="ko" lang="ko">');
+  const en = section(privacy, '<section id="en" lang="en">');
+  for (const heading of ['수집하는 항목', '이용 목적', '보관과 파기', '처리 위탁과 국외 이전', '이용자의 권리', '문의처']) assert.match(ko, new RegExp(`<h2[^>]*>[^<]*${heading}`), `ko: ${heading}`);
+  for (const heading of ['What we collect', 'Why we use it', 'Retention and deletion', 'Processors and overseas transfer', 'Your rights', 'Contact']) assert.match(en, new RegExp(`<h2[^>]*>[^<]*${heading}`), `en: ${heading}`);
+  for (const part of [ko, en]) {
+    for (const vendor of ['Supabase', 'Vercel']) assert.match(part, new RegExp(vendor), `${vendor} 이(가) 처리 위탁·국외 이전에 적혀 있다`);
+  }
+  for (const word of ['이메일', '비밀번호', '표시 이름', '악보', '동의 기록']) assert.match(ko, new RegExp(word), `ko: ${word}`);
+  for (const word of ['email', 'password', 'display name', 'scores', 'consent']) assert.match(en, new RegExp(word, 'i'), `en: ${word}`);
+  assert.match(ko, /탈퇴/, '삭제·탈퇴 방법을 적는다');
+});
+
+test('P8-4e privacy.html: 앱이 접속하는 외부 음원 서버(서비스 워커의 SAMPLE_HOSTS)를 모두 적는다', () => {
+  const hosts = [...read('sw.js').match(/SAMPLE_HOSTS = new Set\(\[([^\]]*)\]/)[1].matchAll(/"([^"]+)"/g)].map(m => m[1]);
+  assert.ok(hosts.length >= 3, `음원 서버 ${hosts}`);
+  for (const host of hosts) assert.ok(privacy.includes(host), `${host} 이(가) privacy.html에 없다 — 새 외부 서버를 쓰면 고지도 고친다`);
+});
+
+test('P8-4e privacy.html: 모르는 값(문의처·서버 지역·시행일 등)은 지어내지 않고 "[확정 필요…]"로 표시하며, 끝에 "법률 검토 필요" 주석이 있다', () => {
+  const todos = [...privacy.matchAll(/<span class="todo">([^<]*)<\/span>/g)].map(m => m[1]);
+  assert.ok(todos.length >= 4, `표시된 자리 ${todos.length}개`);
+  for (const todo of todos) assert.match(todo, /^\[확정 필요[:\]]/, todo);
+  assert.doesNotMatch(privacy.replace(/<span class="todo">[^<]*<\/span>/g, ''), /@[a-z0-9-]+\.[a-z]{2,}/i, '확정되지 않은 이메일 주소를 본문에 적지 않는다');
+  const tail = privacy.slice(privacy.lastIndexOf('</section>'));
+  assert.match(tail, /<!--[^>]*법률 검토 필요[^>]*-->/, '문서 끝에 "법률 검토 필요" 주석');
+  assert.ok(privacy.lastIndexOf('법률 검토 필요') > privacy.lastIndexOf('</section>'), '마지막 절 뒤에 있다');
+});
+
+test('P8-4e privacy.html: 스크립트·인라인 이벤트·외부 자원이 없고 CSP(default-src self) 아래에서도 그대로 열린다', () => {
+  assert.doesNotMatch(privacy, /<script\b/i);
+  assert.doesNotMatch(privacy, /\son[a-z]+\s*=/i, '인라인 이벤트 속성 없음');
+  assert.doesNotMatch(privacy, /\b(?:src|href)="https?:\/\//i, '외부 주소를 불러오거나 링크하지 않는다');
+  assert.match(privacy, /<link rel="stylesheet" href="css\/privacy\.css">/);
+  assert.match(privacy, /<meta name="viewport" content="width=device-width, initial-scale=1">/);
+  assert.match(privacy, /<a href="\.\/">/, '앱으로 돌아가는 링크');
+  assert.ok(existsSync('css/privacy.css'));
+});
+
+test('P8-4e 마크업: 가입 창의 필수 동의 체크(#auth-consent)는 hidden으로 시작하고, 개인정보 링크는 새 탭으로 열린다', () => {
+  const dialog = section(html, '<dialog id="dlg-auth">');
+  const row = section(dialog, '<label id="auth-consent-row"');
+  assert.match(row.match(/^<label[^>]*>/)[0], /\bhidden\b/);
+  assert.match(row, /<input id="auth-consent" type="checkbox">/);
+  assert.doesNotMatch(row.match(/<input[^>]*>/)[0], /\bchecked\b/, '처음에는 체크돼 있지 않다');
+  assert.match(row, /\(필수\)/);
+  assert.equal(dialog.split('id="auth-consent"').length - 1, 1);
+  assert.match(dialog, /<a id="link-privacy" class="auth-link" href="privacy\.html" target="_blank" rel="noopener">개인정보 처리 안내<\/a>/);
+});
+
+test('P8-4e 서비스 워커 사전 캐시에 privacy.html·css/privacy.css가 들어 있다(오프라인에서도 열린다)', () => {
+  const files = JSON.parse(read('precache-manifest.json'));
+  assert.ok(files.includes('privacy.html'), 'precache-manifest.json 에 privacy.html');
+  assert.ok(files.includes('css/privacy.css'), 'precache-manifest.json 에 css/privacy.css');
+  assert.match(read('tests/release-lib.mjs'), /TOP_LEVEL = \[[^\]]*'privacy\.html'/);
 });
 
 // ───────── i18n: 회원 창·메뉴의 한국어 문구가 모두 영어로 번역된다 ─────────

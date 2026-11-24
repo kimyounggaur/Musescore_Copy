@@ -682,6 +682,9 @@
     deleteMissing | 탈퇴 기능을 아직 쓸 수 없어요. | Account deletion is not available yet.
     deleteFailed | 탈퇴를 처리하지 못했어요. 잠시 뒤에 다시 시도해 주세요. | Could not delete the account. Please try again in a little while.
     deleteNetwork | 네트워크에 연결하지 못했어요. 탈퇴가 처리됐는지 확인하지 못했어요. 잠시 뒤 다시 로그인해 확인해 주세요. | Could not connect to the network. We could not confirm whether the account was deleted. Sign in again in a little while to check.
+    consent | 개인정보 처리 안내를 읽었고 동의합니다. (필수) | I have read and agree to the privacy notice. (required)
+    privacyNotice | 개인정보 처리 안내 | Privacy notice
+    consentRequired | 가입하려면 개인정보 처리 안내에 동의해 주세요. | Please agree to the privacy notice to sign up.
     saveFirst | Supabase 연결 정보를 먼저 저장하세요. | Save the Supabase connection details first.
     configSuffix | {message} 먼저 Supabase 연결 정보를 저장하세요. | {message} Save the Supabase connection details first.
     needCredentials | 이메일과 비밀번호를 입력하세요. | Enter your email and password.
