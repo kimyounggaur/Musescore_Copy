@@ -1818,7 +1818,7 @@ window.SF = window.SF || {};
     const out = cloneData(score);
     if (opts.format === 1) {
       // Serialized compatibility only: old applications read events, while the
-      // live model and structuredClone history contain voices just once per bar.
+      // live model and history snapshots contain voices just once per bar.
       for (const part of out.parts) for (const staff of part.staves)
         for (const mm of staff.measures) mm.events = mm.voices[0];
       out.measures = out.parts[0].staves[0].measures;
@@ -1888,7 +1888,10 @@ window.SF = window.SF || {};
     lastAutosaveAt: 0,
     listeners: new Set(),
   };
-  const history = { undo: [], redo: [], max: 200 };
+  /* 실행 취소 기록: 항목마다 악보를 압축 JSON 글자로 담는다(객체째 복사한 것보다 훨씬 작고 크기를 잴 수 있다).
+   * 개수(max)와 메모리 예산(maxBytes)을 넘으면 가장 오래된 것부터 버린다 — trimHistory. */
+  const HISTORY_BUDGET = 48 * 1024 * 1024;
+  const history = { undo: [], redo: [], max: 200, maxBytes: HISTORY_BUDGET };
   let contentVersion = 0, nextContentVersion = 0, savedVersion = 0, mutationDepth = 0;
 
   function onChange(fn) { state.listeners.add(fn); return () => state.listeners.delete(fn); }
@@ -1897,9 +1900,44 @@ window.SF = window.SF || {};
     for (const fn of state.listeners) fn(state.score, { type, label, revision: state.revision, dirty: state.dirty });
   }
   function bumpRevision() { state.rev = ++state.revision; }
-  function snapshot(score) {
-    ensureParts(score);
-    return typeof structuredClone === "function" ? structuredClone(score) : cloneData(score);
+  /** 지금 악보를 글자로 찍는다. keepSilentVoices: 빈 성부의 쉼표를 남겨 둔다 — 입력 커서·선택이 가리키는
+   * 쉼표 ID가 되돌린 뒤에도 같아야 하기 때문이다(파일 저장용 v2와 달리 버리지 않는다). toJSON이 ensureParts를 먼저 한다. */
+  function snapshot(score) { return JSON.stringify(toJSON(score, { keepSilentVoices: true })); }
+  /** snapshot의 글자를 새 악보 모델로 되살린다(fromJSON이 한 번 더 깊은 복사를 하므로 기록 글자는 건드려지지 않는다). */
+  function restore(text) { return fromJSON(JSON.parse(text)); }
+  /** 기록 항목. bytes는 글자 수 × 2 — UTF-16으로 본 어림값이다(V8은 한글이 없으면 글자당 1바이트라 실제는 더 작을 수 있다). */
+  function historyEntry(label, text, version, at, coalesce = null) {
+    return { label, snapshot: text, bytes: text.length * 2, version, at, coalesce };
+  }
+  function historyBytes() {
+    let sum = 0;
+    for (const entry of history.undo) sum += entry.bytes;
+    for (const entry of history.redo) sum += entry.bytes;
+    return sum;
+  }
+  /** 개수 상한(max)과 메모리 예산(maxBytes)을 지킨다. 가장 오래된 것부터 버리되, 되돌리기 쪽과 다시 실행 쪽의
+   * 가장 가까운 항목 1개씩은 예산을 넘어도 남긴다 — 아주 큰 악보에서도 한 번은 늘 되돌릴 수 있게. */
+  function trimHistory() {
+    while (history.undo.length > history.max) history.undo.shift();
+    let total = historyBytes();
+    while (total > history.maxBytes) {
+      const stack = history.undo.length > 1 ? history.undo : history.redo.length > 1 ? history.redo : null;
+      if (!stack) break;
+      total -= stack.shift().bytes;
+    }
+  }
+  /** 시험용: 실행 취소 기록의 예산(바이트)을 바꾸고 바로 적용한다. 값 없이 부르면 기본값(48MB)으로 돌아간다. */
+  function setHistoryBudget(bytes) {
+    history.maxBytes = Number.isFinite(bytes) && bytes >= 0 ? bytes : HISTORY_BUDGET;
+    trimHistory();
+    return history.maxBytes;
+  }
+  /** 시험·측정용: 실행 취소 기록이 지금 얼마나 쌓였나. chars는 기록 글자의 총 길이. */
+  function historyStats() {
+    let chars = 0;
+    for (const entry of history.undo) chars += entry.snapshot.length;
+    for (const entry of history.redo) chars += entry.snapshot.length;
+    return { undo: history.undo.length, redo: history.redo.length, chars, bytes: historyBytes(), maxBytes: history.maxBytes, max: history.max };
   }
   function breakCoalescing() {
     const last = history.undo[history.undo.length - 1];
@@ -1940,13 +1978,13 @@ window.SF = window.SF || {};
       ensureParts(state.score);
       normalizeSpanners(state.score);
     } catch (error) {
-      state.score = fromJSON(before);
+      state.score = restore(before);
       throw error;
     } finally { mutationDepth--; }
     if (coalesced) { last.label = label; last.at = at; }
-    else history.undo.push({ label, snapshot: before, version: previousVersion, at, coalesce: opt.coalesce || null });
-    if (history.undo.length > history.max) history.undo.shift();
+    else history.undo.push(historyEntry(label, before, previousVersion, at, opt.coalesce || null));
     history.redo.length = 0;
+    trimHistory();
     contentVersion = ++nextContentVersion;
     bumpRevision();
     emit("mutate", label);
@@ -1956,9 +1994,10 @@ window.SF = window.SF || {};
     if (state.readOnly) return false;
     if (!history.undo.length) return false;
     const entry = history.undo.pop();
-    history.redo.push({ label: entry.label, snapshot: snapshot(state.score), version: contentVersion, at: Date.now() });
-    state.score = fromJSON(entry.snapshot);
+    history.redo.push(historyEntry(entry.label, snapshot(state.score), contentVersion, Date.now()));
+    state.score = restore(entry.snapshot);
     contentVersion = entry.version;
+    trimHistory();
     breakCoalescing(); bumpRevision();
     emit("undo", entry.label); return true;
   }
@@ -1966,9 +2005,10 @@ window.SF = window.SF || {};
     if (state.readOnly) return false;
     if (!history.redo.length) return false;
     const entry = history.redo.pop();
-    history.undo.push({ label: entry.label, snapshot: snapshot(state.score), version: contentVersion, at: Date.now(), coalesce: null });
-    state.score = fromJSON(entry.snapshot);
+    history.undo.push(historyEntry(entry.label, snapshot(state.score), contentVersion, Date.now()));
+    state.score = restore(entry.snapshot);
     contentVersion = entry.version;
+    trimHistory();
     bumpRevision();
     emit("redo", entry.label); return true;
   }
@@ -2013,6 +2053,6 @@ window.SF = window.SF || {};
     rebar, transposeScore, toJSON, fromJSON,
     state, mutate, undo, redo, canUndo, canRedo, undoLabel, redoLabel, resetHistory, setScore, onChange,
     markSaved, markAutosaved, isAutosaved,
-    __stats: stats,
+    __stats: stats, __setHistoryBudget: setHistoryBudget, __history: historyStats,
   };
 })(window.SF);
