@@ -456,3 +456,62 @@ test('P8-2 클라우드 열기: 고칠 수 없는 악보는 ScoreFormatError로 
   await assert.rejects(h.SF.cloud.open(ID), { name: 'ScoreFormatError', code: 'STAVES_NOT_ARRAY', path: 'parts[0].staves' });
   assert.equal(h.C.state.score, before); assert.equal(calls.length, 0);
 });
+
+/* ----- P8-3: 클라우드 저장 단축키(Ctrl+Shift+S)도 한글 입력 상태에서 먹는다 ----- */
+const keymapSource = readFileSync(new URL('../js/keymap.js', import.meta.url), 'utf8');
+function realKeymap() { const sf = {}; vm.runInNewContext(keymapSource, { window: { SF: sf } }, { filename: 'keymap.js' }); return sf.keymap; }
+const flush = async () => { for (let i = 0; i < 6; i++) await new Promise(resolve => setImmediate(resolve)); };
+function press(h, event) {
+  const seen = { prevented: 0, stopped: 0 };
+  h.events.get('keydown')({ ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, preventDefault() { seen.prevented++; }, stopImmediatePropagation() { seen.stopped++; }, ...event });
+  return seen;
+}
+const wroteToCloud = h => h.operations.some(op => op.op === 'insert' || op.op === 'update');
+
+test('P8-3 저장 단축키: keymap이 있으면 라틴·한글 입력(Process·ㄴ)·Mac Cmd 모두 Ctrl+Shift+S로 저장한다', async () => {
+  const events = [
+    { ctrlKey: true, shiftKey: true, key: 'S', code: 'KeyS' },
+    { ctrlKey: true, shiftKey: true, key: 's', code: 'KeyS' },
+    { ctrlKey: true, shiftKey: true, key: 'Process', code: 'KeyS' },     // Windows·Chrome 한글 입력 상태
+    { ctrlKey: true, shiftKey: true, key: 'ㄴ', code: 'KeyS' },           // Firefox·Safari 한글 입력 상태
+    { metaKey: true, shiftKey: true, key: 'ㄴ', code: 'KeyS' },           // Mac: Cmd+Shift+S
+    { ctrlKey: true, shiftKey: true, key: 'ы', code: 'KeyS' },            // 러시아어 자판
+  ];
+  for (const event of events) {
+    const h = await harness(); h.SF.keymap = realKeymap(); h.edit('단축키로 저장');
+    const seen = press(h, event); await flush();
+    assert.equal(wroteToCloud(h), true, JSON.stringify(event));
+    assert.deepEqual(seen, { prevented: 1, stopped: 1 }, '브라우저 기본 동작(페이지 저장)을 막고 다른 처리기로 넘기지 않는다');
+  }
+});
+
+test('P8-3 저장 단축키: Shift가 없거나 Alt가 섞였거나 다른 글자면 저장하지 않고 이벤트도 건드리지 않는다', async () => {
+  const events = [
+    { ctrlKey: true, key: 's', code: 'KeyS' },                                   // Ctrl+S(저장 아님: 로컬 저장은 keymap이 처리)
+    { ctrlKey: true, shiftKey: true, altKey: true, key: 'S', code: 'KeyS' },
+    { ctrlKey: true, shiftKey: true, key: 'Process', code: 'KeyA' },
+    { ctrlKey: true, shiftKey: true, key: 'ㅁ', code: 'KeyA' },
+    { shiftKey: true, key: 'S', code: 'KeyS' },                                   // Ctrl 없이
+    { ctrlKey: true, shiftKey: true, key: 'Unidentified', code: '' },
+    { ctrlKey: true, shiftKey: true },                                            // key·code가 아예 없는 이벤트
+  ];
+  for (const event of events) {
+    const h = await harness(); h.SF.keymap = realKeymap(); h.edit('저장되면 안 된다');
+    const seen = press(h, event); await flush();
+    assert.equal(wroteToCloud(h), false, JSON.stringify(event));
+    assert.deepEqual(seen, { prevented: 0, stopped: 0 }, JSON.stringify(event));
+  }
+});
+
+test('P8-3 저장 단축키: keymap이 없는 환경에서도 예전처럼 Ctrl+Shift+S로 저장하고, key가 없는 이벤트에도 던지지 않는다', async () => {
+  for (const mod of [{ ctrlKey: true, key: 'S' }, { ctrlKey: true, key: 's' }, { metaKey: true, key: 's' }]) {
+    const h = await harness(); assert.equal(h.SF.keymap, undefined); h.edit('keymap 없이 저장');
+    const seen = press(h, { shiftKey: true, ...mod }); await flush();
+    assert.equal(wroteToCloud(h), true, JSON.stringify(mod)); assert.deepEqual(seen, { prevented: 1, stopped: 1 });
+  }
+  const h = await harness(); h.edit('저장되면 안 된다');
+  for (const event of [{ ctrlKey: true, shiftKey: true }, { ctrlKey: true, shiftKey: true, key: null }, { ctrlKey: true, key: 's' }, { ctrlKey: true, shiftKey: true, altKey: true, key: 's' }]) {
+    assert.doesNotThrow(() => press(h, event), JSON.stringify(event));
+  }
+  await flush(); assert.equal(wroteToCloud(h), false);
+});
