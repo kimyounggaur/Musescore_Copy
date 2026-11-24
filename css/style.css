@@ -516,6 +516,23 @@ select.tsel {
 }
 #toast .toast-action:hover, #toast .toast-action:focus-visible { background: rgba(128, 128, 128, .3); }
 
+/* ---------------- 음원 준비 중 선택 안내(P9-4) ----------------
+ * 재생을 눌렀는데 음원이 아직 준비 중일 때만 뜬다. 배경·글자색은 테마 변수를 써서 어느 테마에서도 대비가 맞는다.
+ * 숨김(hidden)은 파일 맨 위의 전역 [hidden] 규칙이 맡으므로 여기서 따로 정하지 않는다. */
+.sample-wait {
+  position: fixed; left: 50%; bottom: 196px; transform: translateX(-50%); z-index: 99;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 10px;
+  width: max-content; max-width: min(94vw, 560px); box-sizing: border-box;
+  padding: 10px 14px; border: 1px solid var(--line); border-radius: 14px;
+  background: var(--panel); color: var(--text); box-shadow: var(--shadow); font-size: 13.5px;
+}
+.sample-wait-msg { flex: 1 1 100%; text-align: center; }
+.sample-wait-btn {
+  font: inherit; font-weight: 700; color: var(--text); background: transparent; cursor: pointer;
+  border: 1px solid var(--text); border-radius: 999px; padding: 8px 14px; min-height: 40px;
+}
+.sample-wait-btn:hover, .sample-wait-btn:focus-visible { background: rgba(128, 128, 128, .25); }
+
 /* ---------------- 단축키 확인 팝업 ---------------- */
 .shortcut-overlay {
   position: fixed;

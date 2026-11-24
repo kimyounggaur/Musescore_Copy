@@ -388,6 +388,7 @@
     $("#set-time").value = score.timeSig.num + "/" + score.timeSig.den;
     $("#set-tempo").value = score.tempo;
     $("#set-piano-quality").value = P.getPianoQuality();
+    $("#set-sample-preload").value = P.getPreloadSetting();
     const layout = C.ensureLayout(score);
     $("#set-measures-system").value = layout.measuresPerSystem || "";
     $("#set-page-size").value = layout.pageSize || "A4";
@@ -452,6 +453,11 @@
       stopPlayback();
       const quality = P.setPianoQuality($("#set-piano-quality").value);
       toast(quality === "hq" ? "고음질 피아노(약 19MB)를 쓰도록 바꿨어요. 다음 재생부터 적용돼요" : "기본 피아노로 바꿨어요. 다음 재생부터 적용돼요");
+    });
+    // 이 기기의 설정이라 '적용'을 기다리지 않고 바로 저장한다. 끄면 예약·진행 중인 미리 받기의 남은 악기를 그만둔다.
+    $("#set-sample-preload").addEventListener("change", () => {
+      const setting = P.setPreloadSetting($("#set-sample-preload").value);
+      toast(setting === "off" ? "음원은 재생할 때만 받을게요" : "쉴 때 음원을 미리 받아 둘게요");
     });
     $("#set-add-measures").addEventListener("click", (e) => {
       e.preventDefault();

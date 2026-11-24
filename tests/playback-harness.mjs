@@ -10,9 +10,14 @@ const node = () => ({ gain: parameter(), pan: parameter(), frequency: parameter(
 
 // hq: 피아노 음질 설정을 '고음질'로 시작한다(기본은 가벼운 Soundfont 피아노). store: localStorage 초기값. blockedStorage: 저장소가 막힌 브라우저.
 export const PIANO_QUALITY_KEY = 'scoreforge.audio.pianoQuality';
+export const PRELOAD_KEY = 'scoreforge.audio.preload';
 // hook: import() 문을 바꿔치지 않고 playback.js가 제공하는 __setSmplrModuleForTest로 가짜 smplr를 넣는다(P4-4 이후 새 테스트의 기본 방식).
-export function loadPlayback({ sampleModule, fetch, hq = false, store = {}, blockedStorage = false, hook = false } = {}) {
+// navigator: 있으면 vm에 navigator로 넣는다(온라인 여부·데이터 절약 같은 연결 정보 시험용). idle: true면 requestIdleCallback 대역을 넣고
+//   돌려주는 runIdle()로 예약된 쉬는 시간 작업을 직접 실행한다(false면 requestIdleCallback이 없는 브라우저와 같다).
+export function loadPlayback({ sampleModule, fetch, hq = false, store = {}, blockedStorage = false, hook = false, navigator, idle = false } = {}) {
   const stats = { decodes: 0, contexts: 0 }, logs = [];
+  const idleTasks = new Map();
+  let idleSeq = 0;
   const data = new Map(Object.entries({ ...(hq ? { [PIANO_QUALITY_KEY]: 'hq' } : {}), ...store }));
   const blocked = () => { throw new Error('storage blocked'); };
   const localStorage = blockedStorage
@@ -30,6 +35,11 @@ export function loadPlayback({ sampleModule, fetch, hq = false, store = {}, bloc
     SF: { core: SF.core, Fraction: SF.Fraction }, AudioContext, console: { ...console, warn: (...args) => logs.push(args) }, setTimeout, clearTimeout,
     setInterval() { return 1; }, clearInterval() {}, requestAnimationFrame: () => 1, cancelAnimationFrame() {},
     fetch, localStorage, TextEncoder, __sampleModule: async () => sampleModule,
+    ...(navigator ? { navigator } : {}),
+    ...(idle ? {
+      requestIdleCallback: fn => { idleTasks.set(++idleSeq, fn); return idleSeq; },
+      cancelIdleCallback: id => { idleTasks.delete(id); },
+    } : {}),
   });
   context.window = context;
   const original = readFileSync(new URL('../js/playback.js', import.meta.url), 'utf8');
@@ -37,7 +47,8 @@ export function loadPlayback({ sampleModule, fetch, hq = false, store = {}, bloc
   if (source === original && !hook) throw new Error('smplr import 바꿔치기 실패 — playback.js의 import 문을 확인');
   vm.runInContext(source, context);
   if (hook) context.SF.playback.__setSmplrModuleForTest(sampleModule);
-  return { playback: context.SF.playback, context, stats, logs, data };
+  const runIdle = () => { const batch = [...idleTasks.values()]; idleTasks.clear(); for (const fn of batch) fn({ didTimeout: false, timeRemaining: () => 50 }); return batch.length; };
+  return { playback: context.SF.playback, context, stats, logs, data, runIdle, idleCount: () => idleTasks.size };
 }
 
 // 가짜 smplr 모듈: 만들어진 악기와 로더를 기록한다. makeReady(만든 순서, kind)로 악기별 ready Promise를 바꿀 수 있다.

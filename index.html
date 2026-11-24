@@ -215,6 +215,11 @@
 </footer>
 
 <div id="toast" role="status"></div>
+<div id="sample-wait" class="sample-wait" role="status" hidden>
+  <span id="sample-wait-msg" class="sample-wait-msg"></span>
+  <button type="button" class="sample-wait-btn" data-choice="synth">지금은 신스로 재생</button>
+  <button type="button" class="sample-wait-btn" data-choice="wait">준비되면 자동 재생</button>
+</div>
 <div id="aria-live" class="visually-hidden" aria-live="polite"></div>
 
 <!-- ═══════════ 단축키 확인 팝업 ═══════════ -->
@@ -350,6 +355,11 @@ where email = 'admin@example.com';</pre>
       <select id="set-piano-quality" title="이 기기에만 저장돼요. 악보에는 들어가지 않고, 다음 재생부터 적용돼요.">
         <option value="basic">기본</option>
         <option value="hq">고음질(약 19MB)</option>
+      </select>
+      <label for="set-sample-preload">음원 미리 받기</label>
+      <select id="set-sample-preload" title="이 기기에만 저장돼요. 데이터 절약 모드나 오프라인에서는 켜 두어도 미리 받지 않아요.">
+        <option value="on">켜기(쉴 때 미리 받아 두기)</option>
+        <option value="off">끄기(재생할 때만 받기)</option>
       </select>
       <label for="set-measures-system">마디/줄</label>
       <input id="set-measures-system" type="number" min="0" max="16" placeholder="자동">
