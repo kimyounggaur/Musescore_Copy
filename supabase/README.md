@@ -99,7 +99,7 @@ node tests/switch-supabase-project.mjs --url https://<새 ref>.supabase.co --key
 npm run release   # 릴리스 파일(sw.js 등)을 다시 만든 뒤 함께 커밋
 ```
 
-도구는 `js/config.js`의 프로젝트 주소·공개 키와 `vercel.json` CSP의 Supabase 주소만 바꿉니다. 비밀 키(`sb_secret_…`, service_role)는 거절하고 어디에도 쓰지 않습니다. 탈퇴 Edge Function을 새 프로젝트에 배포한 **뒤에만** `--enable-delete-account`를 더해 탈퇴 버튼을 켭니다. CSP가 새 프로젝트 하나로 좁혀지므로 배포본에서는 개발 모드의 "사용자 지정 연결"로 다른 프로젝트에 붙을 수 없습니다(의도된 동작). 전체 체크리스트는 [v4 검증 기록](../docs/SUPABASE_V4_VERIFICATION.md) 7장입니다.
+도구는 `js/config.js`의 프로젝트 주소·공개 키와 `vercel.json` CSP의 Supabase 주소만 바꿉니다. 비밀 키(`sb_secret_…`, service_role)는 거절하고 어디에도 쓰지 않습니다. 탈퇴 Edge Function을 새 프로젝트에 배포한 **뒤에만** `--enable-delete-account`를 더해 탈퇴 버튼을 켭니다(저장소의 시험은 "플래그가 켜져 있으면 CSP가 새 프로젝트 하나로 좁혀져 있어야 한다"를 확인하므로, 도구로 켜면 통과하고 `js/config.js`만 손으로 켜면 막힙니다). CSP가 새 프로젝트 하나로 좁혀지므로 배포본에서는 개발 모드의 "사용자 지정 연결"로 다른 프로젝트에 붙을 수 없습니다(의도된 동작). 전체 체크리스트는 [v4 검증 기록](../docs/SUPABASE_V4_VERIFICATION.md) 7장입니다.
 
 ## 6. 적용 후 검증 (메인 에이전트/운영자 실행)
 

@@ -144,7 +144,7 @@ Supabase 서버는 이 환경과 다르므로 스테이징에서 `supabase/tests
   도구는 `js/config.js`의 주소·공개 키와 `vercel.json` CSP의 supabase 주소(와일드카드 → 새 프로젝트 하나)만 바꾸고, 비밀 키(`sb_secret_…`·service_role)는 거절한다. **비밀 키를 어디에도 적지 않는다.**
   CSP가 한 프로젝트로 좁혀지므로 개발 모드의 "사용자 지정 연결"로 다른 프로젝트에 붙는 것은 배포본에서 막힌다(의도된 동작; 로컬 개발 서버는 CSP 헤더가 없어 그대로 된다).
 - [ ] 5. 새 프로젝트의 Auth 설정을 다시 한다: URL Configuration(배포 주소·로컬 주소), 이메일 문구(비밀번호 재설정 포함), 비밀번호 정책(아래 8장)
-- [ ] 6. 탈퇴 기능: 새 프로젝트에 `supabase/functions/delete-account`를 배포하고 `ALLOWED_ORIGINS`를 정한 뒤(절차: [`delete-account/README.md`](../supabase/functions/delete-account/README.md)), 4번 명령에 `--enable-delete-account`를 더해 플래그를 켜고 커밋·배포. **Edge Function 배포 전에는 켜지 않는다.** 확인: 시험 계정으로 탈퇴 → 관련 행 0건(설계서 Phase 8 DoD).
+- [ ] 6. 탈퇴 기능: 새 프로젝트에 `supabase/functions/delete-account`를 배포하고 `ALLOWED_ORIGINS`를 정한 뒤(절차: [`delete-account/README.md`](../supabase/functions/delete-account/README.md)), 4번 명령에 `--enable-delete-account`를 더해 플래그를 켜고 커밋·배포. **Edge Function 배포 전에는 켜지 않는다.** 저장소의 시험은 "플래그가 켜져 있으면 CSP가 새 프로젝트 하나로 좁혀져 있어야 한다"(D1 규칙)를 확인하므로, 전환 도구로 켜면 그대로 통과하고 `js/config.js`만 손으로 켜면 막힌다. 확인: 시험 계정으로 탈퇴 → 관련 행 0건(설계서 Phase 8 DoD).
 - [ ] 7. 구 프로젝트의 `scores` 표·함수는 레슨 앱 영향 확인 후 **최소 30일 병행 뒤** 제거(제거일: ______)
 - [ ] 8. `privacy.html`의 `[확정 필요]` 표시를 확인한다(관리자 열람 범위 문구는 v4 적용 후에 확정)
 
