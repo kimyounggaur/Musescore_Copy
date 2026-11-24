@@ -671,3 +671,19 @@ test('P8-5 한도 초과: 충돌 처리에서 "다른 이름으로 저장"한 �
   assert.equal(queued(h)[0].blocked, true);
   assert.equal(h.C.state.score.meta.title, '한도 직전 사본', '로컬 악보에는 사본 이름이 남아 있다(내용은 잃지 않는다)');
 });
+
+test('P8-5 한도 초과: 직접 저장이 연달아 겹쳐 앞선 저장이 한도에 걸려도, 뒤따르는 직접 저장은 건너뛰지 않고 다시 시도한다', async () => {
+  const h = await harness(); h.edit('겹친 저장 1');
+  const hold = h.hold('insert'); hold.response = { data: null, error: quotaError('COUNT') };
+  const first = h.SF.cloud.saveCurrent();
+  await hold.started.promise;                       // 첫 저장이 서버 응답을 기다리는 중
+  h.edit('겹친 저장 2');
+  const second = h.SF.cloud.saveCurrent();          // 두 번째 직접 저장은 첫 저장 뒤에 줄을 선다
+  hold.resolve();                                   // 첫 저장이 한도로 거절된다 → 멈춤 표시는 대기열의 최신 작업(= 두 번째 저장)에 붙는다
+  await assert.rejects(first, { code: 'QUOTA_EXCEEDED', quota: 'count' });
+  const row = await second;                         // 자동 저장과 달리 직접 저장은 멈춤 표시와 상관없이 다시 시도한다(같은 행 ID로)
+  assert.ok(row, '직접 저장이 조용히 건너뛰어지지 않았다');
+  assert.equal(insertsOf(h), 2, '서버로 두 번 보냈다');
+  assert.equal(h.db.rows.size, 1); assert.equal(h.db.rows.get(row.id).title, '겹친 저장 2', '그동안 고친 내용까지 저장된다');
+  assert.deepEqual(queued(h), [], '성공하면 대기열이 비워진다');
+});

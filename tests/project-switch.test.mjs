@@ -149,6 +149,8 @@ test('P8-5 전환 도구: 파일 모양이 예상과 다르면 아무것도 돌�
     ['vercel.json이 JSON이 아님', { vercelText: '{ not json' }, /vercel\.json/],
     ['vercel.json에 CSP가 없음', { vercelText: '{ "headers": [] }' }, /Content-Security-Policy|CSP/],
     ['CSP에 supabase 주소가 없음', { vercelText: vercelText.replaceAll('https://*.supabase.co wss://*.supabase.co', "'self'") }, /supabase/],
+    // 바꿀 수 없는 모양(뒤에 / 가 붙음)의 와일드카드가 남으면, 다른 토큰은 바뀌었어도 결과를 내지 않는다
+    ['바뀌지 않은 와일드카드가 CSP에 남음', { vercelText: vercelText.replace('wss://*.supabase.co', 'wss://*.supabase.co/') }, /와일드카드/],
   ];
   for (const [name, change, pattern] of cases) {
     const message = messageOf(() => switchProject({ configText, vercelText, url: URL_A, key: KEY_A, ...change }));
@@ -266,6 +268,9 @@ test('P8-5 탈퇴 플래그 규칙: 꺼져 있으면 언제나 괜찮고, 켜져
   assert.deepEqual({ ...on }, { url: URL_A, deleteAccount: true, wildcard: false, cspTokens: 2 });
   assert.equal(deleteAccountPolicy(on).ok, true, '켜짐 + 분리 후(전환 도구가 한 번에 만든 결과) = 괜찮다');
   assert.equal(deleteAccountPolicy(state(enabled.config, vercelText)).ok, false, '플래그만 켜고 CSP는 그대로 두면 막힌다');
+  const noToken = state(enabled.config, vercelText.replaceAll('https://*.supabase.co wss://*.supabase.co', "'self'"));
+  assert.deepEqual({ ...noToken }, { url: URL_A, deleteAccount: true, wildcard: false, cspTokens: 0 }, '준비: 와일드카드도 없고 supabase 주소도 하나도 없는 CSP');
+  assert.equal(deleteAccountPolicy(noToken).ok, false, '켜짐 + CSP에 supabase 주소가 하나도 없음(앱이 어느 프로젝트에도 연결할 수 없음) = 막힌다');
   assert.equal(deleteAccountPolicy(state(configText.replace(/window\.SF_FEATURES[^\n]*\n/, ''), vercelText)).ok, false, '플래그 줄이 없으면 막힌다');
   assert.throws(() => state(configText, '{ not json'), SwitchError, 'vercel.json이 JSON이 아니면 던진다');
   assert.throws(() => state(configText, '{ "headers": [] }'), SwitchError, 'CSP가 없으면 던진다');

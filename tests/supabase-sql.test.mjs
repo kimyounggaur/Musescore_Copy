@@ -192,13 +192,88 @@ test('P8-5 SQL을 일회용 PostgreSQL에서 실행한다 (v3 기준선 → v4 �
     await t.test('v3가 없거나 다른 앱의 scores 표면 v4는 안내하고 멈춘다', () => {
       sql('postgres', 'create database authonly');
       apply('authonly', SQL.stub); apply('authonly', SQL.auth);
-      assert.match(psql('authonly', { file: SQL.v4 }).err, /Apply scoreforge_scores\.sql first/);
+      assert.match(psql('authonly', { file: SQL.v4 }).err, /Apply scoreforge_scores\.sql first: the ScoreForge public\.scores table was not found/);
       clone('stranger', 'authonly');
       sql('stranger', 'create table public.scores (id int primary key)');
-      assert.match(psql('stranger', { file: SQL.v4 }).err, /Apply scoreforge_scores\.sql first/);
+      assert.match(psql('stranger', { file: SQL.v4 }).err, /Apply scoreforge_scores\.sql first: the ScoreForge public\.scores table was not found/);
       assert.equal(sql('stranger', "select count(*) from pg_policies where tablename = 'scores'").trim(), '0');
       sql('postgres', 'create database empty');
       assert.match(psql('empty', { file: SQL.v4 }).err, /private\.is_admin\(\) is required/);
+    });
+
+    await t.test('ScoreForge 함수가 다 있어도 표 설명(소유 표식)이 다르면 v4·롤백은 아무것도 바꾸지 않고 멈춘다', () => {
+      clone('stranger2', 'v3');
+      sql('stranger2', `comment on table public.scores is 'something else'`);
+      const before = scoreforge('stranger2');
+      const forward = psql('stranger2', { file: SQL.v4 });
+      assert.notEqual(forward.status, 0);
+      assert.match(forward.err, /the ScoreForge public\.scores table was not found/, '함수가 아니라 표를 못 찾았다고 안내한다');
+      const back = psql('stranger2', { file: SQL.rollback });
+      assert.notEqual(back.status, 0);
+      assert.match(back.err, /ScoreForge public\.scores table was not found; nothing to roll back/);
+      sameDetail(scoreforge('stranger2'), before, '멈춘 뒤 상태가 달라졌다');
+      assert.equal(sql('stranger2', `select to_regprocedure('private.scoreforge_enforce_quota()') is null`).trim(), 't', '한도 함수가 만들어졌다');
+    });
+
+    await t.test('권한이 어긋난 상태에서 v4·롤백을 실행하면 집계 함수의 권한이 제자리로 돌아온다(익명·PUBLIC 실행 불가)', () => {
+      const pub = 'public.count_scoreforge_scores_by_owner(uuid[])', priv = 'private.scoreforge_count_by_owner(uuid[])';
+      const can = (db, role, fn) => sql(db, `select has_function_privilege('${role}', '${fn}', 'execute')`).trim();
+      // (1) v3 쪽 공개 집계 함수가 누군가에 의해 모두에게 열려 있었다면 v4가 닫는다
+      clone('drift', 'v3');
+      sql('drift', `grant execute on function ${pub} to public, anon`);
+      assert.equal(can('drift', 'anon', pub), 't', '준비: 어긋난 권한이 걸렸다');
+      apply('drift', SQL.v4);
+      assert.equal(can('drift', 'anon', pub), 'f', 'v4 뒤에도 익명이 공개 집계 함수를 실행할 수 있다');
+      assert.equal(can('drift', 'authenticated', pub), 't', '로그인한 회원은 계속 실행할 수 있다');
+      sameDetail(scoreforge('drift'), v4, '어긋난 권한을 고친 뒤 상태가 v4와 다르다');
+      // (2) v4 뒤에 다시 열렸다면 v4를 다시 실행하면 닫힌다(비공개 함수 포함)
+      sql('drift', `grant execute on function ${pub} to public, anon; grant execute on function ${priv} to public, anon`);
+      assert.equal(can('drift', 'anon', priv), 't', '준비: 비공개 함수도 열렸다');
+      apply('drift', SQL.v4);
+      for (const fn of [pub, priv]) assert.equal(can('drift', 'anon', fn), 'f', `${fn}: v4를 다시 실행해도 익명이 실행할 수 있다`);
+      sameDetail(scoreforge('drift'), v4, '다시 실행한 뒤 상태가 v4와 다르다');
+      // (3) 롤백도 같다 — 되돌린 v3 함수는 익명에게 닫혀 있다
+      sql('drift', `grant execute on function ${pub} to public, anon`);
+      apply('drift', SQL.rollback);
+      assert.equal(can('drift', 'anon', pub), 'f', '롤백 뒤에도 익명이 공개 집계 함수를 실행할 수 있다');
+      sameDetail(scoreforge('drift'), v3, '롤백 뒤 상태가 v3와 다르다');
+    });
+
+    await t.test('이미 한도를 넘은 회원(한도 없는 v3에서 쓰던 회원): 개수만 넘으면 새 악보만, 용량이 넘으면 data만 막히고 읽기·이름·공유·삭제는 된다', () => {
+      clone('overlimit', 'v3');   // v4 적용 전에 만들어 둔다 — v4의 트리거가 걸린 뒤에는 이런 상태를 만들 수 없다
+      const [many, big] = ['dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'];
+      for (const id of [many, big]) sql('overlimit', `insert into auth.users(id,email) values ('${id}','${id}@example.invalid')`);
+      sql('overlimit', `insert into public.scores(owner,title,data) select '${many}','n'||g,'{}' from generate_series(1,201) g`);
+      sql('overlimit', `insert into public.scores(owner,title,data) select '${big}','b'||g,jsonb_build_object('p', repeat('x', 300000)) from generate_series(1,180) g`);
+      const bytesOf = id => Number(sql('overlimit', `select sum(octet_length(data::text)) from public.scores where owner = '${id}'`).trim());
+      assert.ok(bytesOf(big) > 50 * 1024 * 1024, '준비: 용량이 한도를 넘었다');
+      assert.ok(bytesOf(many) < 1024 * 1024, '준비: 개수만 넘은 회원은 용량이 작다');
+      apply('overlimit', SQL.v4);   // 이미 넘은 회원이 있어도 적용은 막히지 않는다
+      // 회원으로 로그인한 것처럼 실행한다(실패하면 status가 0이 아니다)
+      const asMember = (uid, text) => psql('overlimit', { sql: `select set_config('request.jwt.claim.sub', '${uid}', true); set local role authenticated; ${text}` });
+      const done = (uid, text) => lastLine(ok(asMember(uid, text), text));   // 성공해야 하고, 마지막 줄(returning·count)을 돌려준다
+      const refused = (uid, text, code) => { const r = asMember(uid, text); assert.notEqual(r.status, 0, text); assert.match(r.err, new RegExp(code), text); };
+
+      // 개수만 넘은 회원: 201개
+      assert.equal(done(many, 'select count(*) from public.scores'), '201', '기존 악보를 그대로 읽는다');
+      assert.equal(done(many, `update public.scores set data = '{"a": 1}' where title = 'n1' returning title`), 'n1', '기존 악보의 data는 고칠 수 있다(개수는 새로 만들 때만 따진다)');
+      refused(many, `insert into public.scores(owner,title,data) values ('${many}','new','{}')`, 'SCOREFORGE_QUOTA_COUNT');
+      assert.equal(done(many, `update public.scores set title = 'renamed' where title = 'n2' returning title`), 'renamed');
+      assert.equal(done(many, `with d as (delete from public.scores where title in ('n3','n4','n5') returning 1) select count(*) from d`), '3', '삭제는 된다');
+      assert.equal(done(many, `insert into public.scores(owner,title,data) values ('${many}','new','{}') returning title`), 'new', '198개로 내려오면 다시 만들 수 있다');
+      assert.equal(sql('overlimit', `select data->>'a' from public.scores where owner = '${many}' and title = 'n1'`).trim(), '1');
+
+      // 용량만 넘은 회원: 180개(개수는 한도 아래)
+      assert.equal(done(big, 'select count(*) from public.scores'), '180', '기존 악보를 그대로 읽는다');
+      assert.equal(done(big, `update public.scores set title = 'renamed' where title = 'b1' returning title`), 'renamed', '이름 바꾸기는 data를 쓰지 않으므로 한도를 따지지 않는다');
+      assert.equal(done(big, `update public.scores set is_public = true, share_slug = 'AbCdEfGhIjKl' where title = 'renamed' returning is_public`), 't', '공유 켜기');
+      assert.equal(done(big, `update public.scores set is_public = false where title = 'renamed' returning is_public`), 'f', '공유 끄기');
+      refused(big, `update public.scores set data = '{}' where title = 'b2'`, 'SCOREFORGE_QUOTA_BYTES');   // 줄이는 저장도 합계가 한도 아래가 되기 전에는 막힌다
+      refused(big, `insert into public.scores(owner,title,data) values ('${big}','new','{}')`, 'SCOREFORGE_QUOTA_BYTES');
+      assert.equal(done(big, `with d as (delete from public.scores where title in (select 'b'||g from generate_series(100,119) g) returning 1) select count(*) from d`), '20', '삭제는 된다');
+      assert.ok(bytesOf(big) < 50 * 1024 * 1024, '지운 뒤 합계가 한도 아래로 내려왔다');
+      assert.equal(done(big, `update public.scores set data = '{}' where title = 'b2' returning title`), 'b2', '합계가 한도 아래로 내려오면 data도 다시 쓸 수 있다');
+      assert.equal(done(big, `insert into public.scores(owner,title,data) values ('${big}','new','{}') returning title`), 'new');
     });
 
     await t.test('같은 회원이 199개일 때 동시에 두 건을 넣으면 정확히 한 건만 들어간다(어드바이저리 잠금)', async () => {
