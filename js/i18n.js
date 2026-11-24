@@ -725,6 +725,8 @@
     pendingError | 클라우드 저장 대기 · {error} | Cloud save pending · {error}
     checkConnection | 연결을 확인해 주세요. | Check your connection.
     failed | 클라우드 작업을 마치지 못했어요. | Could not complete the cloud operation.
+    quotaReached | 악보 저장 한도(200개·50MB)에 도달했어요. 안 쓰는 악보를 지운 뒤 다시 저장해 주세요. | You have reached the cloud limit (200 scores · 50 MB). Delete scores you no longer use, then save again.
+    quotaStatus | 클라우드 저장 한도 도달 · 악보를 정리해 주세요 | Cloud limit reached · Delete some scores
     dialogUnavailable | 앱 다이얼로그를 사용할 수 없어요. | App dialogs are unavailable.
     title | 클라우드 악보 | Cloud scores
     otherAccount | 다른 계정의 악보예요. 사본으로 저장해 주세요. | This score belongs to another account. Save a copy.
