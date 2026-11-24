@@ -8,7 +8,7 @@ const SHELL_DIRS = ['js', 'css', 'vendor', 'manual'];
 /** 설치(사전 캐시)에는 담지 않고 처음 볼 때 서비스 워커가 담는 폴더(설명서 그림). 그래도 해시에는 넣는다 — 그림만 바뀌어도 새 버전으로 알리고 옛 캐시를 버리기 위해서다. (P9-7) */
 const LAZY_DIRS = ['manual/assets'];
 const LAZY_FILE = /\.(webp|png|jpe?g|svg)$/;
-const SHELL_FILE = /\.(js|mjs|css|html|svg|png|jpe?g|woff2)$/;
+const SHELL_FILE = /\.(js|mjs|css|html|svg|png|jpe?g|webp|woff2)$/;
 /** 문자열로 읽어 줄바꿈을 LF로 맞춘 뒤 해시하는 확장자. 그 밖(png·woff2 등)은 바이트 그대로. */
 const TEXT_FILE = /\.(js|mjs|css|html|svg|json|webmanifest)$/;
 

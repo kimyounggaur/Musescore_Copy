@@ -50,20 +50,24 @@ test('P9-7b 해시 대상에는 설명서 그림이 들어 있다(그림만 바�
   assert.deepEqual(await listHashFiles(), [...await listShellFiles(), ...lazy], '셸 파일 다음에 지연 파일');
 
   const shell = { 'index.html': '<!doctype html>\n', 'privacy.html': '<!doctype html>\n', 'licenses.html': '<!doctype html>\n', 'manifest.webmanifest': '{}\n', 'icons/icon.svg': '<svg/>\n', 'icons/icon-192.png': Buffer.from([1, 2, 3]), 'icons/icon-512.png': Buffer.from([4, 5, 6]), 'fonts/Bravura.woff2': Buffer.from([7, 8, 9]), 'js/app.js': 'let x = 1;\n', 'css/style.css': 'a { b: c; }\n', 'vendor/lib.js': 'var v;\n', 'manual/m.html': '<p>m</p>\n' };
-  const before = await scratch({ ...shell, 'manual/assets/a.webp': Buffer.from([1, 1, 1]) });
-  const after = await scratch({ ...shell, 'manual/assets/a.webp': Buffer.from([2, 2, 2]) });
+  const others = { 'manual/assets/b.png': Buffer.from([9, 9]), 'manual/assets/c.svg': '<svg/>\n' };   // webp가 아닌 그림도 같은 폴더에 있으면 같은 취급
+  const before = await scratch({ ...shell, ...others, 'manual/assets/a.webp': Buffer.from([1, 1, 1]) });
+  const after = await scratch({ ...shell, ...others, 'manual/assets/a.webp': Buffer.from([2, 2, 2]) });
   const none = await scratch(shell);
   const names = ['a', 'b', 'c', 'd', 'e', 'f'].map(letter => `manual/assets/${letter}.webp`);   // 만든 순서(오름차순)와 상관없이 정렬돼 나와야 한다
-  const many = await scratch({ ...shell, ...Object.fromEntries(names.map(name => [name, Buffer.from([1])])), 'manual/assets/notes.txt': 'x', 'manual/assets/.DS_Store': 'x' });
+  const many = await scratch({ ...shell, ...Object.fromEntries(names.map(name => [name, Buffer.from([1])])), 'manual/assets/notes.txt': 'x', 'manual/assets/.DS_Store': 'x', 'manual/assets/folder.webp/inner.txt': 'x', 'css/inline.webp': Buffer.from([2]) });
   const notFolder = await scratch({ ...shell, 'manual/assets': 'not a folder' });
   try {
     assert.deepEqual(await listShellFiles(before), await listShellFiles(after), '설치 목록은 그림이 바뀌어도 그대로');
-    assert.ok(!(await listShellFiles(before)).includes('manual/assets/a.webp'));
-    assert.deepEqual(await listLazyFiles(before), ['manual/assets/a.webp']);
+    assert.deepEqual((await listShellFiles(before)).filter(file => file.startsWith('manual/assets/')), [], '그림 폴더 안의 파일은 형식과 상관없이 설치 목록에 없다');
+    assert.deepEqual(await listLazyFiles(before), ['manual/assets/a.webp', 'manual/assets/b.png', 'manual/assets/c.svg']);
     assert.notEqual(await shellHash(await listHashFiles(after), after), await shellHash(await listHashFiles(before), before), '그림 바이트가 바뀌면 해시가 바뀐다');
     assert.deepEqual(await listLazyFiles(none), [], '그림 폴더가 없어도 오류 없이 빈 목록');
     assert.deepEqual(await listHashFiles(none), await listShellFiles(none));
-    assert.deepEqual(await listLazyFiles(many), names, '그림 파일만(메모·숨김 파일은 뺀다), 정렬해서');
+    assert.deepEqual(await listLazyFiles(many), names, '그림 파일만(메모·숨김 파일·폴더는 뺀다), 정렬해서');
+    const shellOfMany = await listShellFiles(many);
+    assert.ok(shellOfMany.includes('css/inline.webp'), '그림 폴더 밖의 webp는 일반 셸 파일이라 설치 목록에 든다');
+    assert.deepEqual(shellOfMany.filter(file => file.startsWith('manual/assets/')), []);
     await assert.rejects(() => listLazyFiles(notFolder), /ENOTDIR/, '그림 폴더 자리에 파일이 있으면 조용히 넘어가지 않는다');
   } finally { for (const root of [before, after, none, many, notFolder]) await rm(root, { recursive: true, force: true }); }
 });
