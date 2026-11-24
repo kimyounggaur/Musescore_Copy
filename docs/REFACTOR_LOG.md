@@ -414,6 +414,48 @@ start()
 
 **자체 승인**: 위 계획대로 진행한다. 코드·파일만 만들고 배포·공개는 하지 않는다.
 
+### P9-7 설치 용량·파일 연결 (2026-11-25 승인)
+**목표**: 설치 때 내려받는 캐시(precache)에서 설명서 그림 8장을 빼서 첫 설치를 가볍게 하고(그림은 처음 설명서를 볼 때 담는다), 그림을 WebP로 줄인다. manifest `file_handlers`에서 일반 `.json`·`.xml`을 빼는 일은 실제 Chrome에서 `.scoreforge.json`(점이 두 개인 확장자)이 연결되는지 사람이 먼저 확인해야 하므로 이번에는 manifest를 바꾸지 않는다(프롬프트북 3번: 확인 전·안 되면 현행 유지하고 보고).
+
+**조사 결과(이 저장소에서 잰 것)**
+- precache-manifest.json 52개, 합계 2,836,461바이트(2.84MB). 그중 `manual/assets/*.png` 8장이 1,110,432바이트(39%). 그림을 빼면 1,726,029바이트(1.73MB)다. 설계서의 "1.5MB 이하"는 설계 때(그림이 43%) 이후 앱 셸이 약 0.23MB 커져서 이 방법만으로는 맞지 않는다.
+- 더 줄일 후보: `vendor/smplr/index.mjs` 146KB(동적 import라 첫 사용 때 캐시가 가능하지만 재생 모듈의 오프라인 동작이 바뀜), 설명서 HTML·SVG 92KB(오프라인에서 설명서 글자까지 못 읽게 됨), `vendor/supabase.js` 213KB(index.html의 정적 script라 불가). 모두 설계 범위 밖이고 오프라인 동작이 바뀌므로 하지 않고 사람 판단으로 기록한다.
+- sw.js `shellResponse`는 사전 캐시에 없는 같은 출처 요청을 그냥 네트워크로 보낸다 → "처음 열 때 캐시"가 되려면 규칙이 새로 필요하다. 사전 캐시 목록은 `listShellFiles()`(tests/release-lib.mjs), 목록의 파일 내용이 `CACHE_VERSION` 해시가 된다.
+- 해시가 목록 파일로만 계산되므로 그림이 목록에서 빠지면 **그림만 바뀐 배포에서 버전이 안 바뀌어** 사용자 기기에 담긴 옛 그림이 남는다 → 해시에는 그림도 넣어야 한다(설계서에 없는 보완).
+- 그림은 `manual/` 아래 HTML 2개(`scoreforge_user_manual.html`, `scoreforge_quick_start_user_manual.html`)에서만 참조한다. 그림은 모두 1280×720 PNG.
+- manifest `file_handlers`: `application/json`: [`.scoreforge.json`, `.json`], MusicXML: [`.musicxml`, `.xml`], `.mxl`, MIDI. 이중 확장자는 OS가 마지막 확장자(`.json`)만 볼 수 있어 `.json`을 빼면 저장 파일 연결도 같이 사라질 수 있다. 이 환경은 실제 Chrome 설치·OS 연결을 확인할 수 없다.
+
+**만들 것**
+| 파일 | 내용 |
+|---|---|
+| tests/release-lib.mjs | `listShellFiles`가 `manual/assets`를 건너뜀 · 새 `listLazyFiles`(처음 쓸 때 캐시에 담는 파일, 폴더가 없으면 빈 목록) · 새 `listHashFiles`(= 셸 + 지연 파일, 정렬 유지) |
+| tests/prepare-release.mjs | 목록(precache-manifest.json)은 `listShellFiles`, 해시는 `listHashFiles` |
+| sw.js | `shellResponse`: `/manual/assets/…` 요청이 사전 캐시에 없으면 네트워크로 받아 성공한 같은 출처 응답만 이 버전의 캐시에 담고, 오프라인에서는 그 캐시에서 준다(버전이 바뀌면 캐시와 함께 사라짐) |
+| tests/tools/png-to-webp.mjs (신규, 1회용) | Playwright Chromium의 `canvas.toDataURL('image/webp', 0.85)`로 PNG → WebP, 원본과 크기 비교표 출력(새 도구 설치 없음) |
+| manual/assets/*.webp(신규 8) · *.png 삭제 · manual/*.html | 그림 경로를 `.webp`로 · PNG 원본은 git 기록에 남는다 |
+| tests/install-size.test.mjs (신규) | 아래 "테스트" |
+| sw.js · precache-manifest.json | `node tests/prepare-release.mjs`로 재생성(버전 올리기는 R-2) |
+
+**설계서와 다르게 하는 점(미리 밝힘)**
+ⓐ 완료 기준 "설치 캐시 1.5MB 이하"는 달성하지 않는다(1.73MB). 대신 되돌아 커지지 않게 예산 시험(1.8MB)을 두고, 더 줄이는 후보를 🧑에 적는다.
+ⓑ manifest `file_handlers`는 바꾸지 않는다(🧑 Chrome 확인 전 — 프롬프트북이 정한 순서).
+ⓒ 해시에 그림도 넣는다(위 조사).
+ⓓ PNG 원본은 저장소에서 지운다(WebP로 대체, git 기록에서 되찾을 수 있음).
+
+**기존 시험 중 바꿔야 하는 기대**: tests/release.test.mjs 2건 — ①"prepare-release 끝에서 끝까지"의 기대 해시를 `listHashFiles` 기준으로 ②"저장소의 릴리스 파일이 지금 파일들과 맞다"의 기대 해시를 같은 기준으로. 단언을 줄이거나 약화하지 않고 해시 대상 목록만 바꾸며, 그림만 바뀌어도 sw.js 해시가 바뀌고 목록(manifest)은 그대로라는 단언을 새로 더한다.
+
+**테스트**(먼저 쓴다)
+- Node(tests/install-size.test.mjs): ①사전 캐시 목록에 `manual/assets/` 파일이 없고 설명서 HTML·SVG는 있음 ②해시 대상에는 그림이 들어 있음(임시 폴더에서 그림 바이트만 바꾸면 해시가 바뀌고 목록은 그대로) ③예산: 목록 합계 ≤ 1,800,000바이트, 설명서 그림 합계는 목록에 0 ④설명서 HTML의 모든 `img src`가 실제 파일을 가리키고 `assets/` 아래 그림은 `.webp`이며 `manual/assets`에는 `.webp`만 있음, 그림마다 alt ⑤sw.js 규칙(SW를 vm에서 실행해 fetch 이벤트를 흉내): 사전 캐시에 없는 `/manual/assets/…` 요청 → 네트워크 호출·이 버전 캐시에 put · 이미 캐시에 있으면 네트워크 안 감 · 404·오류·불투명 응답은 담지 않음 · `/manual/assets/` 밖의 같은 출처 파일은 담지 않음 · 네트워크가 실패하면 오류를 그대로 냄 ⑥manifest: `file_handlers` 구조가 유효(action이 scope 안, 확장자는 점으로 시작, 확장자 중복 없음)하고 ScoreForge 자신의 파일(`.scoreforge.json`·`.mxl`·`.mid`)은 항상 남아 있음 — `.json`·`.xml` 제거 여부는 고정하지 않는다(사람 확인 뒤 바꿀 수 있게).
+- 브라우저(Chromium, 서비스 워커): ①설명서 두 페이지의 모든 그림이 그려짐(naturalWidth>0) ②설치 직후 이 버전 캐시에는 그림이 없고, 설명서를 열면 그림이 담김 → 오프라인으로 바꿔 설명서를 다시 열어도 그림이 보임 ③그림을 한 번도 안 본 채 오프라인이면 설명서 글은 열리고 그림 자리는 alt 글자 — 오류 없음.
+- 기존 tests/release.test.mjs 2건 갱신 + `verify-offline`(캐시 개수 52 → 44, 설명서 그림 제외 확인).
+- 변이 검사: 그림 제외를 뺌·해시에 그림을 안 넣음·SW 규칙 제거·응답 검사 제거(404도 담음)·경로 틀림·put 뒤 반환 누락·예산 상수 키움·HTML 경로를 png로 되돌림·`manual/assets`가 아닌 곳도 담음 등.
+
+**위험과 대비**: ①오프라인에서 한 번도 안 본 설명서 그림은 안 보임 → 글은 사전 캐시에 있어 읽히고 alt가 있다(🧑에 알림) ②그림만 바뀐 배포에서 옛 그림이 남음 → 해시에 그림 포함(시험) ③오류 응답을 캐시에 담음 → `ok`·`basic`만 담는다(시험) ④WebP 손실 압축으로 글자가 흐려짐 → 변환 뒤 PNG와 나란히 눈으로 확인하고 흐리면 품질을 올린다 ⑤sw.js 변경이 업데이트 흐름을 깸 → 서비스 워커 시험·verify-offline·verify-deploy ⑥manifest를 안 바꿈 → 현행 유지.
+
+**사람이 해야 할 일(보고용)**: ①Chrome에 ScoreForge를 설치한 뒤(쓰는 OS마다) `.scoreforge.json`이 "연결 프로그램" 목록에 ScoreForge로 나타나는지, 일반 `.json`·`.xml`에도 나타나는지 확인 — 이중 확장자만 따로 연결되면 manifest.webmanifest의 `file_handlers`에서 `.json`·`.xml`을 지우고 prepare-release, 안 되면 현행 유지 ②설치 캐시 1.5MB를 꼭 맞추려면 추가 후보(smplr 146KB 지연 캐시·설명서 글자 92KB 지연 캐시 등)의 오프라인 영향을 보고 결정.
+
+**자체 승인**: 위 계획대로 진행한다. 코드·파일만 만들고 배포·공개는 하지 않는다.
+
 ## Phase 검토 기록 (R-1 — 코드는 고치지 않고 점검만)
 
 ### Phase 2 작업 보존 검토 (2026-11-23, phase/p2-work-safety)
