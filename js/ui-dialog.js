@@ -46,7 +46,7 @@
       const input = document.createElement(options.multiline ? "textarea" : "input");
       input.id = "prompt-value"; input.value = String(options.value ?? ""); input.autofocus = true;
       if (!options.multiline) input.type = options.type || "text";
-      for (const key of ["min", "max", "step", "maxLength", "placeholder"]) if (options[key] !== undefined) input[key] = options[key];
+      for (const key of ["min", "max", "step", "maxLength", "placeholder", "autocomplete"]) if (options[key] !== undefined) input[key] = options[key];
       label.htmlFor = input.id;
       const error = document.createElement("p"); error.id = "prompt-error"; error.className = "dialog-error"; error.setAttribute("role", "alert");
       input.setAttribute("aria-describedby", error.id);

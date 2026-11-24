@@ -36,9 +36,9 @@
     <span id="auth-status" class="auth-status" title="Supabase 로그인 상태">Supabase 미설정</span>
     <button id="btn-signup" class="tbtn auth-btn" title="Supabase 회원가입">회원가입</button>
     <button id="btn-member-login" class="tbtn auth-btn" title="회원 로그인">회원 로그인</button>
-    <button id="btn-admin-login" class="tbtn auth-btn" title="관리자 로그인">관리자 로그인</button>
-    <button id="btn-admin-page" class="tbtn auth-btn" title="관리자 페이지">관리자 페이지</button>
+    <button id="btn-admin-page" class="tbtn auth-btn" title="관리자 페이지" hidden>관리자 페이지</button>
     <button id="btn-logout" class="tbtn auth-btn" title="로그아웃" hidden>로그아웃</button>
+    <button id="btn-delete-account" class="tbtn auth-btn" title="회원 탈퇴" hidden>회원 탈퇴</button>
   </div>
 
   <!-- 좁은 화면(≤500px)에서는 위 회원 메뉴(.authbar)가 이 안으로 옮겨 온다(js/menus.js dock). 넓은 화면에서는 보이지 않는다. -->
@@ -233,7 +233,14 @@
   <div class="dlg-body auth-dialog">
     <div id="auth-message" class="auth-message" role="status"></div>
 
-    <section class="auth-config">
+    <div id="auth-custom-banner" class="auth-banner" role="status" hidden>
+      <span>사용자 지정 연결 사용 중</span>
+      <span aria-hidden="true">·</span>
+      <button id="btn-reset-default-connection" type="button" class="tbtn">기본값으로</button>
+    </div>
+
+    <!-- 개발 모드(?dev=1 또는 localStorage scoreforge.dev)에서만 js/auth.js가 연다. 일반 사용자에게는 연결 주소·키 칸을 보이지 않는다. -->
+    <section id="auth-config" class="auth-config" hidden>
       <div class="auth-section-title">Supabase 연결</div>
       <div class="auth-config-grid">
         <label for="supabase-url">Project URL</label>
@@ -261,6 +268,14 @@
         <span>비밀번호</span>
         <input id="auth-password" type="password" minlength="6" placeholder="6자 이상" autocomplete="current-password">
       </label>
+      <label id="auth-consent-row" class="auth-consent" hidden>
+        <input id="auth-consent" type="checkbox">
+        <span>개인정보 처리 안내를 읽었고 동의합니다. (필수)</span>
+      </label>
+      <div class="auth-links">
+        <a id="link-privacy" class="auth-link" href="privacy.html" target="_blank" rel="noopener">개인정보 처리 안내</a>
+        <button id="btn-forgot-password" type="button" class="auth-link">비밀번호를 잊으셨나요?</button>
+      </div>
     </section>
 
     <div class="dlg-actions">

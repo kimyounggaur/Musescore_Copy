@@ -30,6 +30,7 @@ try {
   });
   assert.ok(cached.some(url => url.endsWith('/vendor/supabase.js')));
   assert.ok(cached.some(url => url.endsWith('/js/cloud.js')));
+  assert.ok(cached.some(url => url.endsWith('/privacy.html')) && cached.some(url => url.endsWith('/css/privacy.css')), '개인정보 처리 안내도 사전 캐시에 있다');
   assert.equal(cached.some(url => url.includes('.supabase.co')), false);
   await context.setOffline(true);
   await page.reload({ waitUntil: 'load' });
@@ -39,7 +40,13 @@ try {
   await page.locator('#btn-play').click();
   await page.waitForFunction(() => SF.playback.player.playing);
   await page.evaluate(() => SF.playback.stop());
-  const result = { origin: base, version: await page.evaluate(() => SF.VERSION), offlineReload: true, savedScoreRestored: true, localVendorLoaded: await page.evaluate(() => !!window.supabase), playbackStarted: true, cachedFiles: cached.length, csp, errors };
+  // 오프라인에서도 개인정보 처리 안내가 열리고, 앱이 동의 때 기록하는 버전과 같은 버전이 적혀 있다
+  const privacy = await context.newPage();
+  await privacy.goto(`${base}/privacy.html`, { waitUntil: 'load' });
+  assert.match(await privacy.locator('h1').innerText(), /개인정보 처리 안내/);
+  assert.equal(await privacy.locator('#privacy-version').innerText(), await page.evaluate(() => SF.auth.privacyVersion));
+  await privacy.close();
+  const result = { origin: base, version: await page.evaluate(() => SF.VERSION), offlineReload: true, privacyOffline: true, savedScoreRestored: true, localVendorLoaded: await page.evaluate(() => !!window.supabase), playbackStarted: true, cachedFiles: cached.length, csp, errors };
   await mkdir('output/playwright/v3', { recursive: true });
   await page.screenshot({ path: 'output/playwright/v3/offline.png' });
   await writeFile('output/playwright/v3/offline.json', JSON.stringify(result, null, 2));

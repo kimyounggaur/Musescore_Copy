@@ -12,7 +12,7 @@ ScoreForge는 정적 웹앱이라 브라우저에서 Supabase Auth를 직접 사
 
 ## 2. 웹앱에서 연결
 
-1. ScoreForge 상단의 `회원가입`, `회원 로그인`, `관리자 로그인` 중 하나를 누릅니다.
+1. 주소 끝에 `?dev=1`을 붙여(또는 개발자 도구 콘솔에서 `localStorage.setItem('scoreforge.dev','1')`) 연 뒤 상단의 `회원가입` 또는 `회원 로그인`을 누릅니다. 일반 화면에는 연결 칸이 보이지 않습니다.
 2. `Supabase 연결` 영역에 Project URL과 publishable key를 입력합니다.
 3. `연결 저장`을 누르면 브라우저 localStorage에 저장됩니다.
 
@@ -29,8 +29,8 @@ set role = 'admin', updated_at = now()
 where email = 'admin@example.com';
 ```
 
-3. ScoreForge에서 `관리자 로그인`을 누르고 같은 이메일/비밀번호로 로그인합니다.
-4. `관리자 페이지`에서 회원 목록이 보이면 연결이 완료된 것입니다.
+3. ScoreForge에서 `회원 로그인`을 누르고 같은 이메일/비밀번호로 로그인합니다(관리자도 일반 로그인을 씁니다).
+4. 로그인하면 상단에 `관리자 페이지` 버튼이 나타납니다(관리자 계정에만). 눌러서 회원 목록이 보이면 연결이 완료된 것입니다.
 
 ## 보안 메모
 
@@ -38,6 +38,7 @@ where email = 'admin@example.com';
 - 일반 회원은 자기 프로필만 조회할 수 있습니다.
 - `role = 'admin'`인 회원만 전체 회원 목록을 조회할 수 있습니다.
 - 관리자 승격은 브라우저 UI가 아니라 Supabase SQL Editor에서만 수행합니다.
+- 회원 탈퇴 Edge Function(`functions/delete-account/`)은 **D1(프로젝트 분리) 전에는 배포하지 않습니다.** 같은 프로젝트를 쓰는 레슨 앱 데이터까지 지워질 수 있기 때문입니다. 앱의 탈퇴 버튼도 `js/config.js`의 `SF_FEATURES.deleteAccount`가 꺼져 있는 동안 숨겨집니다. 배포·확인 절차는 [`functions/delete-account/README.md`](./functions/delete-account/README.md)를 보세요.
 
 ## 4. 클라우드 저장·목록·공유
 

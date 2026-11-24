@@ -515,3 +515,64 @@ test('P8-3 저장 단축키: keymap이 없는 환경에서도 예전처럼 Ctrl+
   }
   await flush(); assert.equal(wroteToCloud(h), false);
 });
+
+// ───────── P8-4d 탈퇴 뒤처리: 이 브라우저에 남은 그 계정의 흔적만 지운다 ─────────
+test('P8-4d purgeOwner: 탈퇴한 계정의 저장 대기 작업만 지우고 다른 계정의 것은 남긴다(네트워크 호출 없음)', async () => {
+  const first = await harness({ online: false }); first.edit('탈퇴할 계정의 대기 작업');
+  const [mine] = JSON.parse(first.storage.get('scoreforge.cloud.queue.v1'));
+  assert.equal(mine.owner, OWNER);
+  const theirs = { ...mine, key: '44444444-4444-4444-8444-444444444444', owner: OTHER, insertId: '55555555-5555-4555-8555-555555555555' };
+  first.storage.set('scoreforge.cloud.queue.v1', JSON.stringify([mine, theirs]));
+  const h = await harness({ online: false, storage: first.storage });
+  const before = h.operations.length;
+  assert.equal(h.SF.cloud.purgeOwner(OWNER), 1, '지운 작업 수');
+  assert.deepEqual(JSON.parse(h.storage.get('scoreforge.cloud.queue.v1')).map(job => job.owner), [OTHER], '다른 계정의 대기 작업은 그대로');
+  assert.equal(h.operations.length, before, '서버 호출(getUser·delete 포함) 없음');
+  assert.equal(h.C.state.score.meta.title, '처음 악보', '지금 열린 악보 내용은 건드리지 않는다');
+  assert.equal(h.SF.cloud.purgeOwner(OWNER), 0, '두 번 불러도 같은 결과(이미 없음)');
+});
+
+test('P8-4d purgeOwner: 열린 악보가 그 계정의 클라우드 악보면 클라우드 식별 정보만 떼고, 새 계정으로 저장하면 새 행을 만든다', async () => {
+  const h = await harness(); h.seed(); await h.attach();
+  assert.equal(h.C.state.score.meta.cloudOwner, OWNER);
+  h.SF.cloud.purgeOwner(OWNER);
+  const meta = h.C.state.score.meta;
+  for (const key of ['cloudId', 'cloudUpdatedAt', 'cloudOwner', 'cloudProject']) assert.equal(key in meta, false, key);
+  assert.equal(meta.title, '저장된 악보', '악보 내용·제목은 그대로');
+  assert.equal(h.history.length, 0, '실행 취소 기록을 만들지 않는다');
+  h.switchUser(OTHER);
+  h.operations.length = 0;
+  await h.SF.cloud.saveCurrent();
+  const writes = h.operations.filter(op => op.op === 'insert' || op.op === 'update');
+  assert.deepEqual(writes.map(op => op.op), ['insert'], '사라진 행을 고치려 하지 않고 새로 만든다');
+  assert.equal(writes[0].payload.owner, OTHER);
+  assert.equal([...h.db.rows.values()].filter(row => row.owner === OWNER).length, 1, '이전 계정 행은 이 시험의 가짜 DB에 그대로(서버 쪽 삭제는 이 함수의 일이 아니다)');
+});
+
+test('P8-4d purgeOwner: 공유로 연 다른 사람의 악보는 건드리지 않고, UUID가 아닌 값은 던지지 않고 0을 돌려준다', async () => {
+  const h = await harness({ online: false }); h.edit('대기 작업');
+  for (const bad of [undefined, null, '', 'abc', 42, {}, [], '33333333-3333-4333-8333-33333333333']) assert.equal(h.SF.cloud.purgeOwner(bad), 0, JSON.stringify(bad));
+  assert.equal(JSON.parse(h.storage.get('scoreforge.cloud.queue.v1')).length, 1, '대기 작업은 그대로');
+  h.C.state.score.meta.cloudOwner = OTHER; h.C.state.score.meta.cloudId = ID;
+  h.SF.cloud.onScoreLoaded(h.C.state.score);
+  h.SF.cloud.purgeOwner(OWNER);
+  assert.equal(h.C.state.score.meta.cloudOwner, OTHER, '다른 계정의 악보 식별 정보는 그대로');
+  assert.equal(h.C.state.score.meta.cloudId, ID);
+});
+
+test('P8-4d purgeOwner: 그 계정의 저장 대기 작업을 지우면 "저장 대기"도 끝나고, 엉뚱한 값(null·undefined)으로는 지금 저장 대기 표시를 건드리지 않는다', async () => {
+  const h = await harness({ online: false }); h.edit('대기 작업');
+  assert.equal(h.SF.cloud.state.dirty, true, '지우기 전에는 저장 대기');
+  for (const bad of [null, undefined]) { h.SF.cloud.purgeOwner(bad); assert.equal(h.SF.cloud.state.dirty, true, `${bad} 로는 그대로`); }
+  assert.equal(h.SF.cloud.purgeOwner(OWNER), 1);
+  assert.equal(h.SF.cloud.state.dirty, false, '이 계정의 대기 작업이 사라졌으니 저장할 것도 없다');
+  assert.equal(h.SF.cloud.state.status, '클라우드 저장 준비');
+});
+
+test('P8-4d purgeOwner: 목록에서 읽어 둔 그 계정의 행 버전도 비워서, 지운 계정의 행을 옛 버전으로 고치려 하지 않는다', async () => {
+  const h = await harness(); h.seed();
+  await h.SF.cloud.list();
+  h.SF.cloud.purgeOwner(OWNER);
+  await assert.rejects(h.SF.cloud.remove(ID), { code: 'CONFLICT' }, '옛 버전을 쓰지 않고 목록을 다시 불러오라고 한다');
+  assert.equal(h.db.rows.has(ID), true, '가짜 DB의 행은 그대로(서버 쪽 삭제는 이 함수의 일이 아니다)');
+});

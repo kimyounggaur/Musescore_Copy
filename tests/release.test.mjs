@@ -58,17 +58,17 @@ test('내용이 같아도 파일 이름이 바뀌면 해시가 달라진다(경�
   finally { await rm(root, { recursive: true, force: true }); await rm(renamed, { recursive: true, force: true }); }
 });
 
-test('목록 계산: 최상위 6개와 js·css·vendor·manual 아래 앱 파일만, 정렬·중복 제거', async () => {
+test('목록 계산: 최상위 7개(privacy.html 포함)와 js·css·vendor·manual 아래 앱 파일만, 정렬·중복 제거', async () => {
   const files = await listShellFiles();
   assert.deepEqual(files, [...new Set(files)].sort());
-  for (const file of ['index.html', 'manifest.webmanifest', 'fonts/Bravura.woff2', 'js/version.js', 'js/app.js', 'css/style.css', 'vendor/supabase.js']) assert.ok(files.includes(file), file);
+  for (const file of ['index.html', 'privacy.html', 'manifest.webmanifest', 'fonts/Bravura.woff2', 'js/version.js', 'js/app.js', 'css/style.css', 'css/privacy.css', 'vendor/supabase.js']) assert.ok(files.includes(file), file);
   assert.ok(!files.includes('sw.js') && !files.includes('precache-manifest.json'), '자기 자신은 목록에 없다');
   assert.ok(files.every(file => !file.startsWith('tests/') && !file.startsWith('docs/')));
 });
 
 // prepare-release.mjs를 임시 폴더에서 실제로 돌려 본다: 버전은 package.json에서만 오고, 두 번 돌려도 같고, 셸 파일이 바뀔 때만 sw.js 해시가 바뀐다.
 test('prepare-release 끝에서 끝까지(임시 폴더): 버전 올리기 = package.json 수정 + 실행', async () => {
-  const shell = { 'index.html': '<!doctype html>\n', 'manifest.webmanifest': '{}\n', 'icons/icon.svg': '<svg/>\n', 'icons/icon-192.png': Buffer.from([1, 2, 3]), 'icons/icon-512.png': Buffer.from([4, 5, 6]), 'fonts/Bravura.woff2': Buffer.from([7, 8, 9]), 'js/app.js': 'let x = 1;\n', 'css/style.css': 'a { b: c; }\n', 'vendor/lib.js': 'var v;\n', 'manual/m.html': '<p>m</p>\n' };
+  const shell = { 'index.html': '<!doctype html>\n', 'privacy.html': '<!doctype html>\n', 'manifest.webmanifest': '{}\n', 'icons/icon.svg': '<svg/>\n', 'icons/icon-192.png': Buffer.from([1, 2, 3]), 'icons/icon-512.png': Buffer.from([4, 5, 6]), 'fonts/Bravura.woff2': Buffer.from([7, 8, 9]), 'js/app.js': 'let x = 1;\n', 'css/style.css': 'a { b: c; }\n', 'vendor/lib.js': 'var v;\n', 'manual/m.html': '<p>m</p>\n' };
   const root = await scratch({ ...shell, 'package.json': JSON.stringify({ name: 'x', version: '9.9.9' }), 'js/version.js': '"use strict";\nwindow.SF = window.SF || {};\nwindow.SF.VERSION = "1.0.0";\n', 'sw.js': '"use strict";\nconst CACHE_VERSION = "1.0.0";\nconst SHELL_CACHE = "scoreforge-shell-" + CACHE_VERSION;\nself.x = 1;\n' });
   const script = resolve('tests/prepare-release.mjs');
   const run = () => execFileSync(process.execPath, [script], { cwd: root, encoding: 'utf8' });
