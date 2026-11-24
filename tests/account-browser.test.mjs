@@ -6,16 +6,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 import { launchOptions, pageOptions, preparePage } from './browser-launch.mjs';
 const require = createRequire(import.meta.url);
 const URL_ = process.env.SF_URL || 'http://127.0.0.1:8000';
 const skip = !process.env.PLAYWRIGHT_MODULE;
 
-const DEFAULT_URL = 'https://cgoafcjvnbzozxbbyfle.supabase.co';
+// 기본 연결(주소·세션 키 이름)은 js/config.js에서 읽는다 — Supabase 프로젝트를 분리(D1)해 config.js가 바뀌어도 이 시험이 그대로 통과하도록.
+const DEFAULT_URL = /^\s*url:\s*"(https:\/\/[^"\s]+)"/m.exec(readFileSync(new URL('../js/config.js', import.meta.url), 'utf8'))[1];
+const DEFAULT_REF = new URL(DEFAULT_URL).hostname.split('.')[0];
 const CUSTOM = { url: 'https://example-custom.supabase.co', key: 'sb_publishable_customKeyForTests123' };
 
 // page.route 핸들러가 부르는 기본 응답. 시험이 handler를 주면 그것이 먼저 받는다(true를 돌려주면 처리한 것).
-async function withPage(fn, { path = '/', size = { width: 1200, height: 800 }, init, initArg, handler, timeout } = {}) {
+// allowConnect: 문서의 CSP connect-src에 더할 주소. 배포 CSP(vercel.json)는 Supabase 프로젝트 분리(D1) 뒤 한 프로젝트로 좁혀지는데,
+// 개발 모드의 "사용자 지정 연결"을 확인하는 시험은 다른 주소(CUSTOM)로 요청을 보내야 하므로 그 시험에서만 그 주소를 연다(서버·앱 코드는 그대로).
+async function withPage(fn, { path = '/', size = { width: 1200, height: 800 }, init, initArg, handler, timeout, allowConnect } = {}) {
   const { chromium } = require(process.env.PLAYWRIGHT_MODULE);
   const browser = await chromium.launch(launchOptions());
   try {
@@ -28,6 +33,15 @@ async function withPage(fn, { path = '/', size = { width: 1200, height: 800 }, i
     const calls = [];
     await page.addInitScript(() => localStorage.setItem('scoreforge.welcomed', '1'));
     if (init) await page.addInitScript(init, initArg);
+    if (allowConnect) {
+      await page.route(url => url.origin === new URL(URL_).origin && /^\/(index\.html)?$/.test(url.pathname), async route => {
+        if (!route.request().isNavigationRequest()) return route.fallback();
+        const response = await route.fetch();
+        const headers = response.headers();
+        if (headers['content-security-policy']) headers['content-security-policy'] = headers['content-security-policy'].replace('connect-src ', `connect-src ${allowConnect} `);
+        return route.fulfill({ response, headers });
+      });
+    }
     await page.route(/^https:\/\/[^/]*\.supabase\.co\//, async route => {
       const request = route.request();
       let body = null;
@@ -50,7 +64,7 @@ async function withPage(fn, { path = '/', size = { width: 1200, height: 800 }, i
 
 // ───────── 공용: Supabase 가짜 응답(로그인·프로필·사용자 정보) ─────────
 const USER_ID = '22222222-2222-4222-8222-222222222222';
-const SESSION_KEY = 'sb-cgoafcjvnbzozxbbyfle-auth-token';   // supabase-js가 기본 프로젝트 세션을 두는 localStorage 키
+const SESSION_KEY = `sb-${DEFAULT_REF}-auth-token`;   // supabase-js가 기본 프로젝트 세션을 두는 localStorage 키
 function authMock(options = {}) {
   const state = { role: 'member', email: 'member@example.com', profileFails: false, ...options };
   const user = () => ({ id: USER_ID, aud: 'authenticated', role: 'authenticated', email: state.email, app_metadata: {}, user_metadata: { display_name: '테스터' }, created_at: '2026-01-01T00:00:00Z' });
@@ -143,13 +157,13 @@ test('P8-4a 저장된 사용자 지정 연결이 있으면 개발 모드가 아�
     assert.match(await page.textContent('#auth-message'), /기본 연결로 돌아왔어요/);
     assert.equal(await page.evaluate(() => SF.auth.state.configSig.split('|')[0]), DEFAULT_URL, '기본 연결의 클라이언트로 바뀌었다');
     assert.equal(calls.some(c => c.method === 'POST' && /\/logout/.test(c.url) && /scope=global/.test(c.url)), false, '다른 기기의 로그인까지 끊지 않는다');
-  }, { init: c => { localStorage.setItem('scoreforge.supabase.url', c.url); localStorage.setItem('scoreforge.supabase.publishableKey', c.key); }, initArg: CUSTOM });
+  }, { init: c => { localStorage.setItem('scoreforge.supabase.url', c.url); localStorage.setItem('scoreforge.supabase.publishableKey', c.key); }, initArg: CUSTOM, allowConnect: CUSTOM.url });
 });
 
 test('P8-4a 저장된 값이 기본 연결과 같으면 사용자 지정이 아니다(띠 없음)', { skip, timeout: 90000 }, async () => {
   await withPage(async page => {
     const key = await page.evaluate(() => window.SF_SUPABASE_CONFIG.publishableKey);
-    await page.evaluate(k => { localStorage.setItem('scoreforge.supabase.url', 'https://cgoafcjvnbzozxbbyfle.supabase.co/'); localStorage.setItem('scoreforge.supabase.publishableKey', k); }, key);
+    await page.evaluate(([u, k]) => { localStorage.setItem('scoreforge.supabase.url', u); localStorage.setItem('scoreforge.supabase.publishableKey', k); }, [`${DEFAULT_URL}/`, key]);
     await openLogin(page);
     assert.equal(await page.evaluate(() => SF.auth.hasCustomConnection()), false, '끝의 /는 무시하고 비교');
     assert.equal(await visible(page, '#auth-custom-banner'), false);
@@ -169,7 +183,7 @@ test('P8-4a 개발 모드에서 연결을 저장하면 띠가 나타나고, 개�
     assert.equal(await page.evaluate(() => localStorage.getItem('scoreforge.supabase.url')), null);
     assert.equal(await page.inputValue('#supabase-url'), DEFAULT_URL, '칸에는 기본 연결이 다시 채워진다');
     assert.match(await page.textContent('#auth-message'), /연결 설정을 초기화했어요/);
-  }, { path: '/?dev=1' });
+  }, { path: '/?dev=1', allowConnect: CUSTOM.url });
 });
 
 test('P8-4a 연결이 아예 설정되지 않은 배포(포크)에서는 일반 사용자에게 안내만 하고 저장·요청을 하지 않는다', { skip, timeout: 90000 }, async () => {
@@ -206,7 +220,7 @@ test('P8-4a 사용자 지정 연결에 로그인돼 있어도 [기본값으로]�
     assert.match(logouts[0].url, /scope=local/);
     assert.equal(logouts[0].url.startsWith(CUSTOM.url), true, '로그아웃은 사용자 지정 연결(지금 쓰던 곳)에 보낸다');
     assert.equal(await page.evaluate(() => SF.auth.state.session), null);
-  }, { init: seed, initArg: { custom: CUSTOM } });
+  }, { init: seed, initArg: { custom: CUSTOM }, allowConnect: CUSTOM.url });
 });
 
 test('P8-4a [기본값으로] 뒤에는 기본 연결로 다시 시작해, 기본 연결에 남아 있던 로그인을 읽어 온다', { skip, timeout: 90000 }, async () => {
@@ -228,7 +242,7 @@ test('P8-4a [기본값으로] 뒤에는 기본 연결로 다시 시작해, 기�
     await page.waitForFunction(() => /default@example\.com/.test(document.querySelector('#auth-status').textContent) && /기본 연결로 돌아왔어요/.test(document.querySelector('#auth-message').textContent));
     assert.equal(await page.evaluate(() => SF.auth.state.session?.user?.email), 'default@example.com');
     assert.equal(await page.evaluate(() => SF.auth.hasCustomConnection()), false);
-  }, { init: seed, initArg: { custom: CUSTOM, defaultKey: SESSION_KEY } });
+  }, { init: seed, initArg: { custom: CUSTOM, defaultKey: SESSION_KEY }, allowConnect: CUSTOM.url });
 });
 
 // ───────── b. 관리자 버튼 ─────────
