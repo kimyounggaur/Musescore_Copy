@@ -219,6 +219,17 @@
   }
 
   /* ---------------- 부팅 복원 · 옛 자동 저장 이전 ---------------- */
+  /** 보관된 기록(또는 옛 자동 저장)을 악보로 읽는다. 파일·클라우드와 같은 검사(SF.schema.validate)를 거쳐 고칠 수 있는 것은 고쳐서 열고,
+   * 고칠 수 없으면 ScoreFormatError를 던진다(부르는 쪽이 격리하거나 "읽을 수 없음"으로 알린다). lines: 고친 항목 문구("규칙 설명 (N건)") — 비면 하나도 고치지 않았다.
+   * SF.schema가 없으면(schema.js 없이 로드한 시험) 예전처럼 곧바로 core로 읽는다. */
+  function readRecord(data) {
+    const res = SF.schema?.validate?.(data);
+    if (!res) return { score: C.fromJSON(data), lines: [] };
+    if (res.fatal) throw res.fatal;
+    return { score: C.fromJSON(res.score), lines: SF.schema.fixLines(res.summary) };
+  }
+  let legacyFixes = [];   // 이번 부팅에서 옛 자동 저장을 옮기며 고친 항목 — 그 문서를 열 때 함께 알린다
+
   /** localStorage의 예전 자동 저장(v1)을 문서 하나로 옮긴다. kv "migrated.v1"이 있으면 다시 하지 않고, 원본은 지우지 않는다.
    * 이전에 실패하면(읽기·형식·쓰기 오류) 아무것도 바꾸지 않고 false — 다음 부팅에 다시 시도한다. */
   async function migrateLegacyAutosave() {
@@ -232,7 +243,8 @@
       if (!(await s.loadDoc(LEGACY_ID))) {
         const obj = JSON.parse(raw);
         if (!obj?.score || (!obj.score.measures && !obj.score.parts)) return false;
-        const score = C.fromJSON(obj.score);
+        const read = readRecord(obj.score), score = read.score;
+        legacyFixes = read.lines;
         score.meta.docId = LEGACY_ID;
         const data = C.toJSON(score), at = Number(obj.savedAt) || Date.now();
         await s.saveDoc({
@@ -249,9 +261,10 @@
   /* ---------------- 부팅 안전 모드(P2-E) ---------------- */
   // 이번 부팅에서 있었던 일. 앱이 화면을 다 만든 뒤 bootInfo()로 읽는다.
   //   pending: 지난 부팅이 끝나지 못한 문서(자동으로 열지 않았다) · quarantined: 이번에 새로 격리한 기록 ·
-  //   opened: 이번 부팅이 열어 둔 문서(첫 렌더가 끝나면 bootDone이, 예외면 bootFailed가 정리한다)
-  const boot = { pending: null, quarantined: [], opened: null };
-  const bootInfo = () => ({ pending: boot.pending, quarantined: boot.quarantined.slice() });
+  //   opened: 이번 부팅이 열어 둔 문서(첫 렌더가 끝나면 bootDone이, 예외면 bootFailed가 정리한다) ·
+  //   fixes: 열어 둔 기록을 읽으며 검사(P8-2)가 자동으로 고친 항목 문구(없으면 빈 배열 — 앱이 있을 때만 가져오기 결과 창으로 알린다)
+  const boot = { pending: null, quarantined: [], opened: null, fixes: [] };
+  const bootInfo = () => ({ pending: boot.pending, quarantined: boot.quarantined.slice(), fixes: boot.fixes.slice() });
 
   /** kv "boot.pending"을 { 문서ID: 시각 }으로 읽는다. 문자열 ID 하나인 옛 모양도 받는다. */
   function pendingMap(raw) {
@@ -299,9 +312,9 @@
     if (!validId(id)) return null;
     const doc = await s.loadDoc(id).catch(() => null);
     if (!doc?.data || doc.quarantined) return null;                    // 이미 격리한 기록은 자동으로 열지 않는다
-    let score;
-    try { SF.schema?.checkShape(doc.data); score = C.fromJSON(doc.data); }
-    catch (error) { await quarantine(doc, error); return null; }       // 깨진 기록은 격리하고 건너뛴다
+    let score, lines;
+    try { ({ score, lines } = readRecord(doc.data)); }
+    catch (error) { await quarantine(doc, error); return null; }       // 고칠 수 없이 깨진 기록은 격리하고 건너뛴다
     const got = await lockDoc(id, mine ? { retries: 4 } : undefined);
     if (got.locked && !mine) return null;
     if (pending[id] !== undefined) {                         // 지난 부팅이 이 문서에서 끝나지 못했다 — 자동으로 다시 열지 않는다
@@ -312,6 +325,7 @@
     claim(score, { origin: doc.origin, docId: doc.id, record: doc });
     setLock({ docId: id, handle: got.handle, locked: got.locked });
     boot.opened = { id, title: String(doc.title ?? ""), updatedAt: doc.updatedAt, revision: doc.revision };
+    boot.fixes = id === LEGACY_ID ? [...lines, ...legacyFixes.filter(line => !lines.includes(line))] : lines;
     return score;
   }
 
@@ -320,11 +334,11 @@
    * 다른 탭이 편집 중인 문서는 건너뛴다 — 다만 이 탭이 보던 문서(새로고침 전)라면 읽기 전용으로 되살린다(lockState().locked로 확인).
    * 지난 부팅이 끝나지 못한 문서가 시작 문서라면 열지 않고 null — bootInfo().pending으로 앱이 사용자에게 묻는다. */
   async function restoreOnBoot() {
-    boot.pending = null; boot.quarantined = []; boot.opened = null;
+    boot.pending = null; boot.quarantined = []; boot.opened = null; boot.fixes = []; legacyFixes = [];
     const s = store();
     try { await s?.open(); } catch { /* 열기 실패는 아래에서 처리 */ }
     if (!s?.usable) {                             // 예전 방식(localStorage 1칸)으로 되돌린다
-      try { return SF.io.loadAutosave(); } catch { return null; }
+      try { return SF.io.loadAutosave(boot.fixes); } catch { return null; }
     }
     try {
       await migrateLegacyAutosave();
@@ -338,7 +352,7 @@
       if (found) return found;
       // 이전하지 못한 예전 자동 저장이 남아 있으면 그대로 보여 준다(원본은 건드리지 않았고, 첫 편집 때 다시 문서로 옮겨 쓴다).
       if (!(await s.kvGet("migrated.v1").catch(() => null))) {
-        const legacy = SF.io.loadAutosave?.();
+        const legacy = SF.io.loadAutosave?.(boot.fixes);
         if (legacy) { claim(legacy, { origin: "legacy", docId: LEGACY_ID }); return legacy; }
       }
     } catch { /* 저장소 오류 — 데모로 시작 */ }
@@ -442,7 +456,7 @@
               { id: "cancel", label: "취소" },
             ],
           });
-          if (choice === "autosave") return { score: C.fromJSON(existing.data), info: { origin, docId: existing.id, record: existing } };
+          if (choice === "autosave") { const read = readRecord(existing.data); return { score: read.score, report: read.lines, info: { origin, docId: existing.id, record: existing } }; }
           if (choice !== "file") return null;
           return { score: next, info: { origin, docId: newId() } };
         }
@@ -471,7 +485,8 @@
         if (opts.stale?.()) { if (got.handle && got.handle !== lock.handle) drop(got.handle); return false; }
       }
       if (chosen.readOnly) release(chosen.score); else claim(chosen.score, { ...chosen.info, picked: id });
-      try { SF.app.installScore(chosen.score, got.locked ? { ...opts, readOnly: true } : opts); }
+      const shown = chosen.report ? { ...opts, report: chosen.report, reportKind: "fixes" } : opts;   // 자동 저장본을 골랐다면 그 기록의 고친 항목만 보여 준다(파일의 것은 열지 않았다)
+      try { SF.app.installScore(chosen.score, got.locked ? { ...shown, readOnly: true } : shown); }
       catch (error) { active = before; writeTabId(before.id); if (got.handle && got.handle !== lock.handle) drop(got.handle); throw error; }
       const old = lock.handle;
       setLock({ docId: id, handle: got.handle, locked: got.locked });
@@ -495,9 +510,10 @@
     let doc = null;
     try { await s.open(); doc = s.usable ? await s.loadDoc(id) : null; } catch { return "missing"; }
     if (!doc) return "missing";
-    let score;
-    try { SF.schema?.checkShape(doc.data); score = C.fromJSON(doc.data); } catch { return "unreadable"; }
-    const opened = await replaceScore(score, { reason: "최근 작업 열기", ...opts, docId: doc.id, origin: doc.origin });
+    let score, lines;
+    try { ({ score, lines } = readRecord(doc.data)); } catch { return "unreadable"; }
+    const fixed = lines.length ? { report: lines, reportKind: "fixes", name: String(doc.title ?? "") } : {};   // 고친 항목이 있으면 결과 창으로 알린다
+    const opened = await replaceScore(score, { reason: "최근 작업 열기", ...opts, ...fixed, docId: doc.id, origin: doc.origin });
     return opened ? "opened" : "canceled";
   }
   async function undo(id) {
@@ -523,7 +539,7 @@
     const id = lock.docId, s = store();
     let source = null;
     if (id && s) {
-      try { await s.open(); const doc = s.usable ? await s.loadDoc(id) : null; if (doc?.data) source = C.fromJSON(doc.data); } catch { /* 화면의 내용으로 대신한다 */ }
+      try { await s.open(); const doc = s.usable ? await s.loadDoc(id) : null; if (doc?.data) source = readRecord(doc.data).score; } catch { /* 화면의 내용으로 대신한다 */ }
     }
     if (!source) { try { source = C.fromJSON(C.toJSON(C.state.score)); } catch { return false; } }
     for (const key of IDENTITY_KEYS) delete source.meta[key];

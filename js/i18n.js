@@ -937,6 +937,24 @@
     drumFallback | {name}: 드럼 {midi}의 표기는 스네어로 대체했어요 (원래 소리 유지) | {name}: used snare notation for drum {midi} (original sound kept)
     partReport | {name}: {report} | {name}: {report}
   `);
+  // P8-2: 파일·클라우드·최근 작업·부팅 복원에서 읽은 악보를 검사하며 자동으로 고친 항목(js/schema.js RULES의 label과 같은 글자)
+  group("import", `
+    fixSummary | "{title}" — {measures}마디를 열었어요. 올바르지 않은 값이 있어 아래처럼 자동으로 고쳤어요. | Opened {measures} measures from "{title}". Some values were invalid, so they were fixed automatically as listed below.
+    fixesTitle | 자동으로 고친 항목 | Fixed automatically
+    fixMeta | 곡 정보(제목·작곡가 등)의 모양이나 글자 수를 바로잡았어요 | Corrected the shape or length of the score info (title, composer, …)
+    fixText | 너무 긴 글(리허설·스태프 텍스트·코드)을 잘랐어요 | Trimmed text that was too long (rehearsal marks, staff text, chord symbols)
+    fixTempo | 템포를 10~999 범위로 맞췄어요 | Clamped the tempo to the 10–999 range
+    fixSignature | 올바르지 않은 조표·박자·마디 길이를 기본값으로 바꾸거나 지웠어요 | Reset or removed invalid key signatures, time signatures, and measure lengths
+    fixVoices | 마디당 성부는 4개까지라서 5번째 이후 성부를 뺐어요 | Removed the fifth and later voices (a measure holds up to four)
+    fixDuration | 음표 길이의 점·잇단음표 값을 바로잡았어요 | Corrected the dots and tuplet values of note durations
+    fixHugeDuration | 너무 큰 길이를 가진 음표·쉼표를 지웠어요 | Removed notes and rests with an excessively long duration
+    fixEventType | 음표·쉼표 종류가 올바르지 않아 바로잡았어요 | Corrected invalid note and rest types
+    fixPitch | 올바르지 않은 음높이를 바로잡거나 그 음을 지웠어요 | Corrected or removed notes with an invalid pitch
+    fixEmptyNote | 음이 하나도 없는 음표를 쉼표로 바꿨어요 | Replaced notes without any pitch with rests
+    fixVoiceLength | 마디 길이와 맞지 않는 성부를 쉼표로 채우거나 잘랐어요 | Filled voices that were too short with rests and trimmed voices that were too long
+    fixField | 모양이 올바르지 않은 항목(장식·가사·보표 설정 등)을 지웠어요 | Removed malformed items (ornaments, lyrics, staff settings, …)
+    fixId | 빠졌거나 올바르지 않은 번호(id)를 새로 붙였어요 | Assigned new ids to missing or invalid ones
+  `);
   group("error.midi", `
     truncated | 잘린 MIDI 파일이에요 | Truncated MIDI file
     variableLength | MIDI 가변 길이 값이 너무 길어요 | MIDI variable-length value is too long
@@ -1124,6 +1142,7 @@
   pattern("history.undo", /^실행 취소: ([\s\S]+)$/, ["action"], ["action"]);
   pattern("history.redo", /^다시 실행: ([\s\S]+)$/, ["action"], ["action"]);
   pattern("import.summary", /^"([\s\S]*)" — (\d+)마디를 가져왔어요\.\s*아래 항목은 이 앱이 지원하는 범위로 줄이면서 바뀌거나 무시됐어요\.$/, ["title", "measures"]);
+  pattern("import.fixSummary", /^"([\s\S]*)" — (\d+)마디를 열었어요\. 올바르지 않은 값이 있어 아래처럼 자동으로 고쳤어요\.$/, ["title", "measures"]);
   pattern("import.firstPart", /^파트 (\d+)개 중 첫 번째만 가져왔어요$/, ["count"]);
   pattern("import.tooManyMeasures", /^마디가 많아 앞 500마디만 가져왔어요 \(전체 (\d+)마디\)$/, ["count"]);
   pattern("import.counted", /^([\s\S]+) \((\d+)건\)$/, ["message", "count"], ["message"]);

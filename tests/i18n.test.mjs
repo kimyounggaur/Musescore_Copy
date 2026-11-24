@@ -205,3 +205,25 @@ test('all current generated keymap and palette labels have an approved mapping',
   assert.ok(labels.length > 50);
   for (const label of labels) assert.ok(SF.i18n.lookup(label), `Unmapped UI label: ${label}`);
 });
+
+test('P8-2 자동으로 고친 항목: 결과 창 요약문과 규칙 문구가 모두 영어로 번역된다(schema.js RULES와 같은 글자)', () => {
+  const { SF } = setup();
+  SF.i18n.setLanguage('en');
+  assert.equal(SF.i18n.translate('"곡" — 3마디를 열었어요. 올바르지 않은 값이 있어 아래처럼 자동으로 고쳤어요.'),
+    'Opened 3 measures from "곡". Some values were invalid, so they were fixed automatically as listed below.', '사용자 제목은 그대로');
+  assert.equal(SF.i18n.translate('자동으로 고친 항목'), 'Fixed automatically');
+  // 규칙 문구는 schema.js가 정한다 — 거기서 글자를 바꾸면 이 시험이 번역 행을 같이 고치라고 알려 준다.
+  const context = vm.createContext({});
+  context.window = context; context.SF = {};
+  vm.runInContext(readFileSync(new URL('../js/schema.js', import.meta.url), 'utf8'), context, { filename: 'schema.js' });
+  const { RULES, fixLines } = context.SF.schema;
+  assert.equal(Object.keys(RULES).length, 13);
+  for (const [rule, { label }] of Object.entries(RULES)) {
+    const line = fixLines([{ rule, count: 3, label }])[0];
+    assert.equal(line, `${label} (3건)`);
+    const english = SF.i18n.translate(line);
+    assert.notEqual(english, line, `${rule}: 번역 행이 없다`);
+    assert.match(english, /\(3 occurrences\)$/);
+    assert.doesNotMatch(english, /[가-힣]/, `${rule}: 한글이 남았다 — ${english}`);
+  }
+});
