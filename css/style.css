@@ -646,6 +646,7 @@ dialog::backdrop { background: rgba(10, 12, 16, .6); backdrop-filter: blur(2px);
 .form-grid .full { grid-column: 2 / -1; }
 .form-row { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; align-items: center; }
 .form-row .grow { flex: 1; }
+.check-inline { display: inline-flex; align-items: center; gap: 6px; color: var(--text-dim); font-size: 13px; cursor: pointer; }
 .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 .chiprow { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip {

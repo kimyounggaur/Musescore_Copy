@@ -414,3 +414,158 @@ test('실행 취소 기록(글자): 빈 성부 쉼표에 커서를 두고 편집
   assert.ok(C.redo()); assert.ok(C.redo());
   assert.equal(C.findEvent(C.state.score, id)?.ev.id, id, '다시 실행 뒤에도 그대로');
 });
+
+/* ---------------- P8-1: 조옮김할 때 코드 기호도 함께 ---------------- */
+const whole = { n: 1, d: 1, dots: 0 };
+/** 마디마다 온음표 하나를 놓고 거기에 코드 기호를 붙인다. */
+function chordScore(chords, { keySig = 0, ensemble } = {}) {
+  const s = C.createScore({ measureCount: Math.max(2, chords.length), keySig, ...(ensemble ? { ensemble } : {}) });
+  const ids = chords.map((text, m) => {
+    const id = C.inputAt(s, m, F(0), whole, [pitch(0, 4)]);
+    C.findEvent(s, id).ev.chordSymbol = C.cloneChordSymbol(text);
+    return id;
+  });
+  return { s, ids };
+}
+const chordOf = (s, id) => C.findEvent(s, id).ev.chordSymbol;
+
+test('코드 기호 조옮김: C +2 → D · F#m7(D장조) +2 → G#m7(E장조) · Bb/D −3 → G/B · N.C.는 그대로', () => {
+  const cases = [
+    { key: 0, semis: 2, from: 'C', to: 'D' },
+    { key: 2, semis: 2, from: 'F#m7', to: 'G#m7', newKey: 4 },
+    { key: 0, semis: -3, from: 'Bb/D', to: 'G/B', newKey: 3 },
+    { key: 0, semis: 5, from: 'N.C.', to: 'N.C.' },
+    { key: 0, semis: 1, from: 'C', to: 'Db', newKey: -5 },          // 새 조(내림 5개) 안의 철자
+    { key: 0, semis: -1, from: 'C', to: 'B', newKey: 5 },
+    { key: 1, semis: 12, from: 'Em7', to: 'Em7', newKey: 1 },       // 옥타브: 이름은 그대로
+    { key: 0, semis: 2, from: 'Cmaj7/E', to: 'Dmaj7/F#' },          // 베이스까지, 질(maj7)은 그대로
+  ];
+  for (const { key, semis, from, to, newKey } of cases) {
+    const { s, ids } = chordScore([from], { keySig: key });
+    C.transposeScore(s, semis);
+    const chord = chordOf(s, ids[0]);
+    assert.equal(chord.normalized, to, `${from} ${semis > 0 ? '+' : ''}${semis} → ${to}`);
+    assert.equal(chord.raw, to, `raw도 함께 바뀐다(${from} → ${to})`);
+    if (newKey !== undefined) assert.equal(s.keySig, newKey);
+  }
+});
+
+test('코드 기호 조옮김: 저장했다 다시 읽어도 조옮긴 코드가 유지된다(읽을 때 raw를 다시 해석하므로 raw까지 바뀌어야 한다)', () => {
+  const { s, ids } = chordScore(['F#m7', 'Bb/D', 'N.C.'], { keySig: 2 });
+  C.transposeScore(s, 2);
+  const back = C.fromJSON(JSON.parse(JSON.stringify(C.toJSON(s))));
+  assert.deepEqual(ids.map(id => chordOf(back, id).normalized), ['G#m7', 'C/E', 'N.C.']);
+  assert.deepEqual(ids.map(id => chordOf(back, id).raw), ['G#m7', 'C/E', 'N.C.']);
+  const v1 = C.fromJSON(JSON.parse(JSON.stringify(C.toJSON(s, { format: 1 }))));
+  assert.deepEqual(ids.map(id => chordOf(v1, id).normalized), ['G#m7', 'C/E', 'N.C.']);
+});
+
+test('코드 기호 조옮김: 자동 코드 다이어그램은 새 코드로 다시 만들고 직접 만든 것은 그대로 두며, 직접 만든 개수를 돌려준다', () => {
+  const { s, ids } = chordScore(['C', 'Am', 'F#m7', 'G']);
+  const ev = id => C.findEvent(s, id).ev;
+  const handmade = { strings: 6, frets: 4, firstFret: 1, positions: ['x', 0, 2, 2, 1, 0], fingers: [1, 2, 3], manual: true };
+  ev(ids[0]).fretboard = C.getDefaultFretboard('C');               // 자동 → D의 기본 다이어그램으로 바뀐다
+  ev(ids[1]).fretboard = clone(handmade);                           // 직접 만든 것 → 그대로
+  ev(ids[2]).fretboard = C.getDefaultFretboard('Am');               // 자동인데 새 코드(G#m7)는 기본 목록에 없다 → 지워진다
+  const result = C.transposeScore(s, 2);                            // ids[3]은 다이어그램이 없다 → 새로 만들지 않는다
+  assert.deepEqual(result, { manualFretboards: 1 });
+  assert.deepEqual(ids.map(id => chordOf(s, id).normalized), ['D', 'Bm', 'G#m7', 'A']);
+  assert.deepEqual(ev(ids[0]).fretboard.positions, C.getDefaultFretboard('D').positions);
+  assert.deepEqual(ev(ids[1]).fretboard, handmade);
+  assert.equal(ev(ids[2]).fretboard, undefined);
+  assert.equal('fretboard' in ev(ids[3]), false);
+});
+
+test('코드 기호 조옮김: 쉼표 위의 코드도 옮기고, 타악기 보표는 건드리지 않는다', () => {
+  const s = C.createScore({ measureCount: 2 });
+  C.ensureParts(s);
+  const rest = C.getVoiceEvents(s.parts[0].staves[0].measures[0], 1, s)[0];
+  assert.equal(rest.type, 'rest');
+  rest.chordSymbol = C.cloneChordSymbol('Dm7');
+  C.transposeScore(s, 3);
+  assert.equal(C.getVoiceEvents(s.parts[0].staves[0].measures[0], 1, s)[0].chordSymbol.normalized, 'Fm7');
+
+  const d = C.createScore({ measureCount: 2, ensemble: 'drumkit' });
+  C.ensureParts(d);
+  const drumRest = C.getVoiceEvents(d.parts[0].staves[0].measures[0], 1, d)[0];
+  assert.ok(C.isPercussionRef(C.staffRefs(d)[0]), '드럼 키트 보표는 타악기');
+  drumRest.chordSymbol = C.cloneChordSymbol('C');
+  C.transposeScore(d, 2);
+  assert.equal(C.getVoiceEvents(d.parts[0].staves[0].measures[0], 1, d)[0].chordSymbol.normalized, 'C', '타악기 보표의 코드 기호는 그대로');
+});
+
+test('코드 기호 조옮김: { chords: false }면 음만 옮기고, 0반음이면 아무것도 하지 않는다', () => {
+  const { s, ids } = chordScore(['C']);
+  assert.deepEqual(C.transposeScore(s, 2, { chords: false }), { manualFretboards: 0 });
+  assert.equal(chordOf(s, ids[0]).normalized, 'C', '코드 기호는 그대로');
+  assert.equal(C.midiOf(C.findEvent(s, ids[0]).ev.notes[0]), 62, '음은 온음 올라갔다(C4 → D4)');
+  const t = chordScore(['Am7']);
+  assert.deepEqual(C.transposeScore(t.s, 0), { manualFretboards: 0 });
+  assert.equal(chordOf(t.s, t.ids[0]).normalized, 'Am7');
+  assert.equal(t.s.keySig, 0);
+});
+
+test('코드 기호 조옮김: 실행 취소 한 번으로 코드 기호와 다이어그램이 함께 돌아온다', () => {
+  C.__setHistoryBudget();
+  const { s, ids } = chordScore(['C']);
+  C.findEvent(s, ids[0]).ev.fretboard = C.getDefaultFretboard('C');
+  C.setScore(s);
+  const before = JSON.stringify(C.toJSON(C.state.score, { keepSilentVoices: true }));
+  C.mutate('조옮김', x => C.transposeScore(x, 2));
+  assert.equal(chordOf(C.state.score, ids[0]).normalized, 'D');
+  assert.deepEqual(C.findEvent(C.state.score, ids[0]).ev.fretboard.positions, C.getDefaultFretboard('D').positions);
+  assert.ok(C.undo());
+  assert.equal(JSON.stringify(C.toJSON(C.state.score, { keepSilentVoices: true })), before);
+  assert.equal(chordOf(C.state.score, ids[0]).normalized, 'C');
+});
+
+test('코드 기호 조옮김: 개별 음 높낮이 이동(방향키가 쓰는 transposeNote·transposePitch)은 코드 기호를 바꾸지 않는다(현행 유지)', () => {
+  const { s, ids } = chordScore(['C']);
+  C.transposeNote(s, ids[0], 0, 2);
+  assert.equal(C.midiOf(C.findEvent(s, ids[0]).ev.notes[0]), 62, '음은 옮겨졌다');
+  assert.equal(chordOf(s, ids[0]).normalized, 'C', '코드 기호는 그대로');
+});
+
+test('코드 기호 조옮김: 중간에 조표가 바뀌는 악보는 마디마다 그 마디의 새 조로 철자한다(keySigAt(score, m))', () => {
+  const { s, ids } = chordScore(['C', 'C', 'C']);                       // 모두 C장조(0)에서 출발
+  C.setMeasureKeySig(s, 1, -2);                                          // 2마디부터 B♭장조 — 3마디도 이어받는다
+  C.transposeScore(s, 1);                                                // 반음 위로: 앞 조는 D♭장조(♭5), 뒤 조는 B장조(♯5)
+  assert.equal(s.keySig, -5); assert.equal(C.keySigAt(s, 1), 5); assert.equal(C.keySigAt(s, 2), 5);
+  assert.deepEqual(ids.map(id => chordOf(s, id).normalized), ['Db', 'C#', 'C#'], '♭ 조의 마디는 Db, ♯ 조의 마디는 C#');
+});
+
+test('코드 기호 조옮김: 0반음은 악보를 한 글자도 바꾸지 않는다(임시표 철자도 그대로) · transposeChordSymbol도 0반음·근음 없음·없는 코드는 그대로', () => {
+  const { s, ids } = chordScore(['C#m7']);
+  C.findEvent(s, ids[0]).ev.notes[0].alter = 1;                          // C#4 — 0반음인데 음이름을 다시 쓰면(Db) 철자가 바뀐다
+  const before = JSON.stringify(C.toJSON(s, { keepSilentVoices: true }));
+  assert.deepEqual(C.transposeScore(s, 0), { manualFretboards: 0 });
+  assert.equal(JSON.stringify(C.toJSON(s, { keepSilentVoices: true })), before);
+  for (const key of [-5, -3, 0, 2, 5]) {                                  // 직접 부르는 함수도 마찬가지: 0반음이면 철자까지 그대로
+    for (const text of ['C#m7', 'Db', 'F#/A#', 'Bbmaj7/D']) {
+      const chord = C.cloneChordSymbol(text);
+      assert.equal(C.transposeChordSymbol(chord, 0, key).normalized, chord.normalized, `${text} ±0 (조 ${key})`);
+    }
+  }
+  assert.equal(C.transposeChordSymbol(C.cloneChordSymbol('N.C.'), 5, 0).normalized, 'N.C.');
+  assert.equal(C.transposeChordSymbol(null, 2, 0), null);
+});
+
+test('코드 기호 조옮김: 근음·베이스 12음 × 임시표 × 질 × 조 15개 × 반음 14가지 — 항상 해석되고, 음높이 계이름이 정확히 그만큼 움직이며, raw가 곧 이름이다', () => {
+  const BASE = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  const pc = n => ((n % 12) + 12) % 12;
+  let total = 0;
+  for (const letter of Object.keys(BASE)) for (const [mark, alter] of [['', 0], ['#', 1], ['b', -1]])
+    for (const quality of ['', 'm', '7', 'maj7', 'm7', 'dim', 'sus4', 'add9', 'm7b5', '6', '9']) for (const withBass of [false, true])
+      for (const semis of [-12, -11, -7, -5, -3, -2, -1, 1, 2, 3, 5, 7, 11, 12]) for (let key = -7; key <= 7; key++) {
+        const text = letter + mark + quality + (withBass ? '/Eb' : '');
+        const moved = C.transposeChordSymbol(C.cloneChordSymbol(text), semis, key);
+        const where = `${text} ${semis > 0 ? '+' : ''}${semis} (조 ${key})`;
+        assert.ok(moved, `${where}: 해석되어야 한다`);
+        assert.equal(pc(BASE[moved.root] + moved.rootAlter), pc(BASE[letter] + alter + semis), `${where}: 근음`);
+        if (withBass) assert.equal(pc(BASE[moved.bass] + moved.bassAlter), pc(BASE.E - 1 + semis), `${where}: 베이스`);
+        else assert.equal(moved.bass || '', '', `${where}: 베이스가 생기지 않는다`);
+        assert.equal(moved.raw, moved.normalized, `${where}: raw = 이름`);
+        total++;
+      }
+  assert.equal(total, 3 * 7 * 11 * 2 * 14 * 15);
+});
