@@ -303,6 +303,39 @@ start()
 
 **자체 승인**: 위 계획대로 진행한다. 탈퇴는 꺼진 채로 병합하고, 켜는 일은 8-5(D1)와 사람 작업으로 남긴다.
 
+### P8-5 Supabase 운영 정리 (2026-11-24 승인)
+**목표**: 회원당 저장 한도(200개·50MB), 관리자의 악보 열람 차단(D4b = 불허 → 집계만), 프로젝트 분리(D1 = 분리) 준비를 **SQL 파일·시험·문서·전환 스크립트**로 마련한다. **에이전트는 운영 DB에 접속하거나 SQL을 실행하지 않는다**(연결 도구가 있어도 쓰지 않음). 적용은 사람이 스테이징(또는 새 프로젝트) → 운영 순서로 한다. 서비스 키는 어떤 파일에도 쓰지 않는다. 결정 D4a = 운영이므로 그대로 진행한다.
+
+**만들 것**
+| 파일 | 내용 |
+|---|---|
+| supabase/scoreforge_v4.sql (신규) | 멱등(`create or replace`·`drop … if exists`). 시작 검사(v3가 적용돼 있는지, 낯선 정책이 없는지) → (b) 한도 함수·트리거 → (c) select 정책을 소유자만으로 + 집계 함수를 "private 정의자 함수 + public 호출자 래퍼"로 교체 → 표지 comment → `notify pgrst` |
+| supabase/scoreforge_v4_rollback.sql (신규) | v3 상태로 되돌림: 한도 트리거·함수 제거, select 정책에 관리자 조건 복원, 집계 함수 v3 본문 복원, private 집계 함수 제거 |
+| supabase/tests/scores_rls.sql (수정) | 관리자도 남의 악보 조회 불가 · 관리자 집계 가능 · 일반 회원 집계는 자기 것만 · 익명은 집계 불가 · 한도 초과 시 SCOREFORGE_QUOTA_COUNT / SCOREFORGE_QUOTA_BYTES(200·201번째, 정확히 50MB와 +1바이트 경계) · 이름 바꾸기·공유 켜기는 한도 검사를 타지 않음. 시험용 관리자는 트랜잭션 안에서 만든다(운영에 관리자가 없어도 검증 가능, 끝에 ROLLBACK) |
+| tests/fixtures/pg-supabase-stub.sql, tests/supabase-sql.test.mjs (신규) | **로컬 임시 PostgreSQL 16**(소켓 전용, 운영과 무관한 일회용 클러스터)에 Supabase 최소 흉내(roles `anon`·`authenticated`, `auth.users`, `auth.uid()`)를 깔고 실제 SQL을 실행: auth → scores(v3) → v4. `SF_PG_BIN`을 줄 때만 실행(없으면 건너뜀 — `PLAYWRIGHT_MODULE`과 같은 방식) |
+| js/cloud.js · js/i18n.js · tests/cloud.test.mjs | 한도 오류 두 코드를 "악보 저장 한도(200개·50MB)에 도달했어요 …"로 안내(i18n). 한도 오류는 재시도해도 소용없으므로 CONFLICT처럼 그 작업만 `blocked`(자동 저장 재시도 중지, 수동 저장은 다시 시도 가능) |
+| tests/switch-supabase-project.mjs + tests/project-switch-lib.mjs + 시험 (신규) | D1 전환 도구 — 아래 "분리 커밋을 못 만드는 이유" 참고 |
+| docs/SUPABASE_V4_VERIFICATION.md (틀) · supabase/README.md · tests/manual/cloud.md · privacy.html(주석·확정 필요 문구) | 적용 순서·되돌리기·레슨 앱 영향 확인 쿼리·분리 체크리스트(설계서 (a) 1~6단계)·결과 칸. 관리자 열람 범위 문구를 v4와 맞춤 |
+
+**SQL 설계 요점**
+- 한도 트리거(설계서 (b) 그대로): `private.scoreforge_enforce_quota()` security definer · `search_path = ''` · 어드바이저리 잠금으로 같은 회원의 동시 삽입 경쟁 방지 · INSERT만 개수(200) 검사 · INSERT/UPDATE 모두 바이트(`octet_length(data::text)` 합 > 50MiB) 검사 · 자기 자신 행은 합계에서 제외(`s.id <> new.id`) · `before insert or update of data` — 제목·공유 상태만 바꾸는 갱신은 안 탄다. 함수 EXECUTE는 public·anon·authenticated에서 회수(트리거 함수는 실행 권한 없이 동작).
+- 관리자 열람 불허(설계서 (c)): `scoreforge_scores_select`를 `(select auth.uid()) = owner`만으로 다시 만든다. F12 때문에 같은 파일에서 `public.count_scoreforge_scores_by_owner`를 private 정의자 함수(`private.scoreforge_count_by_owner`)를 부르는 invoker 래퍼로 바꾼다(정책을 빼면 invoker 집계가 관리자에게도 자기 행만 세므로).
+- v3 재실행 보호 장치: scoreforge_scores.sql은 표 comment 문구를 "내 표" 표시로 쓰므로 v4는 그 comment를 바꾸지 않는다(바꾸면 v3 재실행이 엉뚱한 오류로 멈춤). 대신 v4가 만든 함수에 표지 comment를 단다.
+
+**분리 커밋을 못 만드는 이유와 대신 만드는 것**: 프롬프트북은 "config.js·vercel.json을 새 프로젝트 주소로 바꾸는 커밋을 따로 만들어 두라"고 하지만, 새 프로젝트의 주소·공개 키는 사람이 프로젝트를 만들어야 생긴다. 모르는 값으로 커밋을 만들면 병합하는 순간 앱 연결이 깨진다. 그래서 **전환 도구**를 만든다: `node tests/switch-supabase-project.mjs --url https://<ref>.supabase.co --key sb_publishable_… [--enable-delete-account] [--dry-run]` → js/config.js의 주소·공개 키와 vercel.json CSP의 `connect-src`(와일드카드 `https://*.supabase.co wss://*.supabase.co` → `https://<ref>.supabase.co wss://<ref>.supabase.co`)만 바꾸고, **비밀 키(`sb_secret_`·role이 service_role인 JWT)는 거절**하며, 결과 JSON이 깨지지 않았는지 확인한다. 탈퇴 플래그는 `--enable-delete-account`를 줄 때만 켠다(Edge Function 배포 뒤). 사람이 새 프로젝트를 만든 뒤 한 번 실행해 커밋한다 — phase 브랜치에는 이 도구만 들어가고 실제 전환은 들어가지 않는다.
+
+**설계서와 다르게 하는 점(미리 밝힘)**: ⓐ 집계 함수: 설계서 (c) 스케치는 `where (select private.is_admin()) and …`라 일반 회원의 집계가 빈 결과가 된다 — 같은 설계서 (d)와 v3 동작("일반 회원 집계는 자기 것만")에 어긋나므로 `(관리자 or s.owner = 호출자)`로 한다 ⓑ 어드바이저리 잠금을 2-키(`hashtext('scoreforge.quota')`, `hashtext(owner)`)로 — 같은 DB를 쓰는 레슨 앱의 잠금 키와 겹치지 않게 ⓒ v3 표 comment 유지(위) ⓓ 전환 커밋 대신 전환 도구(위) ⓔ 설계서는 시험을 사람이 스테이징에서 돌리는 것만 전제하지만, 같은 SQL을 **로컬 임시 PostgreSQL에서 먼저 실제 실행**해 검증하고 그 시험을 저장소에 남긴다. 이 환경은 PostgREST·Auth·Advisor가 없는 순수 Postgres라 Supabase 검증을 **대신하지 않는다** — 사람의 스테이징 검증은 그대로 필요(검증 문서에 두 칸으로 구분) ⓕ 클라우드 목록에 "모두 내려받기"(설계서 (a)3의 선택지)는 만들지 않는다 — 프롬프트북 P8-5에 없고, 회원 수 확인(2단계) 결과에 따라 필요 여부가 갈리므로 체크리스트의 선택 항목으로 남긴다.
+
+**기존 시험 중 바꿔야 하는 기대(설계가 요구하는 변경)**: ①supabase/tests/scores_rls.sql 63–71행의 "관리자는 남의 악보를 읽을 수 있다"(`Administrator read denied`)가 D4b = 불허에 따라 반대가 된다(읽으면 실패). 마지막 PASS 문구도 맞춘다 ②tests/account-browser.test.mjs의 기본 연결 주소·세션 키 상수(옛 프로젝트 ref를 글자로 박아 둠)를 js/config.js에서 읽도록 바꾼다 — 분리 뒤에도 시험이 깨지지 않게. 기대 동작은 그대로. 그 밖의 기존 시험은 그대로 통과해야 한다.
+
+**테스트**: tests/supabase-sql.test.mjs(임시 PG) — v3 기준선에서 관리자 열람이 **실제로 가능**함을 먼저 보이고(대조군: 새 시험이 v3에서는 실패해야 함) → v4 적용 후 scores_rls.sql 통과 → v4 두 번 적용해도 같은 카탈로그(정책·함수 정의·트리거·권한 지문) → 롤백하면 v3와 같은 지문 · 관리자 열람 복귀 → 같은 회원이 199개일 때 동시에 2건 삽입하면 정확히 1건만 성공(잠금) → 낯선 정책이 있으면 v4가 아무것도 바꾸지 않고 멈춤 → 레슨 앱 쪽 객체 지문이 v4 전후로 같음. tests/cloud.test.mjs(오류 → 문구·blocked·자동 저장 재시도 안 함·수동 저장 재시도·다른 오류는 그대로) · tests/project-switch.test.mjs(주소·키 검증, 비밀 키 거절, config/vercel 치환, 멱등, 플래그 옵션, JSON 유효). 변이 검사: v4.sql 줄 단위 변이(잠금·경계·정책·집계 조건)를 임시 PG 시험이 잡는지, cloud.js·전환 도구 변이를 노드 시험이 잡는지.
+
+**위험과 대비**: ①한도 트리거가 정상 저장을 막음 → 경계 시험(200·201번째, 50MiB 정확히와 +1), 이름 바꾸기·공유는 트리거를 안 탐(시험) ②동시 저장 경쟁 → 잠금 + 동시 2세션 시험, 잠금을 뺀 변이를 시험이 잡는지 확인 ③저장마다 그 회원의 전 행 `data::text` 크기를 합산하는 비용 → 최악(250KB × 200행 = 50MB)에서 시간을 재서 기록, 너무 느리면 사람과 상의(대안은 행 크기 열 추가 — 스키마 변경이라 이번엔 안 함) ④관리자 정책 제거가 관리자 화면의 집계를 깨뜨림(F12) → 같은 파일에서 함께 교체 + 시험 ⑤레슨 앱 영향 → 바꾸는 객체는 `public.scores`의 select 정책·한도 트리거, `private.scoreforge_*` 함수, `public.count_scoreforge_scores_by_owner`뿐. 다른 객체 지문 쿼리를 전후로 비교(검증 문서) ⑥롤백이 v3와 다르게 복원 → 지문 비교 시험 ⑦전환 도구가 비밀 키를 파일에 씀 → 거절 검사 + 시험 ⑧CSP를 한 프로젝트로 좁히면 개발 모드의 사용자 지정 연결이 막힘(의도된 동작) — account-browser 시험이 영향을 받는지 좁힌 CSP 사본으로 미리 돌려 확인 ⑨v4 적용 뒤 v3 SQL을 다시 돌리면 관리자 열람 정책이 되살아남 → README·검증 문서에 "v3를 다시 돌렸다면 v4를 이어서 다시" 명시, scores_rls.sql이 잡아냄.
+
+**사람이 해야 할 일(보고용 체크리스트)**: 새 Supabase 프로젝트 만들기(지역: 사용자와 가까운 곳) → 구 프로젝트에서 규모 확인(`select count(*), count(distinct owner) from public.scores;`) → 이전 방식 결정·공지 → 새 프로젝트에 auth.sql → scores.sql → (데이터 이관이 있으면 여기서) → v4.sql 순서로 적용 → supabase/tests/scores_rls.sql 실행(PASS 확인) → 전환 도구 실행·커밋·배포 → Auth 설정(URL Configuration, 메일 문구, 비밀번호 정책)을 새 프로젝트에서 다시 → delete-account 배포 + `ALLOWED_ORIGINS` + 탈퇴 플래그 켜기 → 구 프로젝트의 scores 표·함수는 레슨 앱 영향 확인 후 30일 병행 뒤 제거 → 요금제(유출 비밀번호 검사는 Pro 이상, F13): 무료면 최소 길이·문자 조합으로 보완하고 그 사실을 문서에 적기 → 검증 문서 채워 커밋.
+
+**자체 승인**: 위 계획대로 진행한다. 운영 DB에는 접속하지 않고, 분리 자체는 사람 작업으로 남긴다.
+
 ## Phase 검토 기록 (R-1 — 코드는 고치지 않고 점검만)
 
 ### Phase 2 작업 보존 검토 (2026-11-23, phase/p2-work-safety)
