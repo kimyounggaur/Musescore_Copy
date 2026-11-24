@@ -306,7 +306,8 @@
 
   function startPlayback(fromSec) {
     timeline = buildTimeline();
-    P.play(fromSec, { viewMode: ui.viewMode, rate: ui.playbackRate, loop: ui.loop, countIn: ui.countIn && P.player.metronome });
+    // samples: "ask" — 음원이 아직 준비 중이면 2.2초를 기다리다 신스로 넘어가는 대신 사용자에게 고르게 한다(P9-4)
+    P.play(fromSec, { viewMode: ui.viewMode, rate: ui.playbackRate, loop: ui.loop, countIn: ui.countIn && P.player.metronome, samples: "ask" });
   }
 
   function playFromSelection() {
@@ -471,6 +472,36 @@
         el.title = st.detail || "실제 악기 샘플 음원";
       });
     }
+    bindSamplePrompt();
+  }
+
+  /* 재생을 눌렀는데 음원이 준비 중일 때의 선택 안내 띠(P9-4). 고르지 않아도 준비되면 재생이 시작되고, 재생 버튼으로 취소한다. */
+  function bindSamplePrompt() {
+    const bar = $("#sample-wait"), msg = $("#sample-wait-msg");
+    if (!bar || !msg || !P.setSamplePromptHandler) return;
+    bar.addEventListener("click", (e) => {
+      const button = e.target.closest("[data-choice]");
+      if (button) P.resolveSamplePrompt(button.dataset.choice);
+    });
+    P.setSamplePromptHandler((st) => {
+      bar.hidden = !st.open;
+      if (!st.open) return;
+      msg.textContent = SF.t(st.mode === "wait" ? "sampleWait.waiting" : "sampleWait.asking", { ready: st.ready, total: st.total });
+      const waitButton = bar.querySelector('[data-choice="wait"]');
+      // 누른 "준비되면 자동 재생"이 사라질 때 키보드 포커스가 문서 맨 위로 날아가지 않게 남는 버튼으로 옮긴다
+      if (st.mode === "wait" && document.activeElement === waitButton) bar.querySelector('[data-choice="synth"]').focus();
+      waitButton.hidden = st.mode === "wait";
+    });
+  }
+
+  /* 첫 조작 신호: 미리 받기는 사용자가 앱을 한 번이라도 조작한 뒤에만 시작한다(음원 서버에 접속 정보가 남으므로, 보기만 하고 닫는 방문자는 제외) */
+  function bindFirstGesture() {
+    const names = ["pointerdown", "keydown", "touchstart"];
+    const once = () => {
+      for (const name of names) document.removeEventListener(name, once, true);
+      P.noteUserGesture();
+    };
+    for (const name of names) document.addEventListener(name, once, true);
   }
 
   function refreshToolbar() {
@@ -650,6 +681,7 @@
     ui.speedy = false; ui.speedyStep = null; clearSpeedyHeld();
     stopPlayback();
     P.releaseUnused(C.state.score); // 새 악보에 없는 악기·믹서 버스를 메모리에서 내림(재생은 바로 위에서 멈춤)
+    P.requestPreload(); // 새 악보의 악기를 쉬는 시간에 미리 받음(첫 조작 전·설정 꺼짐·오프라인이면 안 함)
     update();
     if (opts.report && opts.report.length) showImportReport(opts.name, score, opts.report, opts.reportKind);
     else if (opts.toast !== false && !opts.boot) toast(opts.toast || `"${score.meta.title || opts.name}" 불러왔어요`);
@@ -1069,6 +1101,7 @@
     buildPiano();
     bindThemePicker();
     bindButtons();
+    bindFirstGesture();
     SF.auth?.bindAuth();
     bindShortcutOverlay();
     bindMenu();

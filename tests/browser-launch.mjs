@@ -16,10 +16,19 @@ export function pageOptions(extra = {}) {
 // 이 호스트 목록은 sw.js의 SAMPLE_HOSTS와 같아야 한다. 한쪽만 바꾸지 말 것.
 const SAMPLE_HOSTS = /gleitz\.github\.io|smpldsnds\.github\.io|goldst\.dev/;
 const blocked = new WeakSet();
+const quieted = new WeakSet();
 
 export async function preparePage(page) {
-  if (!process.env.SF_BLOCK_SAMPLES) return;
   const context = page.context();
+  // 음원 미리 받기(P9-4)는 시험에서는 기본으로 꺼 둔다: 첫 조작 뒤에 음원 서버로 요청이 나가거나 샘플 상태 칩이 바뀌어
+  // 그것과 상관없는 시험이 흔들리지 않게 한다. 저장된 값이 이미 있으면(시험이 직접 정했으면) 건드리지 않는다. 미리 받기를 시험하는 쪽은 'on'으로 켠다.
+  if (!quieted.has(context)) {
+    quieted.add(context);
+    await context.addInitScript(() => {
+      try { if (localStorage.getItem('scoreforge.audio.preload') === null) localStorage.setItem('scoreforge.audio.preload', 'off'); } catch (err) { /* 저장소를 못 쓰는 문서는 그대로 둔다 */ }
+    });
+  }
+  if (!process.env.SF_BLOCK_SAMPLES) return;
   if (blocked.has(context)) return;
   blocked.add(context);
   await context.route(SAMPLE_HOSTS, route => route.abort());

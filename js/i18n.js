@@ -213,6 +213,10 @@
     pianoQuality | 피아노 음질 | Piano sound quality
     pianoQualityHigh | 고음질(약 19MB) | High quality (about 19 MB)
     pianoQualityHint | 이 기기에만 저장돼요. 악보에는 들어가지 않고, 다음 재생부터 적용돼요. | Saved on this device only, not in the score. Applies from the next playback.
+    samplePreload | 음원 미리 받기 | Preload instrument sounds
+    samplePreloadOn | 켜기(쉴 때 미리 받아 두기) | On (download ahead while idle)
+    samplePreloadOff | 끄기(재생할 때만 받기) | Off (download only when playing)
+    samplePreloadHint | 이 기기에만 저장돼요. 데이터 절약 모드나 오프라인에서는 켜 두어도 미리 받지 않아요. | Saved on this device only. Nothing is downloaded ahead in data saver mode or offline, even when this is on.
     measures | 마디 | Measures
     addFour | ＋ 마디 4개 추가 | ＋ Add four measures
     deleteLast | － 마지막 마디 삭제 | － Delete last measure
@@ -330,6 +334,12 @@
     rhythm | 리듬 연습 | Rhythm practice
     rhythmHint | 8분음표·점음표·빔 예제 | Eighth notes, dotted notes, and beams
   `);
+  group("sampleWait", `
+    asking | 음원 준비 중이에요 ({ready}/{total}) | Instrument sounds are getting ready ({ready}/{total})
+    waiting | 음원을 받는 중이에요 ({ready}/{total}). 준비되면 자동으로 재생해요 | Getting the instrument sounds ({ready}/{total}). Playback starts automatically when ready
+    synth | 지금은 신스로 재생 | Play with the built-in synth now
+    wait | 준비되면 자동 재생 | Play automatically when ready
+  `);
   group("about", `
     title | 정보 | About
     versionLabel | ScoreForge · 버전 | ScoreForge · Version
@@ -419,6 +429,8 @@
     savedLegacy | 구버전 호환 형식으로 악보 파일을 내려받았어요 | Score file downloaded in the older-version format
     pianoHigh | 고음질 피아노(약 19MB)를 쓰도록 바꿨어요. 다음 재생부터 적용돼요 | Switched to the high-quality piano (about 19 MB). It applies from the next playback
     pianoBasic | 기본 피아노로 바꿨어요. 다음 재생부터 적용돼요 | Switched to the standard piano. It applies from the next playback
+    preloadOn | 쉴 때 음원을 미리 받아 둘게요 | Instrument sounds will be downloaded ahead while the app is idle
+    preloadOff | 음원은 재생할 때만 받을게요 | Instrument sounds will be downloaded only when you play
     autosaved | 이 기기에 자동 저장했어요 | Saved automatically on this device
     storageFull | 자동 저장 공간이 부족해요. 파일 메뉴에서 악보를 저장해 주세요. | Auto-save storage is full. Save your score from the File menu.
     musicxml | MusicXML로 내보냈어요 — MuseScore에서 열 수 있어요 | Exported MusicXML — open it in MuseScore
