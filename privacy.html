@@ -39,8 +39,8 @@
       <li>이메일 인증과 비밀번호 재설정 메일 발송</li>
       <li>부정 이용 방지와 문의 응대, 회원 수·악보 개수 같은 이용 현황 집계</li>
     </ul>
-    <p>관리자는 회원 목록(이메일·표시 이름·권한·가입일)과 회원별 악보 개수를 볼 수 있으며, 악보 내용은 열람하지 않는 것을 원칙으로 합니다.
-      <span class="todo">[확정 필요: 관리자의 악보 열람 범위 — 데이터베이스 권한 설정과 일치하는지 게시 전에 확인]</span></p>
+    <p>관리자는 회원 목록(이메일·표시 이름·권한·가입일)과 회원별 악보 개수를 볼 수 있습니다. 관리자 계정으로는 다른 회원의 악보 내용을 열람할 수 없도록 데이터베이스 권한을 설정합니다.
+      <span class="todo">[확정 필요: 이 문장은 관리자 열람 제한 SQL(v4)이 실제 서비스 데이터베이스에 적용된 것을 확인한 뒤에 게시 — 데이터베이스를 직접 운영하는 사람의 접근 범위를 어떻게 적을지도 함께 정함]</span></p>
 
     <h2 id="ko-retention">3. 보관과 파기</h2>
     <ul>
@@ -108,8 +108,8 @@
       <li>Sending email confirmation and password reset messages</li>
       <li>Preventing misuse, answering inquiries, and counting usage such as members and scores</li>
     </ul>
-    <p>Administrators can see the member list (email, display name, role, sign-up date) and the number of scores per member. As a rule they do not read score content.
-      <span class="todo">[확정 필요: scope of administrator access to score content — confirm it matches the database permissions before publishing]</span></p>
+    <p>Administrators can see the member list (email, display name, role, sign-up date) and the number of scores per member. Database permissions are set so that an administrator account cannot read other members' score content.
+      <span class="todo">[확정 필요: publish this sentence only after the administrator read restriction (v4 SQL) is confirmed on the live service database; also decide how to describe access by the people who operate the database directly]</span></p>
 
     <h2 id="en-retention">3. Retention and deletion</h2>
     <ul>
@@ -153,7 +153,7 @@
     <p>Effective date: <span class="todo">[확정 필요: effective date]</span>. When this notice changes, this page is updated and the version above is renewed. The version and time of the notice you agreed to at sign-up are recorded with your account.</p>
   </section>
 <!-- 법률 검토 필요: 이 문서는 개인정보 보호법 등 관련 법령에 맞는지 전문가의 검토를 거치지 않은 초안입니다.
-     게시 전에 (1) class="todo" 자리를 모두 채우거나 없애고, (2) 관리자의 악보 열람 범위를 데이터베이스 권한 설정(8-5)과 맞추고,
+     게시 전에 (1) class="todo" 자리를 모두 채우거나 없애고, (2) 관리자의 악보 열람 제한(D4b, supabase/scoreforge_v4.sql)이 실제 서비스 데이터베이스에 적용된 것을 확인한 뒤 그 문장을 게시하고(8-5),
      (3) 회원 탈퇴 기능을 켜면(8-5, 결정 D1 이후) 3절의 "준비 중" 문장을 고치고, (4) 내용을 바꾸면 meta privacy-version·#privacy-version·js/auth.js의 값을 함께 새로 매기세요. -->
 </main>
 </body>

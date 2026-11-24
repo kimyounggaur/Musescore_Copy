@@ -83,10 +83,20 @@
     }
     return actor;
   }
+  // 서버(supabase/scoreforge_v4.sql)가 악보 200개·합계 50MB를 넘는 저장을 이 두 글자로 거절한다. 사용자에게는 쉬운 문구만 보인다.
+  const QUOTA_CODES = { SCOREFORGE_QUOTA_COUNT: "count", SCOREFORGE_QUOTA_BYTES: "bytes" };
+  function friendly(err) {
+    if (!err || typeof err !== "object") return err;
+    const text = [err.message, err.details, err.hint].filter(part => typeof part === "string").join(" ");
+    const code = Object.keys(QUOTA_CODES).find(name => text.includes(name));
+    if (!code) return err;
+    return Object.assign(error("QUOTA_EXCEEDED", "악보 저장 한도(200개·50MB)에 도달했어요. 안 쓰는 악보를 지운 뒤 다시 저장해 주세요."),
+      { quota: QUOTA_CODES[code], cause: err });
+  }
   async function result(query, actor) {
     const response = await query;
     if (actor) assertActor(actor);
-    if (response.error) throw response.error;
+    if (response.error) throw friendly(response.error);
     return response.data;
   }
   function storeQueue() {
@@ -125,7 +135,9 @@
   }
   function notifyError(err, quiet = false) {
     const code = err && err.code;
-    status(code === "CONFLICT" ? "다른 기기에서 수정됨 · 눌러서 해결" : `클라우드 저장 대기 · ${err.message || "연결을 확인해 주세요."}`);
+    status(code === "CONFLICT" ? "다른 기기에서 수정됨 · 눌러서 해결"
+      : code === "QUOTA_EXCEEDED" ? "클라우드 저장 한도 도달 · 악보를 정리해 주세요"
+      : `클라우드 저장 대기 · ${err.message || "연결을 확인해 주세요."}`);
     if (!quiet) {
       if (code === "AUTH_REQUIRED" || code === "SESSION_CHANGED" || code === "session_not_found" || /session missing/i.test(err.message || "")) SF.auth.openDialog("member");
       else toast(err.message || "클라우드 작업을 마치지 못했어요.");
@@ -216,7 +228,7 @@
       return row;
     } catch (err) {
       const latest = queue.get(key);
-      if (latest && (err.code === "CONFLICT" || err.code === "CANCELLED")) latest.blocked = true;
+      if (latest && (err.code === "CONFLICT" || err.code === "CANCELLED" || err.code === "QUOTA_EXCEEDED")) latest.blocked = true;
       storeQueue();
       throw err;
     } finally { state.saving = false; }

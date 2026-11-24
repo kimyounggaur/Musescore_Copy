@@ -576,3 +576,114 @@ test('P8-4d purgeOwner: 목록에서 읽어 둔 그 계정의 행 버전도 비�
   await assert.rejects(h.SF.cloud.remove(ID), { code: 'CONFLICT' }, '옛 버전을 쓰지 않고 목록을 다시 불러오라고 한다');
   assert.equal(h.db.rows.has(ID), true, '가짜 DB의 행은 그대로(서버 쪽 삭제는 이 함수의 일이 아니다)');
 });
+
+// ───────── P8-5 저장 한도: 서버(트리거)가 거절한 저장을 알아듣게 보여 주고, 같은 요청을 되풀이하지 않는다 ─────────
+// 서버는 악보 200개·합계 50MB를 넘는 저장을 SCOREFORGE_QUOTA_COUNT / SCOREFORGE_QUOTA_BYTES 오류로 거절한다(supabase/scoreforge_v4.sql).
+const quotaError = (kind, extra = {}) => ({ code: 'P0001', message: `SCOREFORGE_QUOTA_${kind}`, details: null, hint: null, ...extra });
+function failNext(h, op, error) { const hold = h.hold(op); hold.response = { data: null, error }; hold.resolve(); return hold; }
+const queued = h => JSON.parse(h.storage.get('scoreforge.cloud.queue.v1'));
+const insertsOf = h => h.operations.filter(op => op.op === 'insert').length;
+const QUOTA_STATUS = '클라우드 저장 한도 도달 · 악보를 정리해 주세요';
+
+test('P8-5 한도 초과: 서버의 SCOREFORGE_QUOTA_COUNT·BYTES를 QUOTA_EXCEEDED로 바꿔 던진다(쉬운 문구, 서버 코드는 원인으로만 남긴다)', async () => {
+  for (const [kind, quota] of [['COUNT', 'count'], ['BYTES', 'bytes']]) {
+    const h = await harness(); h.edit('한도 시험'); const raw = quotaError(kind);
+    failNext(h, 'insert', raw);
+    await assert.rejects(h.SF.cloud.saveCurrent(), err => {
+      assert.equal(err.code, 'QUOTA_EXCEEDED', kind); assert.equal(err.quota, quota, kind);
+      assert.match(err.message, /200개/); assert.match(err.message, /50MB/);
+      assert.ok(!/SCOREFORGE|P0001/.test(err.message), '서버 내부 코드를 사용자 문구에 넣지 않는다');
+      assert.equal(err.cause, raw, '원래 오류는 원인으로 남긴다');
+      return true;
+    });
+    assert.equal(h.db.rows.size, 0, '거절된 저장은 아무것도 남기지 않는다');
+  }
+});
+
+test('P8-5 한도 초과: 오류 문구가 message·details·hint 어디에 담겨 와도, 고치기(UPDATE) 저장에서도 같은 방식으로 바뀐다', async () => {
+  for (const field of ['message', 'details', 'hint']) {
+    const h = await harness(); h.seed(); await h.attach(); h.edit('용량 초과 수정');
+    failNext(h, 'update', { code: 'P0001', message: '다른 문구', details: null, hint: null, [field]: 'raise: SCOREFORGE_QUOTA_BYTES (사용량 초과)' });
+    await assert.rejects(h.SF.cloud.saveCurrent(), { code: 'QUOTA_EXCEEDED', quota: 'bytes' }, field);
+    assert.equal(h.db.rows.get(ID).title, '저장된 악보', '서버에 쓰이지 않았다');
+  }
+});
+
+test('P8-5 한도 초과: 한도와 상관없는 서버 오류는 바꾸지 않고 같은 객체 그대로 던진다(비슷한 글자·소문자·빈 값 포함)', async () => {
+  const others = [
+    { code: '42501', message: 'new row violates row-level security policy for table "scores"', details: null, hint: null },
+    { code: 'P0001', message: 'SCOREFORGE_QUOTA_OTHER', details: null, hint: null },
+    { code: 'P0001', message: 'scoreforge_quota_count', details: null, hint: null },
+    { code: 'P0001', message: 'QUOTA_COUNT', details: null, hint: null },
+    { code: 'PGRST301', message: 'JWT expired', details: null, hint: null },
+    { code: '57014', message: 'canceling statement due to statement timeout' },
+    { message: '' },
+    { code: 'X', message: 42, details: { SCOREFORGE_QUOTA_COUNT: true }, hint: ['SCOREFORGE_QUOTA_BYTES'] },
+  ];
+  for (const raw of others) {
+    const h = await harness(); h.edit('다른 오류'); failNext(h, 'insert', raw);
+    await assert.rejects(h.SF.cloud.saveCurrent(), err => err === raw, JSON.stringify(raw));
+    assert.notEqual(queued(h)[0].blocked, true, `한도 오류가 아니면 멈추지 않는다: ${JSON.stringify(raw)}`);
+  }
+});
+
+test('P8-5 한도 초과: 걸린 저장 작업은 멈춰 두어 자동 저장이 같은 요청을 되풀이하지 않고, 직접 저장만 같은 행 ID로 다시 시도해 성공한다', async () => {
+  const h = await harness(); h.edit('한도에 걸린 악보'); failNext(h, 'insert', quotaError('COUNT'));
+  await assert.rejects(h.SF.cloud.saveCurrent(), { code: 'QUOTA_EXCEEDED' });
+  const [job] = queued(h);
+  assert.equal(job.blocked, true, '저장 대기열에 멈춤 표시');
+  assert.equal(insertsOf(h), 1);
+  await h.SF.cloud.drain(); await h.SF.cloud.drain();
+  assert.equal(insertsOf(h), 1, '자동 재시도(drain)는 멈춘 작업을 건드리지 않는다');
+  h.edit('한도에 걸린 채 더 고침');
+  assert.equal(queued(h)[0].blocked, true, '고쳐도 멈춤 표시는 유지');
+  for (const timer of [...h.timers.values()]) timer.fn();   // 10초 자동 저장 타이머가 돌아도
+  await flush();
+  assert.equal(insertsOf(h), 1, '타이머가 돌아도 같은 요청을 되풀이하지 않는다');
+  // 안 쓰는 악보를 지워 자리가 생긴 뒤 직접 저장하면 한 번 더 시도한다(가짜 DB는 이제 받아 준다)
+  const row = await h.SF.cloud.saveCurrent();
+  assert.equal(insertsOf(h), 2); assert.equal(h.db.rows.size, 1);
+  assert.equal(row.id, job.insertId, '같은 행 ID로 다시 보낸다(중복 행이 생기지 않는다)');
+  assert.equal(h.db.rows.get(row.id).title, '한도에 걸린 채 더 고침', '그동안 고친 내용이 저장된다');
+  assert.deepEqual(queued(h), [], '성공하면 대기열이 비워진다'); assert.equal(h.SF.cloud.state.dirty, false);
+});
+
+test('P8-5 한도 초과: Ctrl+Shift+S로 저장하다 걸리면 쉬운 문구를 알림으로 띄우고, 자동 저장 때는 알림 없이 상태 줄만 바뀐다', async () => {
+  const h = await harness(); h.edit('단축키 저장'); failNext(h, 'insert', quotaError('COUNT'));
+  press(h, { ctrlKey: true, shiftKey: true, key: 'S', code: 'KeyS' }); await flush();
+  assert.equal(h.SF.cloud.state.status, QUOTA_STATUS);
+  const toasts = h.notices.map(String);
+  assert.ok(toasts.some(text => /200개·50MB/.test(text) && /지운 뒤 다시 저장/.test(text)), `알림에 쉬운 문구: ${toasts}`);
+  assert.ok(!toasts.some(text => /SCOREFORGE|member/.test(text)), '서버 코드·로그인 창 없이');
+  const auto = await harness(); auto.edit('자동 저장'); failNext(auto, 'insert', quotaError('BYTES'));
+  const before = auto.notices.length;
+  await auto.SF.cloud.drain();
+  assert.equal(auto.SF.cloud.state.status, QUOTA_STATUS); assert.equal(auto.notices.length, before, '자동 저장은 알림창을 띄우지 않는다');
+  assert.equal(queued(auto)[0].blocked, true);
+});
+
+test('P8-5 한도 초과: 충돌 처리에서 "다른 이름으로 저장"한 사본이 한도에 걸려도 같은 방식으로 멈추고, 원본은 그대로 둔다', async () => {
+  const h = await harness(); h.seed(); await h.attach(); h.edit('충돌 뒤 사본');
+  h.db.rows.get(ID).updated_at = '2026-02-01T00:00:00Z'; h.confirms.push(false); h.answers.push('한도 직전 사본');
+  failNext(h, 'insert', quotaError('COUNT'));
+  await assert.rejects(h.SF.cloud.saveCurrent(), { code: 'QUOTA_EXCEEDED', quota: 'count' });
+  assert.equal(h.db.rows.size, 1, '사본은 만들어지지 않았다'); assert.equal(h.db.rows.get(ID).title, '저장된 악보', '원본 행은 그대로');
+  assert.equal(queued(h)[0].blocked, true);
+  assert.equal(h.C.state.score.meta.title, '한도 직전 사본', '로컬 악보에는 사본 이름이 남아 있다(내용은 잃지 않는다)');
+});
+
+test('P8-5 한도 초과: 직접 저장이 연달아 겹쳐 앞선 저장이 한도에 걸려도, 뒤따르는 직접 저장은 건너뛰지 않고 다시 시도한다', async () => {
+  const h = await harness(); h.edit('겹친 저장 1');
+  const hold = h.hold('insert'); hold.response = { data: null, error: quotaError('COUNT') };
+  const first = h.SF.cloud.saveCurrent();
+  await hold.started.promise;                       // 첫 저장이 서버 응답을 기다리는 중
+  h.edit('겹친 저장 2');
+  const second = h.SF.cloud.saveCurrent();          // 두 번째 직접 저장은 첫 저장 뒤에 줄을 선다
+  hold.resolve();                                   // 첫 저장이 한도로 거절된다 → 멈춤 표시는 대기열의 최신 작업(= 두 번째 저장)에 붙는다
+  await assert.rejects(first, { code: 'QUOTA_EXCEEDED', quota: 'count' });
+  const row = await second;                         // 자동 저장과 달리 직접 저장은 멈춤 표시와 상관없이 다시 시도한다(같은 행 ID로)
+  assert.ok(row, '직접 저장이 조용히 건너뛰어지지 않았다');
+  assert.equal(insertsOf(h), 2, '서버로 두 번 보냈다');
+  assert.equal(h.db.rows.size, 1); assert.equal(h.db.rows.get(row.id).title, '겹친 저장 2', '그동안 고친 내용까지 저장된다');
+  assert.deepEqual(queued(h), [], '성공하면 대기열이 비워진다');
+});
