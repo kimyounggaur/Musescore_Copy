@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { cacheVersionLine, listShellFiles, normalizeForHash, shellHash, versionFileText } from './release-lib.mjs';
+import { cacheVersionLine, listHashFiles, listShellFiles, normalizeForHash, shellHash, versionFileText } from './release-lib.mjs';
 
 async function scratch(files) {
   const root = await mkdtemp(join(tmpdir(), 'sf-release-'));
@@ -77,7 +77,7 @@ test('prepare-release 끝에서 끝까지(임시 폴더): 버전 올리기 = pac
   try {
     run();
     assert.equal(read('js/version.js'), versionFileText('9.9.9'), 'version.js는 package.json의 버전');
-    const files = await listShellFiles(root), hash = await shellHash(files, root);
+    const files = await listShellFiles(root), hash = await shellHash(await listHashFiles(root), root);
     assert.match(read('sw.js'), new RegExp(`^const CACHE_VERSION = "9\\.9\\.9\\+${hash}";$`, 'm'));
     assert.match(read('sw.js'), /const SHELL_CACHE = "scoreforge-shell-" \+ CACHE_VERSION;\nself\.x = 1;/, 'CACHE_VERSION 줄만 바뀐다');
     assert.deepEqual(JSON.parse(read('precache-manifest.json')), files);
@@ -87,6 +87,13 @@ test('prepare-release 끝에서 끝까지(임시 폴더): 버전 올리기 = pac
     assert.equal(changed[0], JSON.parse(first)[0]); assert.equal(changed[2], JSON.parse(first)[2]); assert.notEqual(changed[1], JSON.parse(first)[1], '셸 파일이 바뀌면 sw.js 해시만 바뀐다');
     await writeFile(join(root, 'css/style.css'), 'a { b: d; }\r\n'); run();
     assert.equal(JSON.parse(state())[1], changed[1], 'CRLF로 저장해도 같은 해시');
+    // P9-7: 설치에 담지 않는 설명서 그림도 해시에는 들어간다 — 그림만 생기거나 바뀌어도 새 버전이 되고, 설치 목록(manifest)은 그대로다.
+    const noImage = JSON.parse(state());
+    await mkdir(join(root, 'manual/assets'), { recursive: true }); await writeFile(join(root, 'manual/assets/a.webp'), Buffer.from([1, 2, 3])); run();
+    const withImage = JSON.parse(state());
+    assert.notEqual(withImage[1], noImage[1], '그림이 생기면 sw.js 해시가 바뀐다'); assert.equal(withImage[2], noImage[2], '설치 목록은 그대로'); assert.equal(withImage[0], noImage[0]);
+    await writeFile(join(root, 'manual/assets/a.webp'), Buffer.from([1, 2, 4])); run();
+    assert.notEqual(JSON.parse(state())[1], withImage[1], '그림 내용이 바뀌어도 sw.js 해시가 바뀐다'); assert.equal(JSON.parse(state())[2], withImage[2], '설치 목록은 그대로');
     await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'x', version: '9.10.0' })); run();
     assert.match(read('sw.js'), /CACHE_VERSION = "9\.10\.0\+[0-9a-f]{8}"/); assert.equal(read('js/version.js'), versionFileText('9.10.0'));
   } finally { await rm(root, { recursive: true, force: true }); }
@@ -99,7 +106,7 @@ test('저장소의 릴리스 파일이 지금 파일들과 맞다 — 어긋나�
   const files = await listShellFiles();
   assert.deepEqual(JSON.parse(readFileSync('precache-manifest.json', 'utf8')), files, 'precache-manifest.json이 지금 파일 목록과 다르다');
   const sw = readFileSync('sw.js', 'utf8');
-  assert.ok(sw.includes(cacheVersionLine(version, await shellHash(files))), 'sw.js의 CACHE_VERSION이 앱 셸 파일의 해시와 다르다');
+  assert.ok(sw.includes(cacheVersionLine(version, await shellHash(await listHashFiles()))), 'sw.js의 CACHE_VERSION이 앱 셸 파일(설명서 그림 포함)의 해시와 다르다');
   assert.match(sw, /const SHELL_CACHE = "scoreforge-shell-" \+ CACHE_VERSION;/);
 });
 
