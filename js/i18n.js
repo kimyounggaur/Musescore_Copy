@@ -617,7 +617,6 @@
     signup | 회원가입 | Sign up
     signupTitle | Supabase 회원가입 | Sign up with Supabase
     memberLogin | 회원 로그인 | Member sign-in
-    adminLogin | 관리자 로그인 | Admin sign-in
     adminPage | 관리자 페이지 | Admin panel
     logout | 로그아웃 | Sign out
     login | 로그인 | Sign in
@@ -632,7 +631,6 @@
     minPassword | 6자 이상 | At least 6 characters
     signupHelp | 이메일과 비밀번호로 새 계정을 만들어요. 이메일 확인이 켜져 있으면 인증 메일 확인 뒤 로그인됩니다. | Create an account with your email and password. If email confirmation is enabled, confirm your email before signing in.
     memberHelp | 가입한 회원 계정으로 로그인합니다. | Sign in with your member account.
-    adminHelp | 관리자 페이지는 profiles.role 값이 admin인 계정만 열 수 있어요. | Only accounts with profiles.role set to admin can open the admin panel.
     configureFirst | Supabase Project URL과 publishable key를 먼저 저장하세요. | Save the Supabase Project URL and publishable key first.
     libraryFailed | Supabase JS 라이브러리를 불러오지 못했어요. 네트워크 연결을 확인하세요. | Could not load the Supabase JS library. Check your network connection.
     invalidCredentials | 이메일 또는 비밀번호가 올바르지 않습니다. | Incorrect email or password.
@@ -655,9 +653,6 @@
     shortPassword | 비밀번호는 6자 이상이어야 합니다. | The password must contain at least 6 characters.
     signupDone | 회원가입 완료. 로그인했어요 | Account created. You are signed in
     confirmEmail | 회원가입 요청이 완료됐어요. 이메일 인증이 켜져 있다면 받은 편지함에서 확인 링크를 눌러주세요. | Sign-up request complete. If email confirmation is enabled, click the confirmation link in your inbox.
-    checkRls | profiles 테이블 또는 RLS 설정을 확인해야 합니다. | Check the profiles table or RLS settings.
-    noAdmin | 관리자 권한이 없습니다. Supabase SQL Editor에서 해당 계정의 role을 admin으로 승격하세요. | This account has no admin access. Set its role to admin in the Supabase SQL Editor.
-    adminDone | 관리자로 로그인했어요 | Signed in as administrator
     memberDone | 회원 로그인 완료 | Signed in as member
     logoutDone | 로그아웃했어요 | Signed out
     adminRequired | 관리자 권한이 필요합니다. 관리자 계정으로 다시 로그인하세요. | Admin access is required. Sign in again with an admin account.

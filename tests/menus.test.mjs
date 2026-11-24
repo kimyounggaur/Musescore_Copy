@@ -113,7 +113,7 @@ test('P6-2 마크업: .authbar는 상단바 직계로 계정 버튼 앞에 있�
   const authbar = header.indexOf('<div class="authbar"'), account = header.indexOf('id="btn-account"'), file = header.indexOf('id="btn-file"');
   assert.ok(authbar > 0 && authbar < account && account < file, '언어 선택 → .authbar → 계정 버튼 → 파일 메뉴 순서');
   assert.match(header.match(/<div class="authbar"[^>]*>/)[0], /role="group"/);
-  for (const id of ['auth-status', 'btn-signup', 'btn-member-login', 'btn-admin-login', 'btn-admin-page', 'btn-logout']) assert.match(header, new RegExp(`id="${id}"`), id);
+  for (const id of ['auth-status', 'btn-signup', 'btn-member-login', 'btn-admin-page', 'btn-logout']) assert.match(header, new RegExp(`id="${id}"`), id);
 });
 
 test('P6-2 연결: app.js가 .authbar를 500px 이하에서 계정 메뉴로 옮긴다', () => {

@@ -21,12 +21,6 @@
       message: "가입한 회원 계정으로 로그인합니다.",
       showName: false,
     },
-    admin: {
-      title: "관리자 로그인",
-      submit: "관리자 로그인",
-      message: "관리자 페이지는 profiles.role 값이 admin인 계정만 열 수 있어요.",
-      showName: false,
-    },
   };
   const authState = {
     client: null,
@@ -308,13 +302,15 @@
     }
     const signup = $("#btn-signup");
     const memberLogin = $("#btn-member-login");
-    const adminLogin = $("#btn-admin-login");
     const adminPage = $("#btn-admin-page");
     const logout = $("#btn-logout");
     if (signup) signup.hidden = signedIn;
     if (memberLogin) memberLogin.hidden = signedIn;
-    if (adminLogin) adminLogin.hidden = signedIn && admin;
-    if (adminPage) adminPage.classList.toggle("on", admin);
+    // P8-4b: 관리자도 일반 로그인을 쓴다. "관리자 페이지"는 로그인한 관리자에게만 보인다.
+    if (adminPage) {
+      adminPage.hidden = !(signedIn && admin);
+      adminPage.classList.toggle("on", admin);
+    }
     if (logout) logout.hidden = !signedIn;
     window.dispatchEvent(new CustomEvent("scoreforge:auth", { detail: { userId: authState.session?.user?.id || null } }));
     if (SF.cloud?.state.initialized) SF.cloud.onAuthChanged();
@@ -389,23 +385,9 @@
       authState.session = data.session || null;
       authState.profile = data.user ? await loadAuthProfile(data.user) : null;
 
-      if (mode === "admin" && !isAdminProfile(authState.profile)) {
-        const profileError = authState.profile && authState.profile.profileError;
-        await client.auth.signOut();
-        authState.session = null;
-        authState.profile = null;
-        updateAuthChrome();
-        const msg = profileError
-          ? "profiles 테이블 또는 RLS 설정을 확인해야 합니다."
-          : "관리자 권한이 없습니다. Supabase SQL Editor에서 해당 계정의 role을 admin으로 승격하세요.";
-        setAuthMessage(msg, "error");
-        return;
-      }
-
       updateAuthChrome();
       $("#dlg-auth").close();
-      toast(mode === "admin" ? "관리자로 로그인했어요" : "회원 로그인 완료");
-      if (mode === "admin") openAdminPage();
+      toast("회원 로그인 완료");
     } catch (err) {
       setAuthMessage(authErrorMessage(err), "error");
     } finally {
@@ -444,23 +426,15 @@
   }
 
   async function openAdminPage() {
+    const needAdmin = () => {
+      openAuthDialog("member");
+      setAuthMessage("관리자 권한이 필요합니다. 관리자 계정으로 다시 로그인하세요.", "error");
+    };
     const client = getSupabaseClient({ requireConfig: false });
-    if (!client) {
-      openAuthDialog("admin");
-      setAuthMessage("Supabase 연결 정보를 먼저 저장하세요.", "error");
-      return;
-    }
-    if (!authState.session || !authState.session.user) {
-      openAuthDialog("admin");
-      return;
-    }
+    if (!client || !authState.session || !authState.session.user) { needAdmin(); return; }
     authState.profile = await loadAuthProfile(authState.session.user);
     updateAuthChrome();
-    if (!isAdminProfile(authState.profile)) {
-      openAuthDialog("admin");
-      setAuthMessage("관리자 권한이 필요합니다. 관리자 계정으로 다시 로그인하세요.", "error");
-      return;
-    }
+    if (!isAdminProfile(authState.profile)) { needAdmin(); return; }
     const dlg = $("#dlg-admin");
     if (!dlg.open) dlg.showModal();
     renderAdminPage();
@@ -519,7 +493,6 @@
   function bindAuth() {
     $("#btn-signup").addEventListener("click", () => openAuthDialog("signup"));
     $("#btn-member-login").addEventListener("click", () => openAuthDialog("member"));
-    $("#btn-admin-login").addEventListener("click", () => openAuthDialog("admin"));
     $("#btn-admin-page").addEventListener("click", openAdminPage);
     $("#btn-logout").addEventListener("click", signOutAuth);
     $("#btn-save-supabase-config").addEventListener("click", saveSupabaseConfigFromDialog);

@@ -74,3 +74,28 @@ test('P8-4a 사용자 지정 연결 판정: 실제로 쓰는 연결이 기본 �
   assert.equal(customConnectionFrom({ url: '', publishableKey: '' }, { url: '', publishableKey: '' }), false, '기본값도 없고 저장값도 없으면 사용자 지정이 아니다');
   assert.equal(customConnectionFrom(base, { url: '', publishableKey: '' }), true, '기본값이 없는 포크에서 저장값을 쓰면 사용자 지정');
 });
+
+// ───────── b. 관리자 버튼 ─────────
+test('P8-4b 마크업: "관리자 로그인" 버튼은 없고, "관리자 페이지" 버튼은 hidden으로 시작한다', () => {
+  assert.equal(html.includes('btn-admin-login'), false, '관리자도 일반 로그인을 쓴다');
+  assert.equal(/>\s*관리자 로그인\s*</.test(html), false);
+  const header = html.match(/<header class="topbar">([\s\S]*?)<\/header>/)[1];
+  const authbar = section(header, '<div class="authbar"');
+  const page = authbar.match(/<button id="btn-admin-page"[^>]*>/)[0];
+  assert.match(page, /\bhidden\b/, '관리자일 때만 js가 보인다');
+  assert.ok(authbar.indexOf('id="btn-member-login"') < authbar.indexOf('id="btn-admin-page"'), '순서: 회원 로그인 → 관리자 페이지');
+});
+
+test('P8-4b auth.js: 관리자 로그인 모드와 버튼 연결이 남아 있지 않다', () => {
+  const source = read('js/auth.js');
+  assert.equal(/btn-admin-login/.test(source), false);
+  assert.equal(/^\s*admin:\s*\{/m.test(source), false, 'AUTH_MODES.admin 없음');
+  assert.equal(/mode === "admin"/.test(source), false, '관리자 로그인 뒤 권한 확인·로그아웃 가지 없음');
+  assert.match(source, /adminPage\.hidden = !\(signedIn && admin\)/, '"관리자 페이지"는 로그인한 관리자에게만');
+});
+
+test('P8-4b i18n: 관리자 로그인 전용 문구는 쓰는 곳이 없어 지웠고, 관리자 페이지 문구는 남아 있다', () => {
+  const i18n = read('js/i18n.js');
+  for (const key of ['adminLogin', 'adminHelp', 'noAdmin', 'adminDone', 'checkRls']) assert.equal(new RegExp(`^\\s+${key} \\|`, 'm').test(i18n), false, `auth.${key}`);
+  for (const key of ['adminPage', 'adminRequired', 'adminStatus', 'adminAuth']) assert.equal(new RegExp(`^\\s+${key} \\|`, 'm').test(i18n), true, `auth.${key}`);
+});

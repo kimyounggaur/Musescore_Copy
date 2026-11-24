@@ -48,6 +48,44 @@ async function withPage(fn, { path = '/', size = { width: 1200, height: 800 }, i
   }
 }
 
+// ───────── 공용: Supabase 가짜 응답(로그인·프로필·사용자 정보) ─────────
+const USER_ID = '22222222-2222-4222-8222-222222222222';
+const SESSION_KEY = 'sb-cgoafcjvnbzozxbbyfle-auth-token';   // supabase-js가 기본 프로젝트 세션을 두는 localStorage 키
+function authMock(options = {}) {
+  const state = { role: 'member', email: 'member@example.com', profileFails: false, ...options };
+  const user = () => ({ id: USER_ID, aud: 'authenticated', role: 'authenticated', email: state.email, app_metadata: {}, user_metadata: { display_name: '테스터' }, created_at: '2026-01-01T00:00:00Z' });
+  const session = () => ({ access_token: 'aaa.bbb.ccc', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 3600, refresh_token: 'refresh-1', user: user() });
+  const cors = { 'access-control-allow-origin': '*' };
+  const json = (route, status, body) => route.fulfill({ status, contentType: 'application/json', headers: cors, body: JSON.stringify(body) });
+  const handler = async (route, call) => {
+    const url = new URL(call.url);
+    const path = url.pathname;
+    if (path === '/auth/v1/token' && url.searchParams.get('grant_type') === 'password') { await json(route, 200, session()); return true; }
+    if (path === '/auth/v1/user') { await json(route, 200, user()); return true; }
+    if (path === '/auth/v1/logout') { await route.fulfill({ status: 204, headers: cors }); return true; }
+    if (path === '/rest/v1/profiles') {
+      if (call.method === 'POST') { await route.fulfill({ status: 201, headers: cors, body: '' }); return true; }
+      if (state.profileFails) { await json(route, 500, { message: 'profiles unavailable' }); return true; }
+      const row = { id: USER_ID, email: state.email, display_name: '테스터', role: state.role, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' };
+      // 내 프로필(id=eq.…, maybeSingle)은 한 줄, 회원 목록(관리자 페이지)은 여러 줄
+      const own = (url.searchParams.get('id') || '').startsWith('eq.');
+      await json(route, 200, own ? [row] : [row, { id: '33333333-3333-4333-8333-333333333333', email: 'other@example.com', display_name: '다른 회원', role: 'member', created_at: '2026-02-01T00:00:00Z' }]);
+      return true;
+    }
+    return false;
+  };
+  return { state, handler, session, user };
+}
+// 이미 로그인돼 있던 것처럼 기본 프로젝트 세션을 심는다
+const seedSession = ({ key, session }) => localStorage.setItem(key, JSON.stringify(session));
+const signIn = async (page, email = 'member@example.com', password = 'secret123') => {
+  await openLogin(page);
+  await page.fill('#auth-email', email);
+  await page.fill('#auth-password', password);
+  await page.click('#auth-submit');
+  await page.waitForFunction(() => !document.querySelector('#dlg-auth').open);
+};
+
 const openLogin = async page => { await page.click('#btn-member-login'); await page.waitForFunction(() => document.querySelector('#dlg-auth').open); };
 const visible = (page, selector) => page.isVisible(selector);
 
@@ -164,4 +202,75 @@ test('P8-4a 사용자 지정 연결에 로그인돼 있어도 [기본값으로]�
     assert.equal(logouts[0].url.startsWith(CUSTOM.url), true, '로그아웃은 사용자 지정 연결(지금 쓰던 곳)에 보낸다');
     assert.equal(await page.evaluate(() => SF.auth.state.session), null);
   }, { init: seed, initArg: { custom: CUSTOM } });
+});
+
+// ───────── b. 관리자 버튼 ─────────
+test('P8-4b 로그인 전에는 "관리자 로그인"이 없고 "관리자 페이지"도 보이지 않는다', { skip, timeout: 90000 }, async () => {
+  await withPage(async page => {
+    assert.equal(await page.locator('#btn-admin-login').count(), 0);
+    assert.equal(await page.getByText('관리자 로그인').count(), 0);
+    assert.equal(await visible(page, '#btn-admin-page'), false);
+    assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('.authbar button')].filter(b => !b.hidden).map(b => b.id)), ['btn-signup', 'btn-member-login']);
+  });
+});
+
+test('P8-4b 일반 회원이 로그인해도 "관리자 페이지"는 보이지 않는다', { skip, timeout: 90000 }, async () => {
+  const mock = authMock({ role: 'member' });
+  await withPage(async page => {
+    await signIn(page);
+    await page.waitForFunction(() => SF.auth.state.profile?.role === 'member' && !SF.auth.state.profile.profileError);
+    assert.match(await page.textContent('#auth-status'), /member@example\.com · 회원/);
+    assert.equal(await visible(page, '#btn-logout'), true);
+    assert.equal(await visible(page, '#btn-admin-page'), false);
+  }, { handler: mock.handler });
+});
+
+test('P8-4b 관리자도 일반 로그인으로 들어가고, 그러면 "관리자 페이지"가 나타나며 저절로 열리지는 않는다', { skip, timeout: 90000 }, async () => {
+  const mock = authMock({ role: 'admin', email: 'admin@example.com' });
+  await withPage(async page => {
+    await signIn(page, 'admin@example.com');
+    await page.waitForFunction(() => !document.querySelector('#btn-admin-page').hidden);
+    assert.match(await page.textContent('#auth-status'), /admin@example\.com · 관리자/);
+    assert.match(await page.textContent('#toast'), /회원 로그인 완료/);
+    assert.equal(await page.evaluate(() => document.querySelector('#dlg-admin').open), false, '관리자 페이지는 누를 때만 열린다');
+    await page.click('#btn-admin-page');
+    await page.waitForFunction(() => document.querySelector('#dlg-admin').open);
+    await page.waitForSelector('#admin-users table');
+    assert.match(await page.textContent('#admin-summary'), /admin@example\.com/);
+    assert.match(await page.textContent('#admin-users'), /other@example\.com/);
+    await page.keyboard.press('Escape');
+    await page.click('#btn-logout');
+    await page.waitForFunction(() => document.querySelector('#btn-admin-page').hidden);
+    assert.equal(await visible(page, '#btn-admin-page'), false, '로그아웃하면 다시 숨는다');
+  }, { handler: mock.handler });
+});
+
+test('P8-4b 이미 로그인돼 있던 관리자는 열자마자 "관리자 페이지"가 보인다(부팅 복원)', { skip, timeout: 90000 }, async () => {
+  const mock = authMock({ role: 'admin', email: 'admin@example.com' });
+  await withPage(async page => {
+    await page.waitForFunction(() => !document.querySelector('#btn-admin-page').hidden);
+    assert.equal(await visible(page, '#btn-admin-page'), true);
+    assert.equal(await visible(page, '#btn-member-login'), false);
+  }, { handler: mock.handler, init: seedSession, initArg: { key: SESSION_KEY, session: mock.session() } });
+});
+
+test('P8-4b 프로필을 읽지 못하면(오류) 관리자로 보지 않는다', { skip, timeout: 90000 }, async () => {
+  const mock = authMock({ role: 'admin', email: 'admin@example.com', profileFails: true });
+  await withPage(async page => {
+    await page.waitForFunction(() => SF.auth.state.session?.user && SF.auth.state.profile?.profileError);
+    assert.equal(await visible(page, '#btn-admin-page'), false);
+    assert.doesNotMatch(await page.textContent('#auth-status'), /관리자/);
+  }, { handler: mock.handler, init: seedSession, initArg: { key: SESSION_KEY, session: mock.session() } });
+});
+
+test('P8-4b 권한 없이 관리자 페이지가 불리면 일반 로그인 창을 열고 안내한다', { skip, timeout: 90000 }, async () => {
+  await withPage(async page => {
+    await page.evaluate(() => document.querySelector('#btn-admin-page').click());   // 숨겨진 버튼도 코드로는 누를 수 있다
+    await page.waitForFunction(() => document.querySelector('#dlg-auth').open);
+    assert.equal(await page.textContent('#auth-title'), '회원 로그인', '관리자 전용 로그인 창은 없다');
+    assert.match(await page.textContent('#auth-message'), /관리자 권한이 필요합니다/);
+    assert.equal(await page.evaluate(() => document.querySelector('#dlg-admin').open), false);
+    await page.evaluate(() => { document.querySelector('#dlg-auth').close(); SF.auth.openDialog('admin'); });
+    assert.equal(await page.textContent('#auth-title'), '회원 로그인', '알 수 없는 모드는 일반 로그인으로');
+  });
 });

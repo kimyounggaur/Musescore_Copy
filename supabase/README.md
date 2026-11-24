@@ -12,7 +12,7 @@ ScoreForge는 정적 웹앱이라 브라우저에서 Supabase Auth를 직접 사
 
 ## 2. 웹앱에서 연결
 
-1. ScoreForge 상단의 `회원가입`, `회원 로그인`, `관리자 로그인` 중 하나를 누릅니다.
+1. 주소 끝에 `?dev=1`을 붙여(또는 개발자 도구 콘솔에서 `localStorage.setItem('scoreforge.dev','1')`) 연 뒤 상단의 `회원가입` 또는 `회원 로그인`을 누릅니다. 일반 화면에는 연결 칸이 보이지 않습니다.
 2. `Supabase 연결` 영역에 Project URL과 publishable key를 입력합니다.
 3. `연결 저장`을 누르면 브라우저 localStorage에 저장됩니다.
 
@@ -29,8 +29,8 @@ set role = 'admin', updated_at = now()
 where email = 'admin@example.com';
 ```
 
-3. ScoreForge에서 `관리자 로그인`을 누르고 같은 이메일/비밀번호로 로그인합니다.
-4. `관리자 페이지`에서 회원 목록이 보이면 연결이 완료된 것입니다.
+3. ScoreForge에서 `회원 로그인`을 누르고 같은 이메일/비밀번호로 로그인합니다(관리자도 일반 로그인을 씁니다).
+4. 로그인하면 상단에 `관리자 페이지` 버튼이 나타납니다(관리자 계정에만). 눌러서 회원 목록이 보이면 연결이 완료된 것입니다.
 
 ## 보안 메모
 
