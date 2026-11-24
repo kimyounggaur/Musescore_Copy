@@ -371,6 +371,48 @@ start()
 
 **자체 승인**: 위 계획대로 진행한다. 코드·파일만 만들고 배포·공개는 하지 않는다.
 
+### P9-4 재생 미리 로딩 (2026-11-25 승인)
+**목표**: 악보를 연 뒤 쉬는 시간에 그 악보의 악기만 미리 받아 두어, 준비가 끝나면 첫 재생부터 샘플로 소리 나게 한다. 아직 준비되지 않았을 때는 2.2초를 기다리다 신스로 넘어가는 대신(`play()`의 `sampleTimeoutMs` 경쟁) "음원 준비 중 · 지금은 신스로 재생 / 준비되면 자동 재생" 안내를 보여 준다. 음원 자체 호스팅은 P9-5 조사 결과 때문에 하지 않는다.
+
+**조사 결과(이 저장소에서 확인한 것)**
+- 샘플 로딩은 지금도 소리를 낼 때만이 아니라 건반 미리 듣기(`previewNote` → `scheduleSampleNote` → `ensureSampleInstrument`)에서 시작된다. 공유 로더(`loaders`·`inTurn`)와 동시 요청 제한(`limitedStorage`)은 P4-1에서 이미 갖췄으므로 미리 로딩은 `ensureSampleInstrument`를 부르는 것으로 충분하다.
+- `ensureSampleInstrument`는 `audio()`로 AudioContext를 만들고 `resume()`한다. 사용자가 아무것도 하기 전에 부르면 브라우저 자동재생 경고가 나므로 첫 조작 뒤에만 한다.
+- 악보가 바뀌는 길은 app.js `installScore` 하나이고 거기서 이미 `P.releaseUnused`를 부른다. 재생 시작은 `startPlayback`(app.js) 하나로 모이고(스페이스·재생 버튼·되감기·선택에서 재생) 다른 모듈은 `P.play`를 직접 부르지 않는다. 그래서 "묻기" 방식은 `startPlayback`만 켜면 되고, 기존 시험이 `P.play(..., {sampleTimeoutMs})`로 부르는 옛 경로는 그대로 둘 수 있다.
+- 자체 호스팅: THIRD_PARTY_NOTICES.md 기준 기본 음원(MusyngKite)은 재배포 가능 여부가 불명이다 → 프롬프트북 0번 "불가·불명이면 자체 호스팅(3번)은 하지 않고 보고". Splendid(퍼블릭 도메인)만 따로 호스팅하면 약 19MB를 저장소에 넣게 되고(이 환경에서는 외부 파일을 받을 수도 없다) 혜택은 고음질 피아노를 고른 사람에게만 가므로 이번에는 하지 않는다.
+
+**만들 것**
+| 파일 | 내용 |
+|---|---|
+| js/playback.js | ①미리 받기 설정 `getPreloadSetting`/`setPreloadSetting`(이 기기 localStorage `scoreforge.audio.preload`, "on"(기본)·"off", 악보에는 안 들어감) ②조건 `preloadBlockReason()`: 설정 꺼짐·첫 조작 전·오프라인·데이터 절약(`navigator.connection.saveData`)·느린 망(`effectiveType` 2g)이면 하지 않고 이유를 돌려줌 ③`requestPreload()`: 쉴 때(`requestIdleCallback`, 없으면 `setTimeout`) 조건을 다시 보고, 지금 악보의 악기(드럼 제외)를 파트 순서대로 **하나씩** `ensureSampleInstrument`. 새 요청·재생 시작·설정 끔이면 남은 악기는 시작하지 않음 ④`noteUserGesture()`: 첫 조작을 알리고 보류된 미리 받기를 시작 ⑤`play(from, {samples:"ask"})`: 필요한 악기가 모두 준비돼 있으면 곧바로 시작, 준비 중이면 `player.loading`으로 두고 선택 안내를 띄움(`setSamplePromptHandler`), `resolveSamplePrompt("synth"\|"wait")`. 고르지 않아도 준비되면 자동 시작, 모두 실패하면 안내를 닫고 신스로 시작. `stop()`·새 `play()`는 안내를 닫음. 옛 경로(`sampleTimeoutMs` 경쟁)는 그대로 |
+| js/app.js | `startPlayback`이 `samples:"ask"`를 넘김 · 안내 띠(`#sample-wait`) 연결(문구는 `SF.t`, 진행은 기존 샘플 상태 핸들러에서) · 첫 조작(pointerdown·keydown·touchstart 중 먼저 오는 것 한 번) → `P.noteUserGesture()` · `installScore`에서 `P.requestPreload()` |
+| index.html · css/style.css | `#sample-wait`(role="status", 평소엔 숨김, 문구+버튼 2개, 화면 아래쪽 고정·토스트와 겹치지 않음, 테마 변수 사용) · 설정 '기본' 탭의 피아노 음질 아래에 "음원 미리 받기" 선택 상자(`#set-sample-preload`, 라벨과 짝) |
+| js/panels.js | 설정 창을 열 때 값 표시(열기만 해서는 저장하지 않음), 바꾸면 곧바로 이 기기에 저장하고 토스트 |
+| js/i18n.js | 새 문구(group "sampleWait"·설정 항목·토스트)의 영어 번역 |
+| privacy.html · THIRD_PARTY_NOTICES.md · licenses.html(생성) | "소리를 낼 때 불러옴" → "소리를 낼 때, 또는 앱을 쓰기 시작한 뒤 쉬는 시간에 미리 불러옴(설정에서 끌 수 있음)". 개인정보 처리 안내의 시행일(PRIVACY_VERSION)은 바꾸지 않고 사람이 정하도록 🧑에 적는다 |
+| tests/browser-launch.mjs | 모든 브라우저 시험 페이지에서 미리 받기를 기본으로 꺼 둔다(init script가 localStorage 값이 비어 있을 때만 "off"). 기존 시험이 새 네트워크 요청·상태 칩 변화에 흔들리지 않게 하는 환경 준비이고 기존 단언은 그대로. 새 시험은 켠다 |
+| tests/playback-preload.test.mjs · tests/playback-preload-browser.test.mjs (신규) | 아래 "테스트" |
+| sw.js · precache-manifest.json · js/version.js | js/css/html이 바뀌므로 `node tests/prepare-release.mjs`로 재생성(버전 올리기는 R-2에서) |
+
+**설계서와 다르게 하는 점(미리 밝힘)**
+ⓐ 자체 호스팅·`SAMPLE_HOSTS`·CSP `connect-src` 정리는 하지 않는다 → 완료 기준 "제3자 음원 호스트 요청 0"은 달성하지 않는다(프롬프트북 0번). 대신 요청이 나가는 때를 줄이고 알린다(첫 조작 뒤·설정으로 끔·데이터 절약/오프라인이면 안 함·개인정보 처리 안내 문구). 저장소 용량 증가량은 0.
+ⓑ 미리 받기는 앱을 연 직후가 아니라 **첫 조작 뒤**에 시작한다(보기만 하고 닫는 방문자가 제3자 서버에 접속 정보를 남기지 않게, 자동재생 경고를 피하게).
+ⓒ 선택 안내에서 아무것도 고르지 않아도 준비되면 시작한다(손을 놓아도 멈춰 있지 않게). "준비되면 자동 재생"은 안내 문구를 '기다리는 중'으로 바꾸는 명시적 선택이다.
+ⓓ 미리 받기를 끄는 설정을 더한다(설계서에는 없음. 데이터·개인정보 부담을 줄이는 출구).
+ⓔ `goldst.dev`(smplr가 `loadLoopData`를 켤 때만 쓰고 앱은 켜지 않음) 허용 목록 정리는 CSP·sw.js·여러 시험을 건드리고 자체 호스팅 전체 정리와 같이 하는 편이 낫다고 보아 이번에는 하지 않는다(🧑 후보로 기록).
+
+**기존 시험 중 바꿔야 하는 기대**: 없음. 단언을 바꾸거나 약화하지 않는다. tests/browser-launch.mjs의 init script는 환경 준비다.
+
+**테스트**(먼저 쓴다)
+- Node(가짜 AudioContext·smplr — tests/playback-harness.mjs 재사용): ①설정: 기본 "on", "off" 저장·복원, 막힌 저장소에서도 오류 없음, 알 수 없는 값은 "on" ②조건: 첫 조작 전엔 시작 안 함·조작 뒤 시작, 설정 꺼짐·오프라인·saveData·2g이면 안 함(이유 확인), `navigator`가 없어도 동작 ③범위: 지금 악보의 악기만(드럼 제외)·파트 순서·하나씩(앞 악기가 준비되기 전엔 다음을 시작하지 않음)·이미 준비된 것은 다시 안 받음 ④취소: 새 요청이 오면 이전 요청의 남은 악기는 시작 안 함, 재생 시작·설정 끔·악보 교체 때도 ⑤유휴 예약: `requestIdleCallback`이 있으면 그것을, 없으면 `setTimeout`, 실행 직전에 조건 재확인 ⑥묻기: 모두 준비 → 안내 없이 즉시 시작 / 일부 준비 중 → 안내(준비된 수·전체 수)가 뜨고 재생은 시작 안 함 → "synth"를 고르면 지금 시작하고 준비 안 된 악기는 이번 재생에서 제외 / "wait"를 고르면 모두 준비된 뒤 시작 / 고르지 않아도 준비되면 시작 / 모두 실패하면 안내를 닫고 신스로 시작 / 안내 중 `stop()`이면 안내가 닫히고 시작 안 함 / 안내 중 새 `play()`면 이전 것 취소 / 이미 실패한 악기만 남았으면 묻지 않고 신스로 시작 ⑦옛 경로 불변: `sampleTimeoutMs` 시험 파일이 그대로 통과 ⑧정적: index.html의 `#sample-wait`·`#set-sample-preload`(라벨 짝)·app.js 연결·i18n 번역·privacy.html 문구.
+- 브라우저(Chromium, 음원 서버는 막거나 붙잡아 둠): ①설정 창: 기본 "on", 열기만 해서는 저장 안 함, 바꾸면 저장되고 새로고침 뒤에도 유지 ②첫 조작 전 음원 요청 0건, 조작 뒤 그 악보의 악기 요청이 나감 ③설정을 끄면 조작해도 0건 ④안내 UI: 음원이 느릴 때 재생을 누르면 `#sample-wait`가 보이고 버튼 2개·진행 문구, "지금은 신스로 재생"이면 곧 시작되고 안내가 닫힘, "준비되면 자동 재생"이면 풀어 준 뒤 시작 ⑤미리 받기가 끝난 뒤 첫 재생은 안내 없이 바로 시작되고 세션이 모든 샘플을 씀(가짜 smplr 모듈 주입 훅 사용) ⑥375px 폭에서 안내 띠가 화면 안에 들어오고 버튼이 눌리며, 4개 테마에서 문구·버튼 대비 4.5:1 이상 ⑦영어 전환 시 번역.
+- 변이 검사로 시험이 정말 잡는지 확인한다(첫 조작 조건 제거·saveData 조건 제거·악기 범위에 드럼 포함·동시에 시작·취소 토큰 무시·안내 뒤 `stop()`에서 안내를 안 닫음·모두 실패해도 계속 대기·"synth" 선택 때 준비 안 된 악기도 사용·설정 기본값 뒤집기·옛 경로 대기 시간 변경 등).
+
+**위험과 대비**: ①미리 받기가 데이터·개인정보 부담 → 첫 조작 뒤·설정으로 끔·데이터 절약/오프라인/2G이면 안 함·개인정보 처리 안내 문구 갱신 ②재생 버튼을 눌렀는데 멈춘 것처럼 보임 → 안내 띠가 바로 뜸·준비되면 자동 시작·재생 버튼으로 취소·모두 실패하면 신스로 자동 시작 ③기존 시험이 새 동작에 흔들림 → 하네스는 미리 받기를 기본으로 끔·옛 `sampleTimeoutMs` 경로 유지·전체 시험으로 확인 ④안내 중 악보 교체·음질 변경 경합 → `installScore`·`setPianoQuality`가 이미 `stop`을 부르고 `stop`이 안내를 닫음(시험 포함) ⑤미리 받기 도중 악보 교체 → `releaseUnused`가 정리하고 토큰으로 남은 로딩을 그만둠 ⑥js/css/html 변경으로 sw.js 해시가 바뀜 → prepare-release 후 같이 커밋하고 verify-offline·verify-deploy 확인 ⑦안내 띠가 좁은 화면·테마에서 읽기 어려움 → 테마 변수 사용·375px·4개 테마 대비 시험 ⑧접근성 → role="status"·버튼은 키보드로 닿음·포커스를 빼앗지 않음(재생 중 편집 방해 금지).
+
+**사람이 해야 할 일(보고용)**: ①개인정보 처리 안내 문구 변경 확인과 시행일(PRIVACY_VERSION) 갱신 ②음원 자체 호스팅(완료 기준 "제3자 음원 호스트 0")은 MusyngKite 원본 이용 조건 확인 뒤에 진행 — 확인되면 smplr `instrumentUrl`·`baseUrl` 옵션, sw.js `SAMPLE_HOSTS`·vercel.json CSP 정리, 저장소 용량 보고가 필요 ③`goldst.dev` 허용 정리 후보.
+
+**자체 승인**: 위 계획대로 진행한다. 코드·파일만 만들고 배포·공개는 하지 않는다.
+
 ## Phase 검토 기록 (R-1 — 코드는 고치지 않고 점검만)
 
 ### Phase 2 작업 보존 검토 (2026-11-23, phase/p2-work-safety)
