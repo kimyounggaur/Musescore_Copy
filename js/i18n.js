@@ -217,6 +217,7 @@
     addFour | ＋ 마디 4개 추가 | ＋ Add four measures
     deleteLast | － 마지막 마디 삭제 | － Delete last measure
     transpose | 조옮김 | Transpose
+    transposeChords | 코드 기호도 조옮김 | Transpose chord symbols too
     semitoneUp | 반음 ↑ | Semitone ↑
     semitoneDown | 반음 ↓ | Semitone ↓
     toneUp | 온음 ↑ | Whole tone ↑
@@ -451,6 +452,7 @@
     pasted | {count}개를 붙여넣었어요 | Pasted {count} items
     transposeUp | {count}반음 올렸어요 | Transposed up {count} semitones
     transposeDown | {count}반음 내렸어요 | Transposed down {count} semitones
+    transposeKeptDiagrams | 직접 만든 코드 다이어그램 {count}개는 그대로 두었어요 | Left {count} hand-made chord diagrams unchanged
     tuplet | {count}잇단음표로 나눴어요 | Split into a {count}-tuplet
     repeat | {count}번 반복으로 설정했어요 | Set to repeat {count} times
     ending | {count}번 엔딩을 표시했어요 | Added ending {count}
@@ -1097,6 +1099,7 @@
   pattern("toast.pasted", /^(\d+)개를 붙여넣었어요$/, ["count"]);
   pattern("toast.transposeUp", /^(\d+)반음 올렸어요$/, ["count"]);
   pattern("toast.transposeDown", /^(\d+)반음 내렸어요$/, ["count"]);
+  pattern("toast.transposeKeptDiagrams", /^직접 만든 코드 다이어그램 (\d+)개는 그대로 두었어요$/, ["count"]);
   pattern("toast.tuplet", /^(\d+)잇단음표로 나눴어요$/, ["count"]);
   pattern("toast.repeat", /^(\d+)번 반복으로 설정했어요$/, ["count"]);
   pattern("toast.ending", /^(\d+)번 엔딩을 표시했어요$/, ["count"]);

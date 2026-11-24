@@ -281,6 +281,19 @@ window.SF = window.SF || {};
     const parsed = typeof chord === "string" ? parseChordSymbol(chord) : parseChordSymbol(chord.raw || chord.normalized || "");
     return parsed ? { ...parsed } : null;
   }
+  /** 코드 기호를 semitones만큼 옮긴다(철자는 조표 key에 맞춘다). 근음이 없는 코드(N.C. 등)는 그대로 복제해 돌려준다.
+   * 새 글자를 parseChordSymbol로 다시 해석해 raw·normalized를 함께 바꾼다 — 불러올 때 raw를 다시 해석하므로 raw가 그대로면 원래 코드로 되돌아간다. */
+  function transposeChordSymbol(chord, semitones, key) {
+    const parsed = cloneChordSymbol(chord);
+    if (!parsed || !parsed.root || !semitones) return parsed;
+    const move = (letter, alter) => {
+      const p = transposePitch({ step: STEP_EN.indexOf(letter), alter, oct: 4 }, semitones, key);
+      return STEP_EN[p.step] + chordAlterText(p.alter, false);
+    };
+    const text = move(parsed.root, parsed.rootAlter) + (parsed.quality || "") +
+      (parsed.bass ? "/" + move(parsed.bass, parsed.bassAlter) : "");
+    return parseChordSymbol(text);
+  }
   function normalizeEventChordSymbol(ev) {
     if (!ev || !ev.chordSymbol) return;
     const parsed = cloneChordSymbol(ev.chordSymbol);
@@ -1753,8 +1766,11 @@ window.SF = window.SF || {};
   }
 
   /* ---------------- 전체 조옮김 ---------------- */
-  function transposeScore(score, semitones) {
-    if (!semitones) return;
+  /** 악보 전체를 semitones만큼 옮긴다. opts.chords === false면 코드 기호는 그대로 둔다(기본은 함께 옮김).
+   * 돌려주는 값: { manualFretboards } — 직접 만든 코드 다이어그램이라 그대로 둔 개수(알림용). */
+  function transposeScore(score, semitones, opts = {}) {
+    const result = { manualFretboards: 0 };
+    if (!semitones) return result;
     // 새 조표: 5도권에서 7*semitones 이동 후 |fifths| 최소 후보 선택
     const transposeKey = key => {
       let f = key + 7 * semitones;
@@ -1778,8 +1794,18 @@ window.SF = window.SF || {};
           });
           for (const grace of ev.graceBefore || []) grace.notes = grace.notes.map(n => ({ ...n, ...transposePitch(n, semitones, keySigAt(score, m)) }));
         }
+        // 코드 기호는 이벤트 종류와 상관없이(쉼표 위도) 옮긴다. 조표를 먼저 바꿨으므로 keySigAt은 새 조다.
+        if (ev.chordSymbol && !isPercussionRef(ref) && opts.chords !== false) {
+          const moved = transposeChordSymbol(ev.chordSymbol, semitones, keySigAt(score, m));
+          if (moved) ev.chordSymbol = moved;
+          if (ev.fretboard && !ev.fretboard.manual) {                   // 코드를 직접 고칠 때(input.js·panels.js)와 같은 규칙
+            const fb = getDefaultFretboard(ev.chordSymbol);
+            if (fb) ev.fretboard = fb; else delete ev.fretboard;
+          } else if (ev.fretboard?.manual) result.manualFretboards++;
+        }
       }
     normalizeTies(score);
+    return result;
   }
 
   /** 불러온 이벤트의 단순 값 정리(심층 방어). 템포는 반올림하지 않는다 — 가져온 소수 템포 보존 */
@@ -2050,7 +2076,7 @@ window.SF = window.SF || {};
     removeNoteFromChord, transposeNote, setNoteAccidental, toggleNoteTie,
     addGraceBefore, findGrace, cloneGraceList,
     invalidate, eventIndex, eventOrderMap, normalizeSpanners, slurCoverMap, addOttava, ottavaShiftAt,
-    rebar, transposeScore, toJSON, fromJSON,
+    rebar, transposeScore, transposeChordSymbol, toJSON, fromJSON,
     state, mutate, undo, redo, canUndo, canRedo, undoLabel, redoLabel, resetHistory, setScore, onChange,
     markSaved, markAutosaved, isAutosaved,
     __stats: stats, __setHistoryBudget: setHistoryBudget, __history: historyStats,
