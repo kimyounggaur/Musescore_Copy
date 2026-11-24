@@ -49,12 +49,13 @@ function replaceOnce(text, pattern, value, what) {
   return text.replace(pattern, (_, before, _old, after) => `${before}${value}${after}`);
 }
 
+const FLAG = /(window\.SF_FEATURES\s*=\s*window\.SF_FEATURES\s*\|\|\s*\{\s*deleteAccount:\s*)(true|false)(?=\s*\})/;
 function rewriteConfig(source, { url, key, enableDeleteAccount }) {
   const current = /^\s*url:\s*"(https:\/\/[^"\s]+)"/m.exec(source);
   let text = replaceOnce(source, /^(\s*url:\s*")(https:\/\/[^"\s]+)(")/gm, url, '프로젝트 주소(url)');
   text = replaceOnce(text, /^(\s*publishableKey:\s*")([^"\s]+)(")/gm, key, '공개 키(publishableKey)');
   let deleteAccount = 'unchanged';
-  const flag = /(window\.SF_FEATURES\s*=\s*window\.SF_FEATURES\s*\|\|\s*\{\s*deleteAccount:\s*)(true|false)(?=\s*\})/;
+  const flag = FLAG;
   const found = flag.exec(text);
   if (enableDeleteAccount) {
     if (!found) throw new SwitchError('js/config.js에서 탈퇴 플래그(SF_FEATURES.deleteAccount) 줄을 찾지 못했어요.');
@@ -66,7 +67,7 @@ function rewriteConfig(source, { url, key, enableDeleteAccount }) {
 
 // CSP 값 안의 supabase 주소 토큰(와일드카드 또는 한 프로젝트)을 새 프로젝트 하나로 바꾼다. 다른 토큰·다른 지시어는 건드리지 않는다.
 const CSP_TOKEN = /\b(https|wss):\/\/(?:\*|[a-z0-9]{20})\.supabase\.co(?=[\s;]|$)/g;
-function rewriteCsp(source, ref) {
+function cspValues(source) {
   let parsed;
   try { parsed = JSON.parse(source); } catch { throw new SwitchError('vercel.json을 JSON으로 읽을 수 없어요.'); }
   const values = [];
@@ -76,6 +77,10 @@ function rewriteCsp(source, ref) {
     }
   }
   if (!values.length) throw new SwitchError('vercel.json에서 Content-Security-Policy(CSP) 헤더를 찾지 못했어요.');
+  return values;
+}
+function rewriteCsp(source, ref) {
+  const values = cspValues(source);
   let text = source, tokens = 0;
   for (const value of new Set(values)) {
     const next = value.replace(CSP_TOKEN, (_, scheme) => { tokens += 1; return `${scheme}://${ref}.supabase.co`; });
@@ -115,4 +120,26 @@ export function findStaleReferences(files, ref) {
     .map(([file, text]) => ({ file, count: String(text).split(ref).length - 1 }))
     .filter(item => item.count > 0)
     .sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0));
+}
+
+// 저장소가 지금 어느 상태인지 읽는다(파일은 쓰지 않는다). 전환 도구가 읽는 것과 같은 모양을 같은 정규식으로 본다.
+// url: 지금 연결된 프로젝트 주소 · deleteAccount: 탈퇴 플래그(true/false, 줄이 없으면 null) · wildcard: CSP에 *.supabase.co가 남았는지 · cspTokens: CSP의 supabase 주소 토큰 수
+export function inspectShipState({ configText, vercelText }) {
+  const config = String(configText);
+  const url = /^\s*url:\s*"(https:\/\/[^"\s]+)"/m.exec(config);
+  const flag = FLAG.exec(config);
+  const tokens = cspValues(String(vercelText)).flatMap(value => [...value.matchAll(CSP_TOKEN)].map(match => match[0]));
+  return { url: url ? url[1] : null, deleteAccount: flag ? flag[2] === 'true' : null, wildcard: tokens.some(token => token.includes('*')), cspTokens: tokens.length };
+}
+
+// 탈퇴 기능 규칙(결정 D1): 같은 프로젝트를 쓰는 다른 앱의 데이터까지 지울 수 있으므로 프로젝트를 분리하기 전에는 꺼 둔다.
+// "분리했다"는 전환 도구가 CSP의 supabase 주소를 새 프로젝트 하나로 좁혔다는 뜻으로 읽는다(그 전에는 와일드카드가 남아 있다).
+// 꺼져 있으면 언제나 괜찮고, 켜져 있으면 분리된 뒤에만 괜찮다.
+export function deleteAccountPolicy(state) {
+  if (state.deleteAccount === null) return { ok: false, message: 'js/config.js에서 탈퇴 플래그(SF_FEATURES.deleteAccount) 줄을 찾지 못했어요.' };
+  if (state.deleteAccount === false) return { ok: true, message: '탈퇴 플래그는 꺼져 있어요(D1 전의 출하 값).' };
+  if (state.cspTokens === 0 || state.wildcard) {
+    return { ok: false, message: '탈퇴 플래그가 켜져 있는데 vercel.json CSP는 아직 프로젝트 하나로 좁혀지지 않았어요. D1(프로젝트 분리) 전에는 켤 수 없어요 — node tests/switch-supabase-project.mjs 로 새 프로젝트를 먼저 연결하세요.' };
+  }
+  return { ok: true, message: '탈퇴 플래그가 켜져 있고 CSP는 한 프로젝트로 좁혀져 있어요(D1 이후).' };
 }

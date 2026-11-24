@@ -1,7 +1,8 @@
 // P8-5 D1(Supabase 프로젝트 분리) 전환 도구 시험.
 // 새 프로젝트의 주소·공개 키는 사람이 프로젝트를 만들어야 생기므로, 저장소에는 "바꿔 주는 도구"만 두고 실제 전환은 사람이 한다.
 // 도구가 다루는 것은 공개해도 되는 값(프로젝트 주소·publishable/anon 키)뿐이다 — 비밀 키는 거절하고 어떤 출력에도 키 값을 싣지 않는다.
-// 이 시험은 저장소의 실제 js/config.js·vercel.json 모양을 임시 폴더에 복사해서 돌린다(저장소 파일은 건드리지 않는다).
+// 이 시험은 저장소의 실제 js/config.js·vercel.json 모양을 쓰되, 값은 "전환 전" 기준(가짜 프로젝트·와일드카드 CSP·탈퇴 플래그 꺼짐)으로 되돌려서 돌린다.
+// 사람이 전환을 마친 저장소(새 프로젝트·플래그 켬)에서도 이 시험이 그대로 통과하도록 하기 위해서다. 저장소 파일은 건드리지 않는다.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
@@ -10,7 +11,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writ
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SwitchError, checkPublicKey, parseProjectUrl, switchProject, findStaleReferences } from './project-switch-lib.mjs';
+import { SwitchError, checkPublicKey, parseProjectUrl, switchProject, findStaleReferences, inspectShipState, deleteAccountPolicy } from './project-switch-lib.mjs';
 
 const read = file => readFileSync(file, 'utf8');
 const REF_A = 'abcdefghijklmnopqrst', REF_B = 'zyxwvutsrqponmlkjihg';
@@ -19,8 +20,16 @@ const KEY_A = 'sb_publishable_AAAAAAAAAAAAAAAAAAAAAA_bbbb-CCCC', KEY_B = 'sb_pub
 // 저장소 전체에서 "비밀 키 모양 글자"를 찾는 검사(delete-account.test)에 이 시험 파일이 걸리지 않도록, 가짜 비밀 키는 실행할 때 조립한다.
 const SECRET = ['sb', 'secret', 'TOPSECRETVALUE0123456789abcdef'].join('_');
 const jwt = payload => `e30.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.c2lnbmF0dXJl`;
-const configText = read('js/config.js'), vercelText = read('vercel.json');
-const currentRef = /https:\/\/([a-z0-9]{20})\.supabase\.co/.exec(configText)[1];
+// 저장소의 실제 파일(지금 어느 프로젝트로 전환돼 있든 상관없다)과, 그 모양에서 값만 "전환 전" 기준으로 되돌린 시험용 기준 파일.
+const live = { config: read('js/config.js'), vercel: read('vercel.json') };
+const liveRef = /https:\/\/([a-z0-9]{20})\.supabase\.co/.exec(live.config)[1];
+const BASE_REF = '0123456789abcdefghij', BASE_KEY = 'sb_publishable_BASEBASEBASEBASEBASEBA_base-BASE';
+const configText = live.config
+  .replace(/^(\s*url:\s*")https:\/\/[^"\s]+(")/m, `$1https://${BASE_REF}.supabase.co$2`)
+  .replace(/^(\s*publishableKey:\s*")[^"\s]+(")/m, `$1${BASE_KEY}$2`)
+  .replace(/(deleteAccount:\s*)true/, '$1false');
+const vercelText = live.vercel.replace(/\b(https|wss):\/\/(?:\*|[a-z0-9]{20})\.supabase\.co(?=[\s;]|$)/g, '$1://*.supabase.co');
+const currentRef = BASE_REF;
 const cspOf = text => JSON.parse(text).headers.flatMap(group => group.headers).find(item => item.key === 'Content-Security-Policy').value;
 const directive = (csp, name) => csp.split(';').map(part => part.trim()).find(part => part.startsWith(`${name} `));
 const messageOf = fn => { try { fn(); } catch (err) { assert.ok(err instanceof SwitchError, `SwitchError여야 한다: ${err && err.stack}`); return err.message; } assert.fail('던져야 한다'); };
@@ -237,14 +246,50 @@ test('P8-5 전환 도구 명령줄: vercel.json이 망가져 있으면 config.js
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+// ───────── 탈퇴 플래그 규칙 · 저장소 파일 모양 ─────────
+test('P8-5 탈퇴 플래그 규칙: 꺼져 있으면 언제나 괜찮고, 켜져 있으면 CSP가 새 프로젝트 하나로 좁혀진 뒤(D1 이후)에만 괜찮다', () => {
+  const state = (config, vercel) => inspectShipState({ configText: config, vercelText: vercel });
+  const before = state(configText, vercelText);
+  assert.deepEqual({ ...before }, { url: `https://${BASE_REF}.supabase.co`, deleteAccount: false, wildcard: true, cspTokens: 2 }, '기준 파일: 꺼짐 + 와일드카드 CSP');
+  assert.equal(deleteAccountPolicy(before).ok, true, '꺼짐 + 분리 전');
+  const early = state(configText.replace('deleteAccount: false', 'deleteAccount: true'), vercelText);
+  assert.equal(early.deleteAccount, true);
+  const blocked = deleteAccountPolicy(early);
+  assert.equal(blocked.ok, false, '켜짐 + 분리 전 = 막힌다');
+  assert.match(blocked.message, /D1/); assert.match(blocked.message, /switch-supabase-project/, '무엇을 먼저 해야 하는지 알려 준다');
+  const switched = switchProject({ configText, vercelText, url: URL_A, key: KEY_A });
+  const after = state(switched.config, switched.vercel);
+  assert.deepEqual({ ...after }, { url: URL_A, deleteAccount: false, wildcard: false, cspTokens: 2 }, '전환 도구를 거치면 CSP가 한 프로젝트로 좁혀진다');
+  assert.equal(deleteAccountPolicy(after).ok, true, '꺼짐 + 분리 후');
+  const enabled = switchProject({ configText, vercelText, url: URL_A, key: KEY_A, enableDeleteAccount: true });
+  const on = state(enabled.config, enabled.vercel);
+  assert.deepEqual({ ...on }, { url: URL_A, deleteAccount: true, wildcard: false, cspTokens: 2 });
+  assert.equal(deleteAccountPolicy(on).ok, true, '켜짐 + 분리 후(전환 도구가 한 번에 만든 결과) = 괜찮다');
+  assert.equal(deleteAccountPolicy(state(enabled.config, vercelText)).ok, false, '플래그만 켜고 CSP는 그대로 두면 막힌다');
+  assert.equal(deleteAccountPolicy(state(configText.replace(/window\.SF_FEATURES[^\n]*\n/, ''), vercelText)).ok, false, '플래그 줄이 없으면 막힌다');
+  assert.throws(() => state(configText, '{ not json'), SwitchError, 'vercel.json이 JSON이 아니면 던진다');
+  assert.throws(() => state(configText, '{ "headers": [] }'), SwitchError, 'CSP가 없으면 던진다');
+});
+
+test('P8-5 저장소 파일 모양: 실제 js/config.js·vercel.json은 전환 도구가 읽고 바꿀 수 있는 모양이다(어느 프로젝트로 전환돼 있어도)', () => {
+  const out = switchProject({ configText: live.config, vercelText: live.vercel, url: URL_A, key: KEY_A });
+  assert.equal(out.summary.previousRef, liveRef, '지금 연결된 프로젝트를 정확히 읽는다');
+  assert.equal(out.summary.cspTokens, 2, 'CSP에는 https와 wss 한 쌍');
+  JSON.parse(out.vercel);
+  assert.ok(!/\*\.supabase\.co/.test(out.vercel));
+  const state = inspectShipState({ configText: live.config, vercelText: live.vercel });
+  assert.equal(state.cspTokens, 2); assert.ok(state.url.includes(liveRef));
+});
+
 // ───────── 저장소 불변식 ─────────
 test('P8-5 저장소 불변식: 시험 파일에 지금 프로젝트의 ref를 글자로 박아 두지 않는다(프로젝트를 바꿔도 시험이 안 깨진다)', () => {
-  const offenders = readdirSync('tests').filter(name => /\.(mjs|js)$/.test(name)).filter(name => read(join('tests', name)).includes(currentRef));
+  const offenders = readdirSync('tests').filter(name => /\.(mjs|js)$/.test(name)).filter(name => read(join('tests', name)).includes(liveRef));
   assert.deepEqual(offenders, [], '이 파일들은 js/config.js에서 읽도록 바꿔야 한다');
 });
 
-test('P8-5 저장소 불변식: 저장소의 js/config.js는 탈퇴 플래그가 꺼져 있고, 비밀 키 모양의 글자가 없다', () => {
-  assert.ok(configText.includes('deleteAccount: false'));
+test('P8-5 저장소 불변식: 탈퇴 플래그는 D1 규칙을 지키고(꺼져 있거나, 프로젝트를 분리한 뒤에만 켜짐), 설정·도구 파일에 비밀 키 모양의 글자가 없다', () => {
+  const policy = deleteAccountPolicy(inspectShipState({ configText: live.config, vercelText: live.vercel }));
+  assert.ok(policy.ok, policy.message);
   for (const file of ['js/config.js', 'vercel.json', 'tests/switch-supabase-project.mjs', 'tests/project-switch-lib.mjs']) {
     assert.ok(!/sb_secret_[A-Za-z0-9]/.test(read(file)), `${file}에 sb_secret_ 키 모양이 있다`);
   }

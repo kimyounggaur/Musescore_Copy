@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { launchOptions, pageOptions, preparePage } from './browser-launch.mjs';
+import { inspectShipState } from './project-switch-lib.mjs';
 const require = createRequire(import.meta.url);
 const URL_ = process.env.SF_URL || 'http://127.0.0.1:8000';
 const skip = !process.env.PLAYWRIGHT_MODULE;
@@ -16,6 +17,9 @@ const skip = !process.env.PLAYWRIGHT_MODULE;
 const DEFAULT_URL = /^\s*url:\s*"(https:\/\/[^"\s]+)"/m.exec(readFileSync(new URL('../js/config.js', import.meta.url), 'utf8'))[1];
 const DEFAULT_REF = new URL(DEFAULT_URL).hostname.split('.')[0];
 const CUSTOM = { url: 'https://example-custom.supabase.co', key: 'sb_publishable_customKeyForTests123' };
+// 탈퇴 플래그의 출하 값. D1(분리) 전에는 꺼져 있다. 사람이 새 프로젝트로 전환하며 켠 뒤에는 "꺼진 상태" 시험이 값을 직접 꺼 두고(off) 돌려서 같은 동작을 본다.
+// (켜진 상태의 동작은 아래 flag: true 시험들이 값을 직접 켜서 본다. 출하 값이 D1 규칙을 지키는지는 tests/account.test.mjs가 본다.)
+const SHIPPED_DELETE_ON = inspectShipState({ configText: readFileSync(new URL('../js/config.js', import.meta.url), 'utf8'), vercelText: readFileSync(new URL('../vercel.json', import.meta.url), 'utf8') }).deleteAccount === true;
 
 // page.route 핸들러가 부르는 기본 응답. 시험이 handler를 주면 그것이 먼저 받는다(true를 돌려주면 처리한 것).
 // allowConnect: 문서의 CSP connect-src에 더할 주소. 배포 CSP(vercel.json)는 Supabase 프로젝트 분리(D1) 뒤 한 프로젝트로 좁혀지는데,
@@ -472,9 +476,10 @@ const OTHER_ID = '33333333-3333-4333-8333-333333333333';
 const QUEUE_KEY = 'scoreforge.cloud.queue.v1';
 const PASSWORD = 'right-pass-1';
 // 페이지가 열리기 전에 실행: 세션 심기 · (선택) 플래그 켜기 · (선택) 오프라인으로 보이게 해 저장 대기 작업이 서버로 나가지 않게 하기
-function deleteInit({ key, session, flag, offline }) {
+function deleteInit({ key, session, flag, off, offline }) {
   if (session) localStorage.setItem(key, JSON.stringify(session));
   if (flag) window.SF_FEATURES = { deleteAccount: true };
+  if (off) window.SF_FEATURES = { deleteAccount: false };
   if (offline) Object.defineProperty(navigator, 'onLine', { get: () => false });
 }
 const fnCalls = calls => calls.filter(c => /\/functions\/v1\/delete-account/.test(c.url) && c.method === 'POST');
@@ -525,11 +530,11 @@ async function queueTwoOwners(page) {
 }
 const queueOwners = page => page.evaluate(key => JSON.parse(localStorage.getItem(key) || '[]').map(job => job.owner), QUEUE_KEY);
 
-test('P8-4d 플래그가 꺼진 채로 출하된다: 로그인해도 탈퇴 버튼이 안 보이고, 코드로 불러도 요청이 한 건도 가지 않는다', { skip, timeout: 90000 }, async () => {
+test('P8-4d 플래그가 꺼져 있으면(D1 전의 출하 값): 로그인해도 탈퇴 버튼이 안 보이고, 코드로 불러도 요청이 한 건도 가지 않는다', { skip, timeout: 90000 }, async () => {
   const mock = deleteMock();
   await withPage(async (page, calls) => {
     await signedInAs(page);
-    assert.equal(await page.evaluate(() => window.SF_FEATURES.deleteAccount), false, '출하 값');
+    assert.equal(await page.evaluate(() => window.SF_FEATURES.deleteAccount), false, SHIPPED_DELETE_ON ? '시험이 꺼 둔 값' : '출하 값');
     assert.equal(await visible(page, '#btn-logout'), true, '로그인 상태');
     assert.equal(await visible(page, '#btn-delete-account'), false);
     const before = calls.length;
@@ -540,7 +545,7 @@ test('P8-4d 플래그가 꺼진 채로 출하된다: 로그인해도 탈퇴 버�
     assert.equal(calls.length, before, '요청이 한 건도 없다');
     assert.equal(fnCalls(calls).length, 0);
     assert.equal(reauthCalls(calls).length, 0);
-  }, { init: deleteInit, initArg: { key: SESSION_KEY, session: mock.session() }, handler: mock.handler });
+  }, { init: deleteInit, initArg: { key: SESSION_KEY, session: mock.session(), off: SHIPPED_DELETE_ON }, handler: mock.handler });
 });
 
 test('P8-4d 주소(?deleteAccount=1…)나 localStorage 값으로는 켜지지 않는다', { skip, timeout: 90000 }, async () => {
@@ -552,10 +557,11 @@ test('P8-4d 주소(?deleteAccount=1…)나 localStorage 값으로는 켜지지 �
     assert.deepEqual(await page.evaluate(() => SF.auth.deleteAccount()), { ok: false, reason: 'disabled' });
     assert.equal(fnCalls(calls).length + reauthCalls(calls).length, 0);
   }, { path: '/?deleteAccount=1&features=deleteAccount&dev=1',
-    init: ({ key, session }) => {
+    init: ({ key, session, off }) => {
       localStorage.setItem(key, JSON.stringify(session));
+      if (off) window.SF_FEATURES = { deleteAccount: false };
       for (const name of ['scoreforge.deleteAccount', 'scoreforge.features', 'scoreforge.features.deleteAccount', 'SF_FEATURES']) localStorage.setItem(name, '1');
-    }, initArg: { key: SESSION_KEY, session: mock.session() }, handler: mock.handler });
+    }, initArg: { key: SESSION_KEY, session: mock.session(), off: SHIPPED_DELETE_ON }, handler: mock.handler });
 });
 
 test('P8-4d (플래그를 켠 시험) 로그인했을 때만 버튼이 보이고, 누르면 비밀번호 창이 열리며, 어느 단계에서 취소해도 아무것도 지우지 않는다', { skip, timeout: 90000 }, async () => {

@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { deleteAccountPolicy, inspectShipState } from './project-switch-lib.mjs';
 
 const read = path => readFileSync(path, 'utf8');
 const html = read('index.html');
@@ -218,18 +219,29 @@ test('P8-4c PASSWORD_RECOVERY 이벤트가 와도 인증 콜백 안에서는 새
 });
 const texts = log => log.toasts.map(toast => (Array.isArray(toast) ? toast[0] : toast));   // 오래 보이는 알림은 [문구, { duration }]로 기록된다
 
-test('P8-4d 기능 플래그: js/config.js의 SF_FEATURES.deleteAccount는 기본이 false이고, 미리 정해 둔 값은 덮어쓰지 않는다', () => {
-  assert.deepEqual({ ...loadConfig().SF_FEATURES }, { deleteAccount: false });
+// D1 규칙(tests/project-switch-lib.mjs의 deleteAccountPolicy): 꺼져 있으면 언제나 괜찮고, 켜져 있으면 vercel.json CSP가 전환 도구로 새 프로젝트 하나로 좁혀진 뒤에만 괜찮다.
+// 8-5에서 사람이 새 프로젝트로 전환하면서 플래그를 켜도(--enable-delete-account) 이 시험들이 같이 통과하도록, "항상 false"가 아니라 이 규칙을 고정한다.
+const shipState = () => inspectShipState({ configText: read('js/config.js'), vercelText: read('vercel.json') });
+
+test('P8-4d 기능 플래그: js/config.js의 SF_FEATURES.deleteAccount는 D1(분리) 전에는 false(출하 값)이고, 미리 정해 둔 값은 덮어쓰지 않는다', () => {
+  const state = shipState();
+  const policy = deleteAccountPolicy(state);
+  assert.ok(policy.ok, policy.message);
+  assert.deepEqual({ ...loadConfig().SF_FEATURES }, { deleteAccount: state.deleteAccount }, '파일에 적힌 값이 그대로 읽힌다');
   assert.deepEqual({ ...loadConfig({ deleteAccount: true }).SF_FEATURES }, { deleteAccount: true }, '시험·배포가 먼저 정해 둔 값이 이긴다');
+  assert.deepEqual({ ...loadConfig({ deleteAccount: false }).SF_FEATURES }, { deleteAccount: false }, '꺼 둔 값도 마찬가지');
   const config = read('js/config.js');
   assert.match(config, /D1/, '왜 꺼져 있는지(D1 프로젝트 분리 전)를 주석으로 남긴다');
   assert.match(config, /8-5/, '언제 켜는지(8-5의 분리 커밋)를 주석으로 남긴다');
 });
 
-test('P8-4d 저장소의 어떤 코드·설정도 탈퇴 플래그를 켜지 않는다(켜는 것은 D1 분리 뒤의 별도 커밋)', () => {
-  for (const file of ['index.html', 'vercel.json', 'sw.js', 'manifest.webmanifest', ...readdirSync('js').filter(name => name.endsWith('.js')).map(name => `js/${name}`)]) {
-    assert.doesNotMatch(read(file), /deleteAccount\s*[:=]\s*(true|1|"true")/, `${file} 이(가) 탈퇴 플래그를 켠다`);
+test('P8-4d 저장소의 어떤 코드·설정도 탈퇴 플래그를 켜지 않는다(켜는 것은 D1 분리 뒤 — js/config.js의 한 줄만 전환 도구로 켠다)', () => {
+  const enables = file => read(file).match(/deleteAccount\s*[:=]\s*(true|1|"true")/g) || [];
+  for (const file of ['index.html', 'vercel.json', 'sw.js', 'manifest.webmanifest', ...readdirSync('js').filter(name => name.endsWith('.js') && name !== 'config.js').map(name => `js/${name}`)]) {
+    assert.deepEqual(enables(file), [], `${file} 이(가) 탈퇴 플래그를 켠다`);
   }
+  // js/config.js만 켤 수 있고, 켜는 것은 플래그 줄 하나뿐이며, 켜졌다면 D1 규칙(위 시험)을 지킨다
+  assert.equal(enables('js/config.js').length, shipState().deleteAccount ? 1 : 0, 'config.js에서 켜는 곳은 플래그 줄 하나뿐이다');
 });
 
 test('P8-4d 마크업: #btn-delete-account는 hidden으로 시작하고, 로그아웃 다음에 한 번만 있다', () => {
