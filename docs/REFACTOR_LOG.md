@@ -276,6 +276,32 @@ start()
 
 **자체 승인**: 위 계획대로 진행한다(분류표의 "거부"는 사용자가 모르게 내용을 잃을 수 있는 경우로 한정, 나머지는 고치고 반드시 보고).
 
+### P8-4 계정 기능·노출 정리 (2026-11-24 승인)
+**목표**: 일반 사용자에게 보이면 안 되는 연결 설정·관리자 로그인 버튼을 걷어 내고, 비밀번호 재설정·개인정보 고지(가입 동의)·탈퇴(꺼진 상태로 준비)를 갖춘다. 결정 D4a = 운영이므로 이 Step은 그대로 진행한다(중단이었다면 "회원 기능 숨김"으로 바꿔 계획만 보고). 결정 D1 = 분리이지만 실제 분리는 사람 작업(8-5)이라, **탈퇴는 코드만 만들고 기능 플래그를 끈 채로 둔다**.
+
+**하위 작업(커밋 하나씩) — 순서**
+| 순 | 하위 작업 | 바꿀 곳 | 핵심 |
+|---|---|---|---|
+| a | 연결 설정 숨김 | index.html(`#auth-config`에 hidden, `#auth-custom-banner` 추가) · js/auth.js · css/style.css | 개발 모드(`?dev=1`을 처음 열 때 읽음, 또는 localStorage `scoreforge.dev` = "1"/"true")에서만 Project URL·키 칸을 보임. 저장된 사용자 지정 연결(기본 설정과 다른 값)이 있으면 어느 모드에서든 "사용자 지정 연결 사용 중 · [기본값으로]" 띠를 보이고, 누르면 로그아웃·저장값 삭제로 기본 연결(js/config.js)로 돌아감. 개발 모드가 아닌데 연결이 설정돼 있지 않으면(포크 등) 안내문만 보이고 저장 시도는 하지 않음 |
+| b | 관리자 버튼 | index.html · js/auth.js | `#btn-admin-login` 삭제, `AUTH_MODES.admin`과 "관리자 로그인 뒤 권한 없으면 로그아웃" 가지 삭제(관리자도 일반 로그인). `#btn-admin-page`는 hidden으로 시작해 `signedIn && isAdminProfile`일 때만 보임. `openAdminPage`가 권한 없이 불리면 일반 로그인 창을 열고 "관리자 권한이 필요합니다" 안내 |
+| c | 비밀번호 재설정 | index.html(로그인 창에 "비밀번호를 잊으셨나요?" 버튼) · js/auth.js · js/ui-dialog.js(promptDialog에 `autocomplete` 옵션만 더함) | `resetPasswordForEmail(email, { redirectTo: location.origin + "/?auth=recovery" })`(http·https일 때만 redirectTo). 메일 요청 결과는 계정 유무와 상관없이 같은 문구(계정 존재 여부를 알려 주지 않음). `onAuthStateChange`의 `PASSWORD_RECOVERY` → `setTimeout`으로 콜백 밖에서 SF.ui 새 비밀번호 창 → `updateUser({ password })`(실패하면 이유를 보여 다시 묻기, 최대 5회) → 주소의 `auth` 값 제거. 만료·사용된 링크(`#error=…`)는 안내 + 로그인 창 |
+| d | 탈퇴(꺼짐) | supabase/functions/delete-account/{handler.ts, index.ts, README.md} · js/config.js(`SF_FEATURES.deleteAccount = false`) · js/auth.js · js/cloud.js(`purgeOwner`) · index.html(`#btn-delete-account`, hidden) | Edge Function: 설계서 스케치 + OPTIONS 사전 요청 + 허용 출처(`ALLOWED_ORIGINS` 비밀값, 없으면 모든 출처 거부) + 오류 시 내부 메시지는 서버 로그에만. 서비스 키는 `Deno.env`에서만 읽고 어떤 파일에도 쓰지 않음. 앱: 플래그가 꺼져 있으면 버튼이 없고 `SF.auth.deleteAccount()`는 네트워크 호출 없이 거절. 켜져 있으면 비밀번호 재입력(재로그인) → "탈퇴" 입력 → `functions.invoke("delete-account")` → 성공하면 로컬 로그아웃·이 계정의 클라우드 대기열 작업 삭제 |
+| e | 개인정보 고지 | privacy.html · css/privacy.css · index.html(가입 창 동의 체크·링크) · js/auth.js · tests/release-lib.mjs(TOP_LEVEL에 privacy.html) | 수집 항목·목적·보관·파기·처리 위탁·국외 이전(Supabase·Vercel)·문의처를 한국어 + 영어로. 가입 때만 필수 동의 체크(미동의면 요청을 보내지 않음), 동의 버전·시각을 가입 메타데이터(`privacy_consent_version`·`privacy_consent_at`)에 기록. 페이지 끝에 "법률 검토 필요" 주석 |
+
+**탈퇴를 끄는 방식(중요)**: 지금 이 앱은 레슨 앱과 같은 Supabase 프로젝트·profiles 표를 쓰므로, 여기서 사용자를 지우면 레슨 앱 데이터까지 연쇄 삭제될 수 있다. 그래서 ①Edge Function은 저장소에 파일로만 두고 배포하지 않으며(사람 작업), ②앱의 플래그는 `js/config.js` 상수 하나(`window.SF_FEATURES.deleteAccount`, 기본 false)이고 주소·localStorage로는 켤 수 없다 — 켜는 것은 D1(프로젝트 분리)을 마치고 config.js의 연결 주소를 바꾸는 8-5의 별도 커밋에서 한다(여기서는 하지 않는다).
+
+**설계서와 다르게 하는 점(미리 밝힘)**: ⓐ cloud "대기열 키 삭제" 대신 **이 계정의 작업만** 지운다 — 대기열(`scoreforge.cloud.queue.v1`)은 이 브라우저의 모든 계정이 같이 쓰고 작업마다 owner가 적혀 있어 키를 통째로 지우면 다른 계정의 저장 대기분을 잃는다 ⓑ Edge Function은 시험할 수 있게 `handler.ts`(주입식, 외부 import 없음)와 `index.ts`(배선)로 나눈다 ⓒ Edge Function은 오류 때 `error.message`를 응답에 싣지 않는다(설계서 스케치는 실음) ⓓ "관리자 로그인"을 지우므로 i18n의 관리자 로그인 전용 문구(adminLogin·adminHelp·noAdmin·adminDone)는 쓰는 곳이 없으면 지운다.
+
+**기존 시험 중 바꿔야 하는 기대(설계가 요구하는 변경 — 몰래 고치지 않고 목록으로 남김)**: ①tests/menus.test.mjs 상단바 id 목록에서 `btn-admin-login` 제외(요소를 지웠다) ②tests/account-menu-browser.test.mjs의 "누를 수 있는 로그인 버튼" 목록에서 `#btn-admin-login` 제외 ③같은 파일의 End 키 시험: 로그인 전에는 "관리자 페이지"가 숨겨지므로 마지막 보이는 버튼이 `btn-member-login`. 그 밖의 기존 시험은 그대로 통과해야 한다(안 되면 코드가 틀린 것).
+
+**테스트**: tests/account.test.mjs(노드: 마크업 불변식·플래그 기본 꺼짐·동의 버전 일치·privacy.html 필수 절·i18n 영어 문구·Edge Function 핸들러 8경로 — OPTIONS·허용/비허용 출처·401 헤더 없음/사용자 없음·405·500 환경값 없음/삭제 실패·204, 서비스 키가 응답·로그에 안 나옴·저장소에 키 문자열이 없음) + tests/account-browser.test.mjs(브라우저: 연결 칸 숨김/`?dev=1` 보임/사용자 지정 띠와 기본값으로, 관리자 버튼 없음·관리자 계정만 관리자 페이지 보임, 재설정 메일 요청 본문·redirect_to, 복구 링크 → 새 비밀번호 창 → `PUT /user` 본문, 만료 링크 안내, 가입 동의 체크 필수·메타데이터, privacy.html 열림, 탈퇴 플래그 꺼짐(버튼 없음·호출 거절)/켜짐(두 단계 확인 → invoke → 로그아웃·대기열 정리). Supabase 요청은 모두 `page.route`로 가로채 실제 서버에 접속하지 않는다.
+
+**위험과 대비**: ①`onAuthStateChange` 안에서 Supabase를 바로 부르면 교착 → `setTimeout`으로 콜백 밖에서 ②복구 이벤트가 부팅 중 다른 모달과 겹침 → SF.ui 대화상자는 겹쳐 열 수 있고, 시험에서 부팅 직후 도착을 확인 ③`hidden` 속성이 CSS display에 지는 문제 → style.css 27행에 `[hidden]{display:none!important}`가 이미 있음을 확인 ④privacy.html이 서비스 워커 사전 캐시에 없으면 오프라인에서 안 열림 → release-lib TOP_LEVEL에 추가하고 매니페스트 시험으로 확인 ⑤플래그가 우연히 켜짐 → 기본값 false를 시험으로 고정하고 변이 검사에 넣음
+
+**사람이 해야 할 일(보고용 체크리스트)**: Supabase Auth → URL Configuration의 Site URL과 Redirect URLs에 운영 주소·Vercel Preview 주소(`/?auth=recovery` 포함) 추가 / 재설정·가입 확인 메일 문구(Auth → Email Templates)를 한국어로 / 실제 메일로 재설정 1회 확인 / (D1 뒤) delete-account 함수 배포 + `ALLOWED_ORIGINS` 비밀값 설정(서비스 키는 Supabase가 자동 주입, 저장소에는 넣지 않음) + 연습 계정으로 탈퇴 1회 확인 + config.js 플래그 켜기 / privacy.html 문구 법률 검토와 문의처·지역 확정
+
+**자체 승인**: 위 계획대로 진행한다. 탈퇴는 꺼진 채로 병합하고, 켜는 일은 8-5(D1)와 사람 작업으로 남긴다.
+
 ## Phase 검토 기록 (R-1 — 코드는 고치지 않고 점검만)
 
 ### Phase 2 작업 보존 검토 (2026-11-23, phase/p2-work-safety)
