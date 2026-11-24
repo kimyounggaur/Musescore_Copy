@@ -1,5 +1,5 @@
 "use strict";
-const CACHE_VERSION = "3.6.0+11654a7a";
+const CACHE_VERSION = "3.6.0+ef952268";
 const SHELL_CACHE = "scoreforge-shell-" + CACHE_VERSION;
 const SAMPLE_CACHE = "scoreforge-samples-v1";
 const SAMPLE_META = "scoreforge-sample-meta-v1";
@@ -7,6 +7,10 @@ const SAMPLE_LIMIT = 60 * 1024 * 1024;
 const SAMPLE_HOSTS = new Set(["gleitz.github.io", "smpldsnds.github.io", "goldst.dev"]);
 let sampleQueue = Promise.resolve();
 const local = path => new URL(path, self.registration.scope).href;
+// 설명서 그림(manual/assets/)은 설치에 담지 않는다 — 처음 볼 때 한 번 받아 이 버전의 셸 캐시에 담아 두면 그 뒤로는 오프라인에서도 보인다. (P9-7)
+const LAZY_ASSET = /^manual\/assets\/[^/]+\.(webp|png|jpe?g|svg)$/;
+// 범위(scope) 기준 상대 경로로 판단한다 — 앱이 하위 경로(…/scoreforge/)에 배포돼도 같다. (부르는 쪽에서 이미 범위 안의 같은 출처 주소만 넘긴다)
+const isLazyAsset = url => LAZY_ASSET.test(url.pathname.slice(new URL(self.registration.scope).pathname.length));
 
 self.addEventListener("install", event => {
   event.waitUntil((async () => {
@@ -75,7 +79,10 @@ async function shellResponse(request) {
       if (entry) return navigationResponse(request, entry);
     }
   }
-  return fetch(request);
+  const response = await fetch(request);
+  // 성공한 같은 출처 응답만 담는다(404·불투명 응답은 그대로 돌려주기만). 담기 실패(저장 공간 부족 등)는 그림을 보는 데 영향이 없다.
+  if (isLazyAsset(new URL(request.url)) && response.ok && response.type === "basic") await cache.put(request, response.clone()).catch(() => {});
+  return response;
 }
 function navigationResponse(request, response) {
   // cleanUrls may cache a followed index.html redirect. Navigations use manual
