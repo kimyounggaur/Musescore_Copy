@@ -1,6 +1,6 @@
 {
   "name": "scoreforge",
-  "version": "3.4.0",
+  "version": "3.5.0",
   "private": true,
   "scripts": {
     "check": "node tests/check.mjs",
