@@ -670,6 +670,18 @@ dialog::backdrop { background: rgba(10, 12, 16, .6); backdrop-filter: blur(2px);
   font-size: 13px;
 }
 .auth-message:empty { display: none; }
+.auth-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 122, 26, .5);
+  border-radius: 8px;
+  background: rgba(255, 122, 26, .13);
+  color: var(--text);
+  padding: 8px 12px;
+  font-size: 13px;
+}
 .auth-message.error {
   border-color: rgba(255, 122, 26, .5);
   background: rgba(255, 122, 26, .13);

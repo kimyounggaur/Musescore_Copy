@@ -233,7 +233,14 @@
   <div class="dlg-body auth-dialog">
     <div id="auth-message" class="auth-message" role="status"></div>
 
-    <section class="auth-config">
+    <div id="auth-custom-banner" class="auth-banner" role="status" hidden>
+      <span>사용자 지정 연결 사용 중</span>
+      <span aria-hidden="true">·</span>
+      <button id="btn-reset-default-connection" type="button" class="tbtn">기본값으로</button>
+    </div>
+
+    <!-- 개발 모드(?dev=1 또는 localStorage scoreforge.dev)에서만 js/auth.js가 연다. 일반 사용자에게는 연결 주소·키 칸을 보이지 않는다. -->
+    <section id="auth-config" class="auth-config" hidden>
       <div class="auth-section-title">Supabase 연결</div>
       <div class="auth-config-grid">
         <label for="supabase-url">Project URL</label>

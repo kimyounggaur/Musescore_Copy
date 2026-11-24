@@ -645,6 +645,10 @@
     storageError | 브라우저 저장소에 Supabase 설정을 저장하지 못했어요. | Could not save Supabase settings in browser storage.
     configSaved | Supabase 연결 정보를 저장했어요. | Supabase connection saved.
     configReset | Supabase 연결 설정을 초기화했어요. | Supabase connection settings reset.
+    customConnection | 사용자 지정 연결 사용 중 | Using a custom connection
+    useDefault | 기본값으로 | Use default
+    defaultRestored | 기본 연결로 돌아왔어요. | Switched back to the default connection.
+    notReady | 이 주소에서는 회원 기능을 쓸 수 없어요. | Member features are not available at this address.
     saveFirst | Supabase 연결 정보를 먼저 저장하세요. | Save the Supabase connection details first.
     configSuffix | {message} 먼저 Supabase 연결 정보를 저장하세요. | {message} Save the Supabase connection details first.
     needCredentials | 이메일과 비밀번호를 입력하세요. | Enter your email and password.

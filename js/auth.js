@@ -7,6 +7,7 @@
   const htmlEsc = SF.html.esc;
   const SUPABASE_URL_KEY = "scoreforge.supabase.url";
   const SUPABASE_KEY_KEY = "scoreforge.supabase.publishableKey";
+  const DEV_KEY = "scoreforge.dev";
   const AUTH_MODES = {
     signup: {
       title: "회원가입",
@@ -36,20 +37,53 @@
     authSub: null,
   };
 
-  function readSupabaseConfig() {
+  // js/config.js가 넣어 둔 기본 연결. 저장된 사용자 지정 값이 없을 때 이것을 쓴다.
+  function embeddedConfig() {
     const embedded = window.SF_SUPABASE_CONFIG || {};
+    return {
+      url: String(embedded.url || embedded.supabaseUrl || "").trim().replace(/\/+$/, ""),
+      publishableKey: String(embedded.publishableKey || embedded.anonKey || embedded.key || "").trim(),
+    };
+  }
+
+  function readSupabaseConfig() {
+    const embedded = embeddedConfig();
     let url = "";
     let publishableKey = "";
     try {
       url = localStorage.getItem(SUPABASE_URL_KEY) || "";
       publishableKey = localStorage.getItem(SUPABASE_KEY_KEY) || "";
     } catch {}
-    url = url || embedded.url || embedded.supabaseUrl || "";
-    publishableKey = publishableKey || embedded.publishableKey || embedded.anonKey || embedded.key || "";
     return {
-      url: String(url || "").trim().replace(/\/+$/, ""),
-      publishableKey: String(publishableKey || "").trim(),
+      url: String(url || embedded.url).trim().replace(/\/+$/, ""),
+      publishableKey: String(publishableKey || embedded.publishableKey).trim(),
     };
+  }
+
+  // P8-4a: 연결 주소·키 칸은 개발 모드에서만 보인다(?dev=1 은 처음 열 때 한 번 읽고, localStorage 값은 그때그때 읽는다).
+  function devModeFrom(search, stored) {
+    let query = false;
+    try { query = new URLSearchParams(String(search || "")).get("dev") === "1"; } catch {}
+    return query || /^(1|true)$/i.test(String(stored == null ? "" : stored));
+  }
+  const devQueryAtBoot = (() => { try { return devModeFrom(location.search, null); } catch { return false; } })();
+  function isDevMode() {
+    let stored = null;
+    try { stored = localStorage.getItem(DEV_KEY); } catch {}
+    return devQueryAtBoot || devModeFrom("", stored);
+  }
+  // 실제로 쓰는 연결이 기본 연결과 다르면 "사용자 지정 연결"이다.
+  function customConnectionFrom(effective, embedded) {
+    return effective.url !== embedded.url || effective.publishableKey !== embedded.publishableKey;
+  }
+  function hasCustomConnection() {
+    return customConnectionFrom(readSupabaseConfig(), embeddedConfig());
+  }
+  function applyConnectionChrome() {
+    const config = $("#auth-config");
+    const banner = $("#auth-custom-banner");
+    if (config) config.hidden = !isDevMode();
+    if (banner) banner.hidden = !hasCustomConnection();
   }
 
   function fillSupabaseConfigFields() {
@@ -159,10 +193,11 @@
     return true;
   }
 
-  async function clearSupabaseConfig() {
+  // 저장해 둔 사용자 지정 연결을 지우고 기본 연결(js/config.js)로 돌아간다. 이 기기에서만 로그아웃한다(scope: local).
+  async function resetConnection(message) {
     const client = getSupabaseClient({ requireConfig: false });
+    try { if (client) await client.auth.signOut({ scope: "local" }); } catch {}
     try {
-      if (client) await client.auth.signOut();
       localStorage.removeItem(SUPABASE_URL_KEY);
       localStorage.removeItem(SUPABASE_KEY_KEY);
     } catch {}
@@ -171,12 +206,15 @@
     authState.session = null;
     authState.profile = null;
     fillSupabaseConfigFields();
-    updateAuthChrome();
-    setAuthMessage("Supabase 연결 설정을 초기화했어요.", "ok");
+    await initSupabaseAuth({ quiet: true });
+    setAuthMessage(message, "ok");
   }
+  const clearSupabaseConfig = () => resetConnection("Supabase 연결 설정을 초기화했어요.");
+  const useDefaultConnection = () => resetConnection("기본 연결로 돌아왔어요.");
 
   async function initSupabaseAuth(opts = {}) {
     fillSupabaseConfigFields();
+    applyConnectionChrome();
     if (!window.supabase && SF.loadSupabase && navigator.onLine) {
       try { await SF.loadSupabase(); } catch (error) {
         if (!opts.quiet) console.warn(error.message);
@@ -280,6 +318,7 @@
     if (logout) logout.hidden = !signedIn;
     window.dispatchEvent(new CustomEvent("scoreforge:auth", { detail: { userId: authState.session?.user?.id || null } }));
     if (SF.cloud?.state.initialized) SF.cloud.onAuthChanged();
+    applyConnectionChrome();
   }
 
   function openAuthDialog(mode = "member") {
@@ -290,11 +329,14 @@
     $("#auth-submit").textContent = meta.submit;
     $("#auth-display-name-row").style.display = meta.showName ? "grid" : "none";
     $("#auth-password").autocomplete = meta.showName ? "new-password" : "current-password";
-    setAuthMessage(isSupabaseConfigured() ? meta.message : `${meta.message} 먼저 Supabase 연결 정보를 저장하세요.`);
+    applyConnectionChrome();
+    setAuthMessage(isSupabaseConfigured()
+      ? meta.message
+      : isDevMode() ? `${meta.message} 먼저 Supabase 연결 정보를 저장하세요.` : "이 주소에서는 회원 기능을 쓸 수 없어요.");
     const dlg = $("#dlg-auth");
     if (!dlg.open) dlg.showModal();
     setTimeout(() => {
-      const target = isSupabaseConfigured() ? $("#auth-email") : $("#supabase-url");
+      const target = isSupabaseConfigured() || !isDevMode() ? $("#auth-email") : $("#supabase-url");
       target && target.focus();
     }, 0);
   }
@@ -303,6 +345,7 @@
     const mode = authState.mode;
     const meta = AUTH_MODES[mode] || AUTH_MODES.member;
     if (!isSupabaseConfigured()) {
+      if (!isDevMode()) { setAuthMessage("이 주소에서는 회원 기능을 쓸 수 없어요.", "error"); return; }
       const saved = await saveSupabaseConfigFromDialog();
       if (!saved) return;
     }
@@ -481,6 +524,7 @@
     $("#btn-logout").addEventListener("click", signOutAuth);
     $("#btn-save-supabase-config").addEventListener("click", saveSupabaseConfigFromDialog);
     $("#btn-clear-supabase-config").addEventListener("click", clearSupabaseConfig);
+    $("#btn-reset-default-connection").addEventListener("click", useDefaultConnection);
     $("#auth-submit").addEventListener("click", handleAuthSubmit);
     $("#btn-admin-refresh").addEventListener("click", renderAdminPage);
     ["#auth-display-name", "#auth-email", "#auth-password", "#supabase-url", "#supabase-key"].forEach((sel) => {
@@ -508,5 +552,6 @@
       return JSON.parse(atob(encoded.padEnd(Math.ceil(encoded.length / 4) * 4, "="))).role === "anon";
     } catch { return false; }
   }
-  SF.auth = { state: authState, getClient: getSupabaseClient, openDialog: openAuthDialog, bindAuth, init: initSupabaseAuth, renderAdminPage, isPublicKey };
+  SF.auth = { state: authState, getClient: getSupabaseClient, openDialog: openAuthDialog, bindAuth, init: initSupabaseAuth, renderAdminPage, isPublicKey,
+    isDevMode, devModeFrom, hasCustomConnection, customConnectionFrom };
 })(window.SF);
