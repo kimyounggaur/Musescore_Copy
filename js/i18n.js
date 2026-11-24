@@ -647,6 +647,23 @@
     useDefault | 기본값으로 | Use default
     defaultRestored | 기본 연결로 돌아왔어요. | Switched back to the default connection.
     notReady | 이 주소에서는 회원 기능을 쓸 수 없어요. | Member features are not available at this address.
+    forgotPassword | 비밀번호를 잊으셨나요? | Forgot your password?
+    resetNeedEmail | 비밀번호를 재설정할 이메일을 입력하세요. | Enter the email address to reset the password for.
+    badEmail | 이메일 형식이 올바르지 않아요. | The email address is not valid.
+    resetSent | 입력한 이메일로 가입한 계정이 있으면 재설정 메일이 곧 도착해요. 받은 편지함과 스팸함을 확인하세요. | If an account exists for that email, a reset email will arrive shortly. Check your inbox and spam folder.
+    rateLimited | 요청이 너무 잦아요. 잠시 뒤에 다시 시도하세요. | Too many requests. Try again in a little while.
+    sameAsOld | 이전과 다른 비밀번호를 입력하세요. | Enter a password different from the old one.
+    tooShort | 비밀번호가 너무 짧아요. 더 길게 만들어 주세요. | That password is too short. Make it longer.
+    weakPassword | 너무 흔한 비밀번호예요. 다른 비밀번호를 고르세요. | That password is too common. Choose a different one.
+    sessionMissing | 로그인 상태가 풀렸어요. 다시 로그인하거나 재설정 메일을 다시 받으세요. | You are no longer signed in. Sign in again or request a new reset email.
+    linkExpired | 재설정 링크가 만료됐거나 이미 사용됐어요. "비밀번호를 잊으셨나요?"를 눌러 메일을 다시 받으세요. | The reset link has expired or was already used. Choose "Forgot your password?" to get a new email.
+    newPasswordTitle | 새 비밀번호 설정 | Set a new password
+    newPasswordHelp | 새 비밀번호를 입력하세요. 6자 이상이어야 해요. | Enter a new password. It must contain at least 6 characters.
+    newPasswordLabel | 새 비밀번호 | New password
+    changePassword | 비밀번호 바꾸기 | Change password
+    passwordChanged | 비밀번호를 바꿨어요 | Password changed
+    passwordKept | 비밀번호는 바꾸지 않았어요 | The password was not changed
+    passwordFailed | 비밀번호를 바꾸지 못했어요. 재설정 메일을 다시 요청해 주세요. | Could not change the password. Request a new reset email.
     saveFirst | Supabase 연결 정보를 먼저 저장하세요. | Save the Supabase connection details first.
     configSuffix | {message} 먼저 Supabase 연결 정보를 저장하세요. | {message} Save the Supabase connection details first.
     needCredentials | 이메일과 비밀번호를 입력하세요. | Enter your email and password.

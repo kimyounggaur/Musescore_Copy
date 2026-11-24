@@ -116,7 +116,9 @@
         },
       });
       authState.configSig = sig;
-      const { data } = authState.client.auth.onAuthStateChange((_event, session) => {
+      const { data } = authState.client.auth.onAuthStateChange((event, session) => {
+        // 콜백 안에서 Supabase를 바로 부르면 교착할 수 있어, 새 비밀번호 창은 콜백 밖(다음 틱)에서 연다.
+        if (event === "PASSWORD_RECOVERY") setTimeout(startPasswordRecovery, 0);
         authState.session = session || null;
         if (!session || !session.user) {
           authState.profile = null;
@@ -137,8 +139,15 @@
 
   function authErrorMessage(err) {
     const raw = String((err && (err.message || err.error_description)) || err || "알 수 없는 오류");
+    const code = String((err && (err.code || err.error_code)) || "");
     if (/invalid login credentials/i.test(raw)) return "이메일 또는 비밀번호가 올바르지 않습니다.";
     if (/email not confirmed/i.test(raw)) return "이메일 인증이 아직 완료되지 않았습니다. 받은 편지함을 확인하세요.";
+    if (/rate limit|you can only request this after/i.test(`${raw} ${code}`)) return "요청이 너무 잦아요. 잠시 뒤에 다시 시도하세요.";
+    if (/different from the old password|same_password/i.test(`${raw} ${code}`)) return "이전과 다른 비밀번호를 입력하세요.";
+    // 길이 문제를 먼저 본다: 서버는 길이 부족에도 weak_password 코드를 쓴다. 서버가 정한 최소 길이는 6이 아닐 수 있어 숫자는 말하지 않는다.
+    if (/password should be at least \d+ characters/i.test(raw)) return "비밀번호가 너무 짧아요. 더 길게 만들어 주세요.";
+    if (/known to be weak|easy to guess|weak_password/i.test(`${raw} ${code}`)) return "너무 흔한 비밀번호예요. 다른 비밀번호를 고르세요.";
+    if (/auth session missing|session_not_found/i.test(`${raw} ${code}`)) return "로그인 상태가 풀렸어요. 다시 로그인하거나 재설정 메일을 다시 받으세요.";
     if (/failed to fetch|network/i.test(raw)) return "Supabase에 연결할 수 없습니다. URL, publishable key, 네트워크 상태를 확인하세요.";
     return raw;
   }
@@ -317,6 +326,103 @@
     applyConnectionChrome();
   }
 
+  // ───────── P8-4c 비밀번호 재설정 ─────────
+  // 메일의 링크는 <주소>/?auth=recovery 로 돌아온다. http·https가 아니면(file 등) 돌아올 주소를 정할 수 없어 지정하지 않는다.
+  function recoveryRedirectFrom(loc) {
+    if (!loc || (loc.protocol !== "http:" && loc.protocol !== "https:") || !loc.origin || loc.origin === "null") return "";
+    return `${loc.origin}/?auth=recovery`;
+  }
+  // 복구 링크로 돌아온 주소를 읽는다: 실패(만료·이미 사용)면 failed, 성공이면 토큰이 주소에 실려 있다(hasTokens).
+  function recoveryReturnFrom(href) {
+    const none = { recovery: false, failed: false, hasTokens: false };
+    let url;
+    try { url = new URL(String(href)); } catch { return none; }
+    if (url.searchParams.get("auth") !== "recovery") return none;
+    const fragment = new URLSearchParams(url.hash.replace(/^#/, ""));
+    const failed = Boolean(fragment.get("error") || fragment.get("error_code") || fragment.get("error_description"));
+    const hasTokens = !failed && Boolean(fragment.get("access_token") || url.searchParams.get("code"));
+    return { recovery: true, failed, hasTokens };
+  }
+  // 처리가 끝난 복구 표시(?auth=recovery와 남은 인증 조각)를 주소에서 지운다. 다른 주소 값은 그대로 둔다.
+  function cleanRecoveryUrl() {
+    try {
+      const url = new URL(location.href);
+      if (url.searchParams.get("auth") !== "recovery") return;
+      url.searchParams.delete("auth");
+      url.searchParams.delete("code");
+      if (/(^#|&)(access_token|refresh_token|error|error_code|error_description|type)=/.test(url.hash)) url.hash = "";
+      history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    } catch {}
+  }
+  function handleRecoveryReturn() {
+    const info = recoveryReturnFrom(location.href);
+    if (!info.recovery) return;
+    if (info.hasTokens) return; // 성공: 라이브러리가 세션을 만들고 PASSWORD_RECOVERY가 이어서 온다(startPasswordRecovery)
+    cleanRecoveryUrl();
+    if (!info.failed) return;
+    openAuthDialog("member");
+    setAuthMessage('재설정 링크가 만료됐거나 이미 사용됐어요. "비밀번호를 잊으셨나요?"를 눌러 메일을 다시 받으세요.', "error");
+  }
+  let recoveryRunning = false;
+  async function startPasswordRecovery() {
+    if (recoveryRunning) return;
+    recoveryRunning = true;
+    try {
+      cleanRecoveryUrl();
+      const client = getSupabaseClient({ requireConfig: false });
+      if (!client || !SF.ui || typeof SF.ui.promptDialog !== "function") return;
+      let problem = "";
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const password = await SF.ui.promptDialog({
+          title: "새 비밀번호 설정",
+          message: problem || "새 비밀번호를 입력하세요. 6자 이상이어야 해요.",
+          label: "새 비밀번호",
+          type: "password",
+          autocomplete: "new-password",
+          confirmText: "비밀번호 바꾸기",
+          validate: value => (String(value).length < 6 ? "비밀번호는 6자 이상이어야 합니다." : ""),
+        });
+        if (password === null) { toast("비밀번호는 바꾸지 않았어요"); return; }
+        const { error } = await client.auth.updateUser({ password });
+        if (!error) { toast("비밀번호를 바꿨어요"); return; }
+        problem = authErrorMessage(error);
+      }
+      toast("비밀번호를 바꾸지 못했어요. 재설정 메일을 다시 요청해 주세요.");
+    } finally {
+      recoveryRunning = false;
+    }
+  }
+  async function requestPasswordReset() {
+    const email = ($("#auth-email").value || "").trim();
+    if (!email) {
+      setAuthMessage("비밀번호를 재설정할 이메일을 입력하세요.", "error");
+      $("#auth-email").focus();
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setAuthMessage("이메일 형식이 올바르지 않아요.", "error");
+      return;
+    }
+    if (!isSupabaseConfigured()) {
+      setAuthMessage(isDevMode() ? "Supabase 연결 정보를 먼저 저장하세요." : "이 주소에서는 회원 기능을 쓸 수 없어요.", "error");
+      return;
+    }
+    const button = $("#btn-forgot-password");
+    if (button) button.disabled = true;
+    try {
+      const client = getSupabaseClient();
+      const redirectTo = recoveryRedirectFrom(location);
+      const { error } = await client.auth.resetPasswordForEmail(email, redirectTo ? { redirectTo } : {});
+      if (error) throw error;
+      // 그 이메일의 계정이 있는지는 알려 주지 않는다(없어도 같은 문구).
+      setAuthMessage("입력한 이메일로 가입한 계정이 있으면 재설정 메일이 곧 도착해요. 받은 편지함과 스팸함을 확인하세요.", "ok");
+    } catch (err) {
+      setAuthMessage(authErrorMessage(err), "error");
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
   function openAuthDialog(mode = "member") {
     authState.mode = AUTH_MODES[mode] ? mode : "member";
     const meta = AUTH_MODES[authState.mode];
@@ -324,6 +430,7 @@
     $("#auth-title").textContent = meta.title;
     $("#auth-submit").textContent = meta.submit;
     $("#auth-display-name-row").style.display = meta.showName ? "grid" : "none";
+    $("#btn-forgot-password").hidden = authState.mode === "signup";
     $("#auth-password").autocomplete = meta.showName ? "new-password" : "current-password";
     applyConnectionChrome();
     setAuthMessage(isSupabaseConfigured()
@@ -498,6 +605,7 @@
     $("#btn-save-supabase-config").addEventListener("click", saveSupabaseConfigFromDialog);
     $("#btn-clear-supabase-config").addEventListener("click", clearSupabaseConfig);
     $("#btn-reset-default-connection").addEventListener("click", useDefaultConnection);
+    $("#btn-forgot-password").addEventListener("click", requestPasswordReset);
     $("#auth-submit").addEventListener("click", handleAuthSubmit);
     $("#btn-admin-refresh").addEventListener("click", renderAdminPage);
     ["#auth-display-name", "#auth-email", "#auth-password", "#supabase-url", "#supabase-key"].forEach((sel) => {
@@ -515,6 +623,7 @@
       setAuthBusy(false);
     });
     initSupabaseAuth({ quiet: true });
+    handleRecoveryReturn();
   }
 
   function isPublicKey(key) {
@@ -526,5 +635,6 @@
     } catch { return false; }
   }
   SF.auth = { state: authState, getClient: getSupabaseClient, openDialog: openAuthDialog, bindAuth, init: initSupabaseAuth, renderAdminPage, isPublicKey,
-    isDevMode, devModeFrom, hasCustomConnection, customConnectionFrom };
+    isDevMode, devModeFrom, hasCustomConnection, customConnectionFrom,
+    errorMessage: authErrorMessage, recoveryRedirectFrom, recoveryReturnFrom };
 })(window.SF);

@@ -274,3 +274,153 @@ test('P8-4b 권한 없이 관리자 페이지가 불리면 일반 로그인 창�
     assert.equal(await page.textContent('#auth-title'), '회원 로그인', '알 수 없는 모드는 일반 로그인으로');
   });
 });
+
+// ───────── c. 비밀번호 재설정 ─────────
+const putUser = calls => calls.filter(c => c.method === 'PUT' && /\/auth\/v1\/user/.test(c.url));
+// 노드 쪽 기록(calls)이 원하는 모양이 될 때까지 기다린다(대화상자가 닫힌 직후에는 요청이 아직 가는 중일 수 있다)
+const until = async (check, message, ms = 8000) => {
+  const end = Date.now() + ms;
+  while (Date.now() < end) { if (check()) return; await new Promise(resolve => setTimeout(resolve, 50)); }
+  assert.fail(message);
+};
+const promptOpen = page => page.evaluate(() => Boolean(document.querySelector('#dlg-prompt')?.open));
+const RECOVERY_HASH = '#access_token=aaa.bbb.ccc&expires_in=3600&refresh_token=r1&token_type=bearer&type=recovery';
+const toastText = page => page.evaluate(() => document.querySelector('#toast').textContent);
+
+test('P8-4c "비밀번호를 잊으셨나요?"는 로그인 창에만 있고 가입 창에서는 숨는다', { skip, timeout: 90000 }, async () => {
+  await withPage(async page => {
+    await openLogin(page);
+    assert.equal(await visible(page, '#btn-forgot-password'), true);
+    await page.keyboard.press('Escape');
+    await page.click('#btn-signup');
+    await page.waitForFunction(() => document.querySelector('#dlg-auth').open);
+    assert.equal(await visible(page, '#btn-forgot-password'), false);
+  });
+});
+
+test('P8-4c 재설정 메일 요청: 이메일을 확인한 뒤 recover 요청을 보내고, 돌아올 주소는 <origin>/?auth=recovery', { skip, timeout: 90000 }, async () => {
+  await withPage(async (page, calls) => {
+    await openLogin(page);
+    await page.click('#btn-forgot-password');
+    assert.match(await page.textContent('#auth-message'), /이메일을 입력하세요/);
+    await page.fill('#auth-email', '잘못된주소');
+    await page.click('#btn-forgot-password');
+    assert.match(await page.textContent('#auth-message'), /이메일 형식이 올바르지 않아요/);
+    assert.equal(calls.filter(c => /\/auth\/v1\/recover/.test(c.url)).length, 0, '확인을 통과하기 전에는 요청하지 않는다');
+
+    await page.fill('#auth-email', 'someone@example.com');
+    await page.click('#btn-forgot-password');
+    await page.waitForFunction(() => /메일이 곧 도착해요/.test(document.querySelector('#auth-message').textContent));
+    const recover = calls.filter(c => c.method === 'POST' && /\/auth\/v1\/recover/.test(c.url));
+    assert.equal(recover.length, 1);
+    assert.equal(recover[0].body.email, 'someone@example.com');
+    assert.equal(new URL(recover[0].url).searchParams.get('redirect_to'), `${URL_}/?auth=recovery`);
+    assert.equal(await page.evaluate(() => document.querySelector('#auth-message').classList.contains('ok')), true);
+    assert.equal(await page.isEnabled('#btn-forgot-password'), true, '요청이 끝나면 버튼이 다시 켜진다');
+    assert.equal(await page.evaluate(() => document.querySelector('#dlg-auth').open), true, '창은 그대로 둔다');
+  });
+});
+
+test('P8-4c 재설정 메일 요청이 너무 잦으면(429) 한국어로 안내하고, 서버 오류 문구를 그대로 보이지 않는다', { skip, timeout: 90000 }, async () => {
+  const handler = async (route, call) => {
+    if (!/\/auth\/v1\/recover/.test(call.url)) return false;
+    await route.fulfill({ status: 429, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ code: 429, error_code: 'over_email_send_rate_limit', msg: 'email rate limit exceeded' }) });
+    return true;
+  };
+  await withPage(async page => {
+    await openLogin(page);
+    await page.fill('#auth-email', 'someone@example.com');
+    await page.click('#btn-forgot-password');
+    await page.waitForFunction(() => /너무 잦아요/.test(document.querySelector('#auth-message').textContent));
+    assert.equal(await page.evaluate(() => document.querySelector('#auth-message').classList.contains('error')), true);
+    assert.doesNotMatch(await page.textContent('#auth-message'), /rate limit/);
+  }, { handler });
+});
+
+test('P8-4c 복구 링크로 돌아오면 새 비밀번호 창이 열리고, 짧은 비밀번호는 거절하며, 바꾸면 PUT /user 로 보낸다', { skip, timeout: 90000 }, async () => {
+  const mock = authMock({ email: 'member@example.com' });
+  await withPage(async (page, calls) => {
+    await page.waitForFunction(() => document.querySelector('#dlg-prompt')?.open);
+    assert.equal(await page.textContent('#dlg-prompt h2'), '새 비밀번호 설정');
+    assert.equal(await page.getAttribute('#prompt-value', 'type'), 'password');
+    assert.equal(await page.getAttribute('#prompt-value', 'autocomplete'), 'new-password');
+    const here = new URL(page.url());
+    assert.equal(here.searchParams.has('auth'), false, '주소의 auth 값은 지워졌다');
+    assert.equal(here.hash, '', '주소에 토큰 조각이 남지 않는다');
+    assert.equal(await page.evaluate(() => SF.auth.state.session?.user?.email), 'member@example.com', '복구 링크가 만든 세션으로 로그인된 상태');
+
+    await page.fill('#prompt-value', '123');
+    await page.click('#dlg-prompt button[type=submit]');
+    assert.match(await page.textContent('#prompt-error'), /6자 이상/);
+    assert.equal(putUser(calls).length, 0, '짧은 비밀번호는 보내지 않는다');
+
+    await page.fill('#prompt-value', 'newpass1');
+    await page.click('#dlg-prompt button[type=submit]');
+    await page.waitForFunction(() => !document.querySelector('#dlg-prompt'));
+    await until(() => putUser(calls).length === 1, 'PUT /user 요청이 가야 한다');
+    assert.equal(putUser(calls)[0].body.password, 'newpass1', '새 비밀번호가 요청 본문에 실린다(라이브러리가 덧붙이는 code_challenge는 비교하지 않는다)');
+    assert.equal(putUser(calls)[0].headers.authorization, 'Bearer aaa.bbb.ccc', '복구 세션의 토큰으로 요청');
+    await page.waitForFunction(() => /비밀번호를 바꿨어요/.test(document.querySelector('#toast').textContent));
+  }, { path: '/?auth=recovery' + RECOVERY_HASH, handler: mock.handler });
+});
+
+test('P8-4c 새 비밀번호 창에서 취소하면 비밀번호는 그대로이고 요청도 없다', { skip, timeout: 90000 }, async () => {
+  const mock = authMock();
+  await withPage(async (page, calls) => {
+    await page.waitForFunction(() => document.querySelector('#dlg-prompt')?.open);
+    await page.click('#dlg-prompt .dlg-actions button[type=button]');
+    await page.waitForFunction(() => !document.querySelector('#dlg-prompt'));
+    assert.match(await toastText(page), /비밀번호는 바꾸지 않았어요/);
+    assert.equal(putUser(calls).length, 0);
+    assert.equal(await page.evaluate(() => SF.auth.state.session?.user?.email), 'member@example.com');
+  }, { path: '/?auth=recovery' + RECOVERY_HASH, handler: mock.handler });
+});
+
+test('P8-4c 서버가 새 비밀번호를 거절하면(이전과 같음) 이유를 보여 주고 다시 묻는다', { skip, timeout: 90000 }, async () => {
+  const mock = authMock();
+  let first = true;
+  const handler = async (route, call, calls) => {
+    if (call.method === 'PUT' && /\/auth\/v1\/user/.test(call.url) && first) {
+      first = false;
+      await route.fulfill({ status: 422, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ code: 422, error_code: 'same_password', msg: 'New password should be different from the old password.' }) });
+      return true;
+    }
+    return mock.handler(route, call, calls);
+  };
+  await withPage(async (page, calls) => {
+    await page.waitForFunction(() => document.querySelector('#dlg-prompt')?.open);
+    await page.fill('#prompt-value', 'oldpass1');
+    await page.click('#dlg-prompt button[type=submit]');
+    await page.waitForFunction(() => /이전과 다른 비밀번호를 입력하세요/.test(document.querySelector('#dlg-prompt p')?.textContent || ''));
+    assert.equal(await promptOpen(page), true, '창이 다시 열려 있다');
+    await page.fill('#prompt-value', 'brandnew1');
+    await page.click('#dlg-prompt button[type=submit]');
+    await page.waitForFunction(() => !document.querySelector('#dlg-prompt'));
+    await until(() => putUser(calls).length === 2, '두 번째 PUT /user 요청이 가야 한다');
+    assert.deepEqual(putUser(calls).map(c => c.body.password), ['oldpass1', 'brandnew1']);
+    await page.waitForFunction(() => /비밀번호를 바꿨어요/.test(document.querySelector('#toast').textContent));
+  }, { path: '/?auth=recovery' + RECOVERY_HASH, handler });
+});
+
+test('P8-4c 만료됐거나 이미 쓴 링크(#error=…)로 돌아오면 로그인 창에서 안내하고 주소를 정리한다', { skip, timeout: 90000 }, async () => {
+  await withPage(async (page, calls) => {
+    await page.waitForFunction(() => document.querySelector('#dlg-auth').open);
+    assert.match(await page.textContent('#auth-message'), /재설정 링크가 만료됐거나 이미 사용됐어요/);
+    assert.equal(await page.evaluate(() => document.querySelector('#auth-message').classList.contains('error')), true);
+    assert.equal(await promptOpen(page), false, '새 비밀번호 창은 열지 않는다');
+    assert.equal(await visible(page, '#btn-forgot-password'), true, '바로 메일을 다시 받을 수 있다');
+    const here = new URL(page.url());
+    assert.equal(here.searchParams.has('auth'), false);
+    assert.equal(here.hash, '');
+    assert.equal(putUser(calls).length, 0);
+  }, { path: '/?auth=recovery#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired' });
+});
+
+test('P8-4c ?auth=recovery만 있고 토큰이 없으면 조용히 주소만 정리하고, 다른 주소 값은 지키며 창은 열지 않는다', { skip, timeout: 90000 }, async () => {
+  await withPage(async page => {
+    await page.waitForFunction(() => !new URLSearchParams(location.search).has('auth'));
+    assert.equal(new URL(page.url()).searchParams.get('keep'), '1', '관계없는 주소 값은 남긴다');
+    assert.equal(await page.evaluate(() => document.querySelector('#dlg-auth').open), false);
+    assert.equal(await promptOpen(page), false);
+  }, { path: '/?auth=recovery&keep=1' });
+});
