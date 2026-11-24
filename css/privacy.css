@@ -70,6 +70,18 @@ th:first-child, td:first-child { min-width: 11em; }   /* 음원 서버 주소가
   font-size: .94em;
 }
 
+/* 라이선스 고지(licenses.html): 표 칸이 많아 본문 폭을 넓히고, 칸 안에서는 낱말 중간을 끊지 않는다(버전 숫자가 쪼개지지 않게) */
+body.wide main { max-width: 980px; }
+body.wide th, body.wide td { overflow-wrap: break-word; }
+body.wide td[data-label="버전"] { white-space: nowrap; }
+
+/* 라이선스 고지(licenses.html)의 코드 조각과 라이선스 전문 */
+code { font: .92em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--head-bg); padding: 0 4px; border-radius: 4px; }
+h3 { margin: 20px 0 6px; font-size: 15px; line-height: 1.4; }
+h3 .file { font-weight: 400; color: var(--dim); font-size: 13px; }
+pre { margin: 6px 0 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--head-bg);
+  font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; word-break: normal; }
+
 @media (max-width: 480px) {
   main { padding: 14px 12px 40px; }
   h1 { font-size: 21px; }
