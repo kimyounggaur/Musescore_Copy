@@ -1,5 +1,5 @@
 "use strict";
-const CACHE_VERSION = "3.2.0+63c2c65d";
+const CACHE_VERSION = "3.3.0+1e8ae388";
 const SHELL_CACHE = "scoreforge-shell-" + CACHE_VERSION;
 const SAMPLE_CACHE = "scoreforge-samples-v1";
 const SAMPLE_META = "scoreforge-sample-meta-v1";

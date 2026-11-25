@@ -241,3 +241,203 @@ test('export restores font readiness and routes cursor, ghost and speedy overlay
     assert.ok(Object.values(nodes).every(groups => groups.every(g => g.innerHTML === '')));
   } finally { context.document = oldDocument; }
 });
+
+// ---- P5-A1: 한 보표·한 마디에 내용 있는 성부가 하나뿐이면 기둥 방향을 음높이로 정한다(표준 조판).
+//      여러 성부가 함께 있을 때만 1·3성부 위 / 2·4성부 아래. 사람이 고른 방향(stemDirection)은 그대로 존중한다.
+const restEv = (id, d = 4, voice = 1) => ({ id, type: 'rest', notes: [], voice, dur: { n: 1, d, dots: 0 } });
+const stemOf = (r, id) => r.layout.eventsById.get(id).stemDir;
+const beamY = svg => [...svg.matchAll(/<polygon class="beam" points="([\d.-]+),([\d.-]+) ([\d.-]+),([\d.-]+) /g)].map(m => [+m[2], +m[4]]);
+
+test('P5-A1 ① 성부 하나뿐: 높은 음(C5·D5·E5)의 기둥은 아래로', () => {
+  const s = C.createScore({ measureCount: 1 });
+  measure(s, 0, [note('h1', [pitch(0, 0, 5)]), note('h2', [pitch(1, 0, 5)]), note('h3', [pitch(2, 0, 5)]), restEv('h4')]);
+  const r = render(s);
+  assert.deepEqual(['h1', 'h2', 'h3'].map(id => stemOf(r, id)), ['down', 'down', 'down']);
+  assert.equal(r.layout.eventsById.get('h1').multiVoice, false);
+});
+
+test('P5-A1 ② 성부 하나뿐: 낮은 음(C4·D4)의 기둥은 위로', () => {
+  const s = C.createScore({ measureCount: 1 });
+  measure(s, 0, [note('l1', [pitch(0, 0, 4)], 2), note('l2', [pitch(1, 0, 4)], 2)]);
+  const r = render(s);
+  assert.deepEqual(['l1', 'l2'].map(id => stemOf(r, id)), ['up', 'up']);
+});
+
+test('P5-A1 ③ 같은 마디에 2성부가 생기면 성부 규칙(1성부 위·2성부 아래)으로 — 음높이와 상관없이', () => {
+  const s = C.createScore({ measureCount: 1 });
+  measure(s, 0, [note('v1', [pitch(0, 0, 5)], 1)]);                   // 높은 음이지만 1성부 → 위
+  measure(s, 0, [note('v2', [pitch(2, 0, 4)], 1, { voice: 2 })], 2);   // 낮은 음이지만 2성부 → 아래
+  const r = render(s);
+  assert.equal(stemOf(r, 'v1'), 'up');
+  assert.equal(stemOf(r, 'v2'), 'down');
+  assert.equal(r.layout.eventsById.get('v1').multiVoice, true);
+  assert.equal(r.layout.eventsById.get('v2').multiVoice, true);
+  // 3·4성부도 같은 규칙: 3성부 위, 4성부 아래
+  measure(s, 0, [note('v3', [pitch(0, 0, 3)], 1, { voice: 3 })], 3);
+  measure(s, 0, [note('v4', [pitch(0, 0, 6)], 1, { voice: 4 })], 4);
+  const four = render(s);
+  assert.deepEqual(['v1', 'v2', 'v3', 'v4'].map(id => stemOf(four, id)), ['up', 'down', 'up', 'down']);
+});
+
+test('P5-A1 ④ 성부 하나뿐: 높은 8분음표 빔 묶음은 빔이 음표 아래에 놓인다', () => {
+  const s = C.createScore({ measureCount: 1 });
+  measure(s, 0, [note('b1', [pitch(2, 0, 5)], 8), note('b2', [pitch(3, 0, 5)], 8), note('b3', [pitch(4, 0, 5)], 8), note('b4', [pitch(3, 0, 5)], 8), note('b5', [pitch(2, 0, 5)], 2)]);
+  const r = render(s);
+  assert.deepEqual(['b1', 'b2', 'b3', 'b4'].map(id => stemOf(r, id)), ['down', 'down', 'down', 'down']);
+  const lowestHead = Math.max(...['b1', 'b2', 'b3', 'b4'].map(id => r.layout.eventsById.get(id).noteheads[0].y));
+  const beams = beamY(r.svg);
+  assert.ok(beams.length >= 1);
+  for (const [y1, y2] of beams) assert.ok(y1 > lowestHead && y2 > lowestHead, `빔(${y1}, ${y2})이 가장 낮은 음표 머리(${lowestHead}) 아래에 있어야 한다`);
+});
+
+test('P5-A1 ⑤ 사람이 고른 기둥 방향(위·아래)은 그대로 존중한다', () => {
+  const s = C.createScore({ measureCount: 1 });
+  measure(s, 0, [note('mu', [pitch(0, 0, 5)], 2, { stemDirection: 'up' }), note('md', [pitch(0, 0, 4)], 2, { stemDirection: 'down' })]);
+  const r = render(s);
+  assert.equal(stemOf(r, 'mu'), 'up');
+  assert.equal(stemOf(r, 'md'), 'down');
+  // 자동으로 되돌리면 다시 음높이를 따른다
+  delete s.parts[0].staves[0].measures[0].voices[0][0].stemDirection;
+  C.invalidate(s, { keepNormalized: true });
+  assert.equal(stemOf(render(s), 'mu'), 'down');
+});
+
+test('P5-A1 성부 둘 중 하나가 비어 있으면(쉼표뿐) 한 성부로 본다 — 2성부에만 음이 있어도 음높이로', () => {
+  const s = C.createScore({ measureCount: 1 });
+  measure(s, 0, [restEv('v1rest', 1, 1)]);
+  measure(s, 0, [note('only2', [pitch(2, 0, 4)], 1, { voice: 2 })], 2);
+  const r = render(s);
+  assert.equal(r.layout.eventsById.get('only2').multiVoice, false);
+  assert.equal(stemOf(r, 'only2'), 'up', '낮은 음이라 위로(예전에는 2성부라서 항상 아래)');
+});
+
+test('P5-A1 2성부 마디의 빔은 성부 방향을 지킨다 — 1성부 빔 위, 2성부 빔 아래', () => {
+  const s = C.createScore({ measureCount: 1 });
+  measure(s, 0, [note('u1', [pitch(4, 0, 5)], 8), note('u2', [pitch(5, 0, 5)], 8), note('u3', [pitch(4, 0, 5)], 8), note('u4', [pitch(2, 0, 5)], 8), note('u5', [pitch(2, 0, 5)], 2)]);
+  measure(s, 0, [note('d1', [pitch(0, 0, 4)], 8, { voice: 2 }), note('d2', [pitch(1, 0, 4)], 8, { voice: 2 }), note('d3', [pitch(0, 0, 4)], 8, { voice: 2 }), note('d4', [pitch(2, 0, 4)], 8, { voice: 2 }), note('d5', [pitch(0, 0, 4)], 2, { voice: 2 })], 2);
+  const r = render(s);
+  assert.deepEqual(['u1', 'u2', 'u3', 'u4'].map(id => stemOf(r, id)), ['up', 'up', 'up', 'up']);
+  assert.deepEqual(['d1', 'd2', 'd3', 'd4'].map(id => stemOf(r, id)), ['down', 'down', 'down', 'down']);
+});
+
+test('P5-A1 드럼 기둥은 바뀌지 않는다 — 성부 규칙 그대로(1성부 위)', () => {
+  const s = C.createScore({ measureCount: 1, parts: ['drumkit'] });
+  const drum = (id, drumId, staffLine) => ({ id, type: 'note', notes: [], drumId, midi: drumId === 'kick' ? 36 : 38, staffLine, voice: 1, dur: { n: 1, d: 4, dots: 0 } });
+  measure(s, 0, [drum('k', 'kick', 0), drum('sn', 'snare', 4), drum('k2', 'kick', 0), drum('sn2', 'snare', 4)]);
+  const r = render(s);
+  const stems = [...r.svg.matchAll(/<line class="stem" x1="([\d.-]+)" y1="([\d.-]+)" x2="[\d.-]+" y2="([\d.-]+)"/g)].map(m => ({ x: +m[1], up: +m[3] < +m[2] }));
+  assert.equal(stems.length, 4);
+  assert.ok(stems.every(stem => stem.up), '드럼 기둥은 모두 위로');
+  for (const id of ['k', 'sn', 'k2', 'sn2']) {
+    const le = r.layout.eventsById.get(id);
+    assert.ok(stems.some(stem => Math.abs(stem.x - (le.x + 4.8)) < 0.01), `${id}: 기둥이 머리 오른쪽(+4.8)에 붙는다`);
+  }
+});
+
+test('P5-A1 성부 하나뿐인 높은 음의 슬러·타이는 음표 위쪽(기둥 반대쪽)에 그려진다', () => {
+  const s = C.createScore({ measureCount: 1 });
+  measure(s, 0, [note('s1', [pitch(4, 0, 5)], 4), note('s2', [pitch(5, 0, 5)], 4), note('t1', [{ ...pitch(2, 0, 5), tie: true }], 4), note('t2', [pitch(2, 0, 5)], 4)]);
+  s.spanners = [{ id: 'sl', type: 'slur', startId: 's1', endId: 's2' }];
+  const r = render(s);
+  const slur = r.svg.match(/class="slur" d="M ([\d.-]+) ([\d.-]+) C ([\d.-]+) ([\d.-]+)/), tie = r.svg.match(/class="tie" d="M ([\d.-]+) ([\d.-]+) C ([\d.-]+) ([\d.-]+)/);
+  assert.ok(slur && tie);
+  assert.equal(stemOf(r, 's1'), 'down');
+  assert.ok(+slur[4] < +slur[2], '슬러는 음표 위(기둥이 아래이므로)');
+  assert.ok(+tie[4] < +tie[2], '타이는 음표 위(기둥 반대쪽)');
+});
+
+test('P5-A1 드럼 빔 묶음의 기둥도 바뀌지 않는다 — 성부 규칙 그대로(위)', () => {
+  const s = C.createScore({ measureCount: 1, parts: ['drumkit'] });
+  const drum = (id, drumId, staffLine, d = 8) => ({ id, type: 'note', notes: [], drumId, midi: drumId === 'kick' ? 36 : 38, staffLine, voice: 1, dur: { n: 1, d, dots: 0 } });
+  measure(s, 0, [drum('hb1', 'snare', 4), drum('hb2', 'snare', 4), drum('hb3', 'snare', 4), drum('hb4', 'snare', 4), drum('hb5', 'kick', 0, 2)]);
+  const r = render(s);
+  assert.match(r.svg, /class="beam"/);
+  const stems = [...r.svg.matchAll(/<line class="stem" x1="[\d.-]+" y1="([\d.-]+)" x2="[\d.-]+" y2="([\d.-]+)"/g)].map(m => +m[2] < +m[1]);
+  assert.equal(stems.length, 5);
+  assert.ok(stems.every(Boolean), '드럼 기둥은 빔 묶음 안에서도 모두 위로');
+});
+
+test('P5-A1 TAB 빔 묶음의 기둥도 바뀌지 않는다 — 높은 음이어도 위(성부 규칙)', () => {
+  const s = C.createScore({ measureCount: 1, parts: ['guitar-tab'] });
+  const tabRef = C.staffRefs(s).find(ref => ref.staff?.staffType === 'tab');
+  assert.ok(tabRef, 'guitar-tab 파트에는 TAB 보표가 있다');
+  const tabNote = (id, p, string, fret, d = 8) => ({ id, type: 'note', notes: [p], tab: { string, fret }, voice: 1, dur: { n: 1, d, dots: 0 } });
+  measure(s, 0, [tabNote('tb1', pitch(4, 0, 5), 1, 15), tabNote('tb2', pitch(5, 0, 5), 1, 17), tabNote('tb3', pitch(4, 0, 5), 1, 15), tabNote('tb4', pitch(2, 0, 5), 1, 12), tabNote('tb5', pitch(2, 0, 5), 1, 12, 2)], 1, tabRef);
+  const r = render(s);
+  const stems = [...r.svg.matchAll(/<line class="stem tab-stem" x1="[\d.-]+" y1="([\d.-]+)" x2="[\d.-]+" y2="([\d.-]+)"/g)].map(m => +m[2] < +m[1]);
+  assert.equal(stems.length, 5);
+  assert.ok(stems.every(Boolean), 'TAB 기둥은 모두 위로');
+});
+
+test('P5-A1 빔 묶음 안에서는 음마다 계산한 방향이 아니라 묶음의 방향을 따른다 — 타이·슬러도 그 반대쪽', () => {
+  // G4 G4 F5 F5: 평균이 가운데 줄(B4) 위 → 묶음은 아래. 낮은 G4도 묶음을 따라 기둥이 아래로 가므로 타이·슬러는 위로 휜다.
+  const s = C.createScore({ measureCount: 1 });
+  measure(s, 0, [note('g1', [{ ...pitch(4, 0, 4), tie: true }], 8), note('g2', [pitch(4, 0, 4)], 8), note('g3', [pitch(3, 0, 5)], 8), note('g4', [pitch(3, 0, 5)], 8), note('g5', [pitch(2, 0, 5)], 2)]);
+  const r = render(s);
+  assert.deepEqual(['g1', 'g2', 'g3', 'g4'].map(id => stemOf(r, id)), ['down', 'down', 'down', 'down']);
+  const tie = r.svg.match(/class="tie" d="M ([\d.-]+) ([\d.-]+) C ([\d.-]+) ([\d.-]+)/);
+  assert.ok(tie, 'g1→g2 타이가 그려진다');
+  assert.ok(+tie[4] < +tie[2], '묶음 기둥이 아래이므로 타이는 위로');
+  s.spanners = [{ id: 'sl', type: 'slur', startId: 'g1', endId: 'g2' }];
+  const withSlur = render(s);
+  const slur = withSlur.svg.match(/class="slur" d="M ([\d.-]+) ([\d.-]+) C ([\d.-]+) ([\d.-]+)/);
+  assert.ok(slur);
+  assert.ok(+slur[4] < +slur[2], '묶음 기둥이 아래이므로 슬러도 위로');
+});
+
+test('P5-A1 옥타바 구간의 빔 묶음도 화면에 보이는 높이로 방향을 정한다', () => {
+  // 모델 음높이 G5·A5를 8va로 쓰면 화면에는 G4·A4(가운데 줄 아래)로 보인다 → 기둥은 위.
+  const s = C.createScore({ measureCount: 1 });
+  measure(s, 0, [note('o1', [pitch(4, 0, 5)], 8), note('o2', [pitch(5, 0, 5)], 8), note('o3', [pitch(4, 0, 5)], 8), note('o4', [pitch(5, 0, 5)], 8), note('o5', [pitch(4, 0, 5)], 2)]);
+  s.spanners = [{ id: 'oct', type: 'ottava', startId: 'o1', endId: 'o5', shift: 12 }];
+  const r = render(s);
+  assert.equal(r.layout.eventsById.get('o1').ottavaSteps, 7);
+  assert.deepEqual(['o1', 'o2', 'o3', 'o4', 'o5'].map(id => stemOf(r, id)), ['up', 'up', 'up', 'up', 'up']);
+});
+
+test('P5-A1 슬러가 비켜 가는 기둥 끝도 실제로 그린 방향을 따른다 — 기둥이 반대쪽이면 기둥 길이만큼 더 띄우지 않는다', () => {
+  // 가운데 음(A5)의 기둥만 위/아래로 바꿔 슬러 높이를 비교한다. 슬러는 위(양 끝 기둥이 아래이므로).
+  const slurHeight = middleStem => {
+    const s = C.createScore({ measureCount: 1 });
+    measure(s, 0, [note('c1', [pitch(2, 0, 5)], 4, { stemDirection: 'down' }), note('c2', [pitch(5, 0, 5)], 4, { stemDirection: middleStem }),
+      note('c3', [pitch(2, 0, 5)], 4, { stemDirection: 'down' }), note('c4', [pitch(2, 0, 5)], 4, { stemDirection: 'down' })]);
+    s.spanners = [{ id: 'sl', type: 'slur', startId: 'c1', endId: 'c3' }];
+    const m = render(s).svg.match(/class="slur" d="M ([\d.-]+) ([\d.-]+) C ([\d.-]+) ([\d.-]+)/);
+    assert.ok(m);
+    assert.ok(+m[4] < +m[2], '슬러는 위');
+    return +m[2] - +m[4];
+  };
+  const down = slurHeight('down'), up = slurHeight('up');
+  assert.ok(up - down > 20, `기둥이 위로 솟은 가운데 음은 비켜 가려고 슬러가 더 높아야 한다 (down=${down.toFixed(1)}, up=${up.toFixed(1)})`);
+});
+
+test('P5-A1 성부 수는 보표마다 따로 센다 — 오른손이 2성부여도 왼손이 한 성부면 왼손은 음높이로', () => {
+  const s = C.createScore({ measureCount: 1, parts: ['piano'] });
+  const [right, left] = C.staffRefs(s);
+  measure(s, 0, [note('r1', [pitch(0, 0, 5)], 1)], 1, right);               // 오른손 1성부(높은 음이지만 2성부가 있으니 위)
+  measure(s, 0, [note('r2', [pitch(4, 0, 4)], 1, { voice: 2 })], 2, right);  // 오른손 2성부
+  measure(s, 0, [note('l1', [pitch(0, 0, 4)], 1), ], 1, left);               // 왼손: 베이스 보표에서 C4는 가운데 줄(D3) 위 → 아래
+  const r = render(s);
+  assert.equal(stemOf(r, 'r1'), 'up');
+  assert.equal(stemOf(r, 'r2'), 'down');
+  assert.equal(stemOf(r, 'l1'), 'down');
+  assert.equal(r.layout.eventsById.get('r1').multiVoice, true);
+  assert.equal(r.layout.eventsById.get('l1').multiVoice, false);
+});
+
+test('P5-A1 TAB 보표의 타이는 예전처럼 성부 규칙(위 기둥 → 아래로 휨)을 따른다', () => {
+  const s = C.createScore({ measureCount: 1, parts: ['guitar-tab'] });
+  const tabRef = C.staffRefs(s).find(ref => ref.staff?.staffType === 'tab');
+  const tabNote = (id, p, d = 4) => ({ id, type: 'note', notes: [p], tab: { string: 1, fret: 15 }, voice: 1, dur: { n: 1, d, dots: 0 } });
+  measure(s, 0, [tabNote('tt1', { ...pitch(4, 0, 5), tie: true }), tabNote('tt2', pitch(4, 0, 5), 2), tabNote('tt3', pitch(4, 0, 5), 4)], 1, tabRef);
+  const tie = render(s).svg.match(/class="tie" d="M ([\d.-]+) ([\d.-]+) C ([\d.-]+) ([\d.-]+)/);
+  assert.ok(tie);
+  assert.ok(+tie[4] > +tie[2], 'TAB 기둥은 항상 위이므로 타이는 아래로(음높이와 무관)');
+});
+
+test('P5-A1 경계: 가운데 줄 위의 음은 아래로, 그 바로 아래 칸은 위로, 평균이 가운데 줄인 화음은 아래로', () => {
+  const s = C.createScore({ measureCount: 1 });
+  measure(s, 0, [note('mid', [pitch(6, 0, 4)], 4), note('below', [pitch(5, 0, 4)], 4), note('above', [pitch(0, 0, 5)], 4), note('chord', [pitch(4, 0, 4), pitch(1, 0, 5)], 4)]);
+  const r = render(s);
+  assert.deepEqual(['mid', 'below', 'above', 'chord'].map(id => stemOf(r, id)), ['down', 'up', 'down', 'down']);
+});

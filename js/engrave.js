@@ -531,6 +531,9 @@
           const mm = SL.measures[mIdx] || { events: [C.fullRest(score, mIdx)] };
           const MS = { ...SL, clef: clefAt(SL, mIdx), mIdx };
           const SM = { ...group, idx: mIdx, x0: x, x1: x + mW, events: [], staff: MS, prefixW: M.prefixW, scale };
+          // 기둥 방향 규칙: 이 보표·이 마디에 "내용 있는" 성부가 둘 이상일 때만 성부 규칙(1·3성부 위 / 2·4성부 아래),
+          // 하나뿐이면 음높이로 정한다(표준 조판). 쉼표뿐인 성부는 세지 않는다.
+          SM.multiVoice = C.ensureMeasureVoices(mm, score, mIdx).filter(list => !C.voiceIsEmpty(list)).length > 1;
           const entries = C.measureEntries(mm, { score, activeVoice: opts.activeVoice });
           if (group.collapsed || entries.length === 1 && entries[0].ev.full) {
             const ent = entries[0];
@@ -548,6 +551,7 @@
             });
           }
           for (const le of SM.events) {
+            le.multiVoice = SM.multiVoice;
             out.eventsById.set(le.id, le);
             M.events.push(le);
           }
@@ -596,11 +600,14 @@
 
   /* ---------------- 렌더 ---------------- */
   let lastLayout = null;
+  // 클릭 영역(.note-hit)을 그릴지. render()가 opts.export를 보고 호출마다 정하고 되돌린다 — 내보낸 SVG·PNG·인쇄물에는 넣지 않는다.
+  let emitHits = true;
   const renderCache = new WeakMap();
 
   function render(score, opts = {}) {
-    const savedLayout = lastLayout, savedFont = fontReady;
+    const savedLayout = lastLayout, savedFont = fontReady, savedHits = emitHits;
     if (opts.fallback) fontReady = false;
+    emitHits = !opts.export;
     try {
     C.ensureParts(score);
     // Structural edits invalidate the core revision. Small presentation fields
@@ -657,6 +664,7 @@
     return result;
     } finally {
       fontReady = savedFont;
+      emitHits = savedHits;
       if (opts.preserveLayout || opts.export) lastLayout = savedLayout;
     }
   }
@@ -1153,11 +1161,20 @@
     const avg = notes.reduce((a, n) => a + C.absStep(n), 0) / notes.length;
     return avg < mid ? "up" : "down";
   }
-  function stemDirForVoice(score, notes, S, voice) {
+  // multiVoice=false(그 마디에 내용 있는 성부가 하나뿐)이면 음높이로, true이면 성부 규칙으로.
+  // 기본값 true: 이 값을 넘기지 않는 호출부(드럼 등)는 예전 동작 그대로다.
+  function stemDirForVoice(score, notes, S, voice, multiVoice = true) {
     voice = C.normalizeVoice(voice || 1);
+    if (!multiVoice) return stemDirForStaff(score, notes, S);
     if (voice === 1 || voice === 3) return "up";
     if (voice === 2 || voice === 4) return "down";
     return stemDirForStaff(score, notes, S);
+  }
+  /* 타이·슬러가 "스템 반대쪽"을 고를 때의 기준 방향.
+     renderNote가 실제로 그린 방향(le.stemDir)을 우선한다 — 빔 묶음 안의 음은 묶음 전체의 방향을 따르고,
+     손으로 고른 방향도 반영되기 때문이다. 기록이 없는 이벤트(드럼·TAB·쉼표)는 성부 규칙을 그대로 쓴다. */
+  function drawnStemDir(score, le) {
+    return le.stemDir || stemDirForVoice(score, le.ev.notes, le.staff, le.voice);
   }
   function drumY(S, ev) {
     const spec = C.drumSpec(ev.drumId);
@@ -1178,6 +1195,11 @@
     }
     return headShape(x, y, "black");
   }
+  // 클릭 영역: 글꼴 글리프의 경계 상자는 이웃한 화음 머리와 겹치므로, 보이는 머리마다 작은 타원을 따로 둔다.
+  // 좌표는 le.noteheads와 같은 전역 좌표다. CSS(#svg-host .nh > .note-hit)가 투명하게 만들고 포인터만 받게 한다.
+  function noteHit(head) {
+    return emitHits ? `<ellipse class="note-hit" cx="${r2(head.x)}" cy="${r2(head.y)}" rx="${r2(Math.max(6, head.width / 2))}" ry="${r2(Math.max(5, head.height / 2))}"/>` : "";
+  }
   function noteHeadShape(x, y, kind, notehead) {
     if (notehead === "x") {
       return `<path class="custom-head" d="M ${r2(x - 5.5)} ${r2(y - 4.5)} L ${r2(x + 5.5)} ${r2(y + 4.5)} M ${r2(x + 5.5)} ${r2(y - 4.5)} L ${r2(x - 5.5)} ${r2(y + 4.5)}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>`;
@@ -1195,7 +1217,8 @@
     let s = renderGraceBefore(score, S, le);
     const kind = headKind(ev.dur);
     const manualStem = ev.stemDirection && ev.stemDirection !== "auto" ? ev.stemDirection : null;
-    const dir = stem ? stem.dir : (manualStem || stemDirForVoice(score, ev.notes, S, le.voice || ev.voice || 1));
+    const dir = stem ? stem.dir : (manualStem || stemDirForVoice(score, ev.notes, S, le.voice || ev.voice || 1, le.multiVoice));
+    le.stemDir = dir; // 실제로 그린 기둥 방향(테스트, 그리고 타이·슬러가 반대쪽을 고를 때 쓴다)
     const sorted = ev.notes.slice().sort((a, b) => C.absStep(a) - C.absStep(b)); // 낮은 음부터
     const headScale = S.style?.noteheadScale || 1;
     const stemX = stem?.x ?? le.x + (dir === "up" ? 4.8 : -4.8) * headScale;
@@ -1238,9 +1261,10 @@
       const y = yForStep(S, score, C.absStep(n));
       const ox = offs.get(n) || 0;
       const ni = ev.notes.indexOf(n), headX = le.x + ox, scale = S.style?.noteheadScale || 1;
-      le.noteheads.push({ index: ni, x: headX, y, width: (ev.dur.d === 1 ? 24 : 12) * scale, height: 10 * scale });
+      const box = { index: ni, x: headX, y, width: (ev.dur.d === 1 ? 24 : 12) * scale, height: 10 * scale };
+      le.noteheads.push(box);
       const head = noteHeadShape(headX, y, kind, ev.notehead);
-      s += `<g class="nh${sel?.has(`${ev.id}#${ni}`) ? " sel-note" : ""}" data-note="${ni}">${scale === 1 ? head : `<g transform="translate(${headX},${y}) scale(${scale}) translate(${-headX},${-y})">${head}</g>`}</g>`;
+      s += `<g class="nh${sel?.has(`${ev.id}#${ni}`) ? " sel-note" : ""}" data-note="${ni}">${scale === 1 ? head : `<g transform="translate(${headX},${y}) scale(${scale}) translate(${-headX},${-y})">${head}</g>`}${noteHit(box)}</g>`;
       if (ev.dur.dots) {
         const off = C.absStep(n) - bottom;
         const dotY = off % 2 === 0 ? y - SP / 2 : y; // 줄 위 음표는 점을 위 칸으로
@@ -1308,9 +1332,10 @@
     const y = tabY(S, tab);
     const text = tab.fret === "x" ? "x" : String(tab.fret);
     const w = Math.max(12, text.length * 7 + 5);
-    le.noteheads.push({ index: 0, x: le.x, y, width: w, height: 14 });
+    const box = { index: 0, x: le.x, y, width: w, height: 14 };
+    le.noteheads.push(box);
     let s = `<g class="nh${sel?.has(`${ev.id}#0`) ? " sel-note" : ""}" data-note="0"><rect class="tab-fret-bg" x="${r2(le.x - w / 2)}" y="${r2(y - 7)}" width="${r2(w)}" height="13" rx="2"/>` +
-      `<text class="tab-fret" x="${r2(le.x)}" y="${r2(y + 4)}" text-anchor="middle">${esc(text)}</text></g>`;
+      `<text class="tab-fret" x="${r2(le.x)}" y="${r2(y + 4)}" text-anchor="middle">${esc(text)}</text>${noteHit(box)}</g>`;
     for (let d = 0; d < (ev.dur.dots || 0); d++) s += `<circle class="dot" cx="${r2(le.x + w / 2 + 4 + d * 6)}" cy="${r2(y - 4)}" r="2.1"/>`;
     if (ev.dur.d !== 1) {
       const dir = stem ? stem.dir : "up";
@@ -1328,8 +1353,9 @@
     const manualStem = ev.stemDirection && ev.stemDirection !== "auto" ? ev.stemDirection : null;
     const dir = stem ? stem.dir : (manualStem || stemDirForVoice(score, ev.notes && ev.notes.length ? ev.notes : [C.spellMidi(ev.midi || C.drumSpec(ev.drumId).midi, 0)], S, le.voice || ev.voice || 1));
     const stemX = dir === "up" ? le.x + 4.8 : le.x - 4.8;
-    le.noteheads.push({ index: 0, x: le.x, y, width: 12, height: 10 });
-    let s = `<g class="nh${sel?.has(`${ev.id}#0`) ? " sel-note" : ""}" data-note="0">${drumHeadShape(le.x, y, ev.notehead || C.drumSpec(ev.drumId).notehead)}</g>`;
+    const box = { index: 0, x: le.x, y, width: 12, height: 10 };
+    le.noteheads.push(box);
+    let s = `<g class="nh${sel?.has(`${ev.id}#0`) ? " sel-note" : ""}" data-note="0">${drumHeadShape(le.x, y, ev.notehead || C.drumSpec(ev.drumId).notehead)}${noteHit(box)}</g>`;
     if (ev.dur.dots) {
       for (let d = 0; d < ev.dur.dots; d++) s += `<circle class="dot" cx="${r2(le.x + 10 + d * 6)}" cy="${r2(y - SP / 2)}" r="2.1" fill="currentColor"/>`;
     }
@@ -1404,7 +1430,10 @@
     // 방향: 전체 음의 평균
     const all = [];
     for (const le of items) for (const n of le.ev.notes) all.push(n);
-    const dir = rn.voice ? stemDirForVoice(score, all, S, rn.voice) : stemDirForStaff(score, all, S);
+    // 표준 보표만 음높이 규칙을 쓴다. 드럼·TAB 빔은 예전처럼 성부 규칙(모든 묶음 위)을 유지한다.
+    // 음높이 판정에는 묶음 첫 음의 보표(옥타바 이동 반영)를 쓴다.
+    const pitched = S.staffType !== "tab" && !items[0].ev.drumId;
+    const dir = rn.voice ? stemDirForVoice(score, all, pitched ? items[0].staff : S, rn.voice, pitched ? items[0].multiVoice : true) : stemDirForStaff(score, all, S);
 
     const xs = items.map(le => le.x + (dir === "up" ? 1 : -1) * (S.staffType === "tab" ? 7 : le.ev.drumId ? 4.8 : 4.8 * (S.style?.noteheadScale || 1)));
     // 각 이벤트의 극단 머리 y(스템 방향 쪽)
@@ -1486,7 +1515,7 @@
           for (const n of tied) {
             const target = le2.ev.notes?.find(nn => nn.step === n.step && nn.oct === n.oct && nn.alter === n.alter);
             if (!target) continue;
-            const dir = stemDirForVoice(score, ev.notes, le1.staff, entry.voice); // 타이는 스템 반대쪽
+            const dir = drawnStemDir(score, le1); // 타이는 스템 반대쪽
             const curveDown = dir === "up";
             if (le1.sys === le2.sys) {
               if (pageIndex == null || le1.page === pageIndex) s += tiePath(le1.x + 7, le2.x - 7, yForStep(le1.staff, score, C.absStep(n)), curveDown, L.style, yForStep(le2.staff, score, C.absStep(target)));
@@ -1539,7 +1568,7 @@
 
   /* 슬러: 스템 반대쪽(혼합이면 위), 3차 베지어 + 사이 음표 회피 */
   function renderSlur(score, L, le1, le2, pageIndex) {
-    const d1 = stemDirForVoice(score, le1.ev.notes, le1.staff, le1.voice), d2 = stemDirForVoice(score, le2.ev.notes, le2.staff, le2.voice);
+    const d1 = drawnStemDir(score, le1), d2 = drawnStemDir(score, le2);
     const polyphonic = le1.sys.measures.some(m => m.events.some(le => le.globalIdx === le1.globalIdx && le.voice !== le1.voice && le.ev.type === "note"));
     const above = polyphonic ? d1 === "up" : !(d1 === "up" && d2 === "up");
     const segs = spannerSegments(le1, le2, L);
@@ -1568,7 +1597,7 @@
         const steps = le.ev.notes.map(C.absStep);
         const ext = above ? Math.max(...steps) : Math.min(...steps);
         let headY = yForStep(le.staff, score, ext);
-        const sd = stemDirForVoice(score, le.ev.notes, le.staff || seg.staff, le.voice);
+        const sd = drawnStemDir(score, le);
         if (above && sd === "up") headY -= 3.2 * SP;       // 스템 끝까지 회피
         if (!above && sd === "down") headY += 3.2 * SP;
         headY += (above ? -1 : 1) * (le.ev.artics?.length || 0) * SP;

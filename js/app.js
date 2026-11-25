@@ -85,18 +85,7 @@
       hideEmptyStaves: ui.hideEmptyStaves, activeVoice: ui.currentVoice });
     layoutCache = res.layout;
     $("#svg-host").innerHTML = res.svg;
-    // Font glyph bounding boxes overlap adjacent chord heads. Give each visible
-    // head its own small pointer target, in the renderer's global coordinates.
-    for (const le of layoutCache.eventsById.values()) {
-      const event = $("#svg-host").querySelector(`[data-ref="${CSS.escape(le.id)}"]`);
-      for (const head of le.noteheads || []) {
-        const group = event?.querySelector(`[data-note="${head.index}"]`);
-        if (!group) continue;
-        const hit = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
-        for (const [key, value] of Object.entries({ class: "note-hit", cx: head.x, cy: head.y, rx: Math.max(6, head.width / 2), ry: Math.max(5, head.height / 2) })) hit.setAttribute(key, value);
-        group.append(hit);
-      }
-    }
+    // 음표머리 클릭 영역은 조판기(engrave.js)가 그림과 함께 그린다 — 여기서 따로 붙이지 않는다.
     renderedScore = score; renderedRevision = changeRevision;
     const svg = $("#score-svg");
     if (svg) { svg.setAttribute("role", "img"); svg.setAttribute("aria-label", `악보: ${score.meta.title || "제목 없음"}, ${score.measures.length}마디`); }
