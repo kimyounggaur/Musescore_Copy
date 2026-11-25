@@ -303,6 +303,25 @@
     const cancel = m ? cancellationSteps(keyAt(score, m - 1), keyAt(score, m)).length : 0;
     return 14 + 28 + ((k + cancel) ? (k + cancel) * 9.5 + 7 : 0) + (showTime ? Math.max(30, String(ts.num).length * 16 + 8) : 0) + 10;
   }
+  /* 파트 이름 칸: x0(보표 시작)에서 왼쪽으로 잰 거리. 묶음 괄호는 x0−29(조절점 기준)까지 나온다. */
+  const NAME_RIGHT = 12, BRACE_LEFT = 29, BRACE_GAP = 4, NAME_PAD = 4;
+  /** 이름 글자 오른쪽 끝의 x0에서의 거리. 괄호가 있는 파트는 괄호 왼쪽에 여백을 두고 쓴다. */
+  const nameRightOf = hasBrace => hasBrace ? BRACE_LEFT + BRACE_GAP : NAME_RIGHT;
+  /** 13px 글꼴 기준 글자 폭 추정(한글·한자 13, 대문자·숫자 9, 공백·마침표 4, 나머지 7). */
+  function nameTextWidth(label) {
+    return Array.from(String(label)).reduce((w, ch) => w + (ch.codePointAt(0) >= 0x2E80 ? 13 : /[A-Z0-9]/.test(ch) ? 9 : /[\s.]/.test(ch) ? 4 : 7), 0);
+  }
+  /** 이름 칸 폭: 기본(첫 줄 96·이어지는 줄 54) 이상이고, 이름이 길거나 괄호가 있으면 이름과 괄호가 다 들어가게 늘어난다. */
+  function nameColumnWidth(refs, first) {
+    if (refs.length <= 1) return 0;
+    let need = 0;
+    for (const ref of refs) {
+      if (ref.staffIdx !== 0) continue; // 이름은 파트의 첫 보표에만 그린다
+      const hasBrace = refs.filter(other => other.partIdx === ref.partIdx).length >= 2;
+      need = Math.max(need, nameRightOf(hasBrace) + nameTextWidth(first ? ref.name : ref.shortName) + NAME_PAD);
+    }
+    return Math.max(first ? 96 : 54, Math.ceil(need));
+  }
   function measureCount(score, refs) {
     return Math.max(1, ...refs.map(r => r.measures.length));
   }
@@ -461,7 +480,7 @@
     let i = 0;
     while (i < groups.length) {
       const first = systems.length === 0;
-      const nameW = refs.length > 1 ? (first ? 96 : 54) : 0;
+      const nameW = nameColumnWidth(refs, first);
       const hw = headerWidth(score, first, groups[i].idx);
       const usable = metrics.width - metrics.marginLeft - metrics.marginRight - nameW;
       const perSystem = score.layout?.measuresPerSystem | 0;
@@ -724,7 +743,8 @@
       }
       const label = S.first ? SL.name : SL.shortName;
       if (S.nameW && SL.staffIdx === 0) {
-        s += `<text class="part-name" x="${S.x0 - 12}" y="${SL.middleY + 4}" text-anchor="end">${esc(label)}</text>`;
+        const hasBrace = S.staffLayouts.filter(other => other.partIdx === SL.partIdx).length >= 2;
+        s += `<text class="part-name" x="${S.x0 - nameRightOf(hasBrace)}" y="${SL.middleY + 4}" text-anchor="end">${esc(label)}</text>`;
       }
     }
     for (const partIdx of [...new Set(S.staffLayouts.map(st => st.partIdx))]) {
