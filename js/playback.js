@@ -121,13 +121,19 @@
   const live = new Set(); // 정지 시 끊을 노드들
   const sampleInstruments = new Map();
   const partBuses = new Map();
+  const loaders = new Map();   // kind → SampleLoader(Splendid 계열). 같은 URL의 디코딩 버퍼를 인스턴스끼리 공유
+  const loadTurns = new Map(); // kind → 그 kind의 마지막 로딩 Promise(같은 kind는 차례로 로딩)
   let smplrModule = null;
   let smplrPromise = null;
+  let smplrOverride = null; // 테스트가 넣은 smplr 대역(__setSmplrModuleForTest). 앱 코드는 쓰지 않는다
   let sampleStatus = { state: "idle", text: "샘플 대기", detail: "재생하면 smplr 실제 악기 샘플을 불러옵니다." };
   let onSampleStatus = null;
 
+  // 피아노는 두 가지다(결정 D2-A): 기본은 가벼운 Soundfont 피아노, 설정에서 고르면 큰 Splendid 피아노(약 19MB)를 쓴다.
+  // 악기 이름은 악보 데이터에 계속 "piano"로 저장되고, 어느 음원을 쓸지는 sampleKey가 이 기기의 설정으로 정한다.
   const SAMPLE_MAP = {
-    piano: { kind: "splendid", label: "Splendid Grand Piano", volume: 98 },
+    piano: { kind: "soundfont", instrument: "acoustic_grand_piano", label: "Grand Piano", volume: 96 },
+    pianoHQ: { kind: "splendid", label: "Splendid Grand Piano", volume: 98 },
     epiano: { kind: "soundfont", instrument: "electric_piano_1", label: "Electric Piano", volume: 96 },
     musicbox: { kind: "soundfont", instrument: "music_box", label: "Music Box", volume: 104 },
     organ: { kind: "soundfont", instrument: "church_organ", label: "Church Organ", volume: 94 },
@@ -151,7 +157,14 @@
     if (onSampleStatus) onSampleStatus(sampleStatus);
   }
 
+  // 테스트용: 설정하면 vendor/smplr를 불러오는 import() 대신 이 모듈을 쓴다. null을 주면 원래대로 돌아간다.
+  // (이미 만든 악기·loader는 그대로 두므로, 바꾸기 전에 releaseUnused 등으로 정리하는 것은 테스트의 몫이다.)
+  function __setSmplrModuleForTest(mod) {
+    smplrOverride = mod && typeof mod === "object" ? mod : null;
+  }
+
   async function loadSmplrModule() {
+    if (smplrOverride) return smplrOverride;
     if (smplrModule) return smplrModule;
     if (!smplrPromise) {
       setSampleStatus("loading", "샘플 로딩", "smplr 라이브러리를 불러오는 중입니다.");
@@ -167,20 +180,101 @@
     return smplrPromise;
   }
 
+  const PIANO_QUALITY_KEY = "scoreforge.audio.pianoQuality"; // "basic"(기본) | "hq"(고음질). 이 기기에만 저장하고 악보에는 넣지 않는다
+  let pianoQuality = readPianoQuality();
+
+  function readPianoQuality() {
+    try { return localStorage.getItem(PIANO_QUALITY_KEY) === "hq" ? "hq" : "basic"; } catch (err) { return "basic"; }
+  }
+
   function sampleKey(instrument) {
-    return SAMPLE_MAP[instrument] ? instrument : "piano";
+    const key = SAMPLE_MAP[instrument] ? instrument : "piano";
+    return key === "piano" && pianoQuality === "hq" ? "pianoHQ" : key;
+  }
+
+  function getPianoQuality() {
+    return pianoQuality;
+  }
+
+  /* 피아노 음질을 바꾼다. 재생 중이면 재생을 멈추고(곡 도중에 음원이 바뀌지 않게), 이전 음질의 인스턴스를 내린다.
+   * 새 음원은 다음 재생 준비 때 불러온다. */
+  function setPianoQuality(quality) {
+    const next = quality === "hq" ? "hq" : "basic";
+    if (next === pianoQuality) return pianoQuality;
+    if (player.playing || player.loading) stop(true);
+    pianoQuality = next;
+    try { localStorage.setItem(PIANO_QUALITY_KEY, next); } catch (err) { /* 저장 못 해도 이번 접속 동안은 적용 */ }
+    releaseUnused();
+    return pianoQuality;
+  }
+
+  /* 샘플 요청을 동시에 max개까지만 보낸다(백로그 #3: 수백 개를 한꺼번에 요청해 화면이 멈추던 문제).
+   * 슬롯은 응답 본문을 다 읽었을 때 돌려준다 — 헤더만 받고 돌려주면 본문 수신이 겹쳐 제한이 무의미해진다.
+   * 본문을 읽지 않을 응답(200이 아님)과 요청 실패는 바로 돌려주고, 본문을 읽지 않고 붙잡고 있는 경우에도
+   * holdMs 뒤에는 돌려준다(슬롯이 새면 샘플 로딩 전체가 멈추므로). smplr가 응답에서 쓰는 것은 status와 본문 읽기뿐이다. */
+  function limitedStorage(max = 4, fetchImpl = url => fetch(url), holdMs = 30000) {
+    let active = 0;
+    const waiting = [];
+    function pump() {
+      while (active < max && waiting.length) {
+        const { url, ok, fail } = waiting.shift();
+        active++;
+        let held = true, timer = null;
+        const release = () => {
+          if (!held) return;
+          held = false; clearTimeout(timer); active--; pump();
+        };
+        let request;
+        try { request = Promise.resolve(fetchImpl(url)); } catch (err) { request = Promise.reject(err); }
+        request.then(res => {
+          if (!res || res.status !== 200) { release(); ok(res); return; }
+          timer = setTimeout(release, holdMs);
+          const read = name => () => {
+            let body;
+            try { body = res[name](); } catch (err) { release(); throw err; }
+            Promise.resolve(body).then(release, release);
+            return body;
+          };
+          ok({ status: res.status, ok: res.ok, headers: res.headers, arrayBuffer: read("arrayBuffer"), text: read("text"), json: read("json") });
+        }, err => { release(); fail(err); });
+      }
+    }
+    return {
+      fetch: url => new Promise((ok, fail) => { waiting.push({ url, ok, fail }); pump(); }),
+      stats: () => ({ active, waiting: waiting.length, max }),
+    };
+  }
+  const storage = limitedStorage();
+
+  // 같은 kind의 파트가 loader를 나눠 쓴다. 디코딩된 버퍼가 URL별로 loader 캐시에 하나만 남는다.
+  function loaderFor(mod, kind) {
+    if (typeof mod.SampleLoader !== "function") return null;
+    if (!loaders.has(kind)) loaders.set(kind, mod.SampleLoader(ctx, { storage }));
+    return loaders.get(kind);
+  }
+
+  // loader를 나눠 쓰는 kind는 한 번에 하나씩 로딩한다. 동시에 시작하면 캐시에 아직 없는 같은 URL을 인스턴스마다
+  // 따로 받아 디코딩해 공유의 이점이 사라진다(실제 smplr로 확인: 동시에 시작하면 452회, 차례로 시작하면 226회 디코딩).
+  function inTurn(kind, work) {
+    const run = (loadTurns.get(kind) || Promise.resolve()).then(work);
+    loadTurns.set(kind, run.catch(() => {}));
+    return run;
   }
 
   function createSampleInstrument(mod, key, partId) {
-    const spec = SAMPLE_MAP[sampleKey(key)];
+    const kind = sampleKey(key), spec = SAMPLE_MAP[kind];
     const opts = {
       destination: partBus(partId).input,
       volume: spec.volume || 96,
+      storage,
       onLoadProgress: ({ loaded, total }) => {
         setSampleStatus("loading", `${loaded}/${total}`, `${spec.label} 샘플을 불러오는 중입니다.`);
       },
     };
-    if (spec.kind === "splendid" && mod.SplendidGrandPiano) return mod.SplendidGrandPiano(ctx, opts);
+    if (spec.kind === "splendid" && mod.SplendidGrandPiano) {
+      const loader = loaderFor(mod, kind);
+      return mod.SplendidGrandPiano(ctx, loader ? { ...opts, loader } : opts);
+    }
     if (mod.Soundfont) return mod.Soundfont(ctx, { ...opts, instrument: spec.instrument });
     throw new Error("smplr Soundfont factory is unavailable");
   }
@@ -191,17 +285,25 @@
     const key = partId + ":" + sampleKey(instrument);
     const cached = sampleInstruments.get(key);
     if (cached && !cached.failed) return cached.promise;
-    const rec = { instrument: null, ready: false, failed: false, promise: null };
+    if (cached) disposeRec(cached); // 실패한 이전 시도가 남긴 악기를 정리하고 다시 만든다
+    const rec = { instrument: null, ready: false, failed: false, released: false, promise: null };
     rec.promise = (async () => {
       const mod = await loadSmplrModule();
-      const inst = createSampleInstrument(mod, instrument, partId);
-      rec.instrument = inst;
-      await (inst.ready || inst.load || Promise.resolve(inst));
+      const kind = sampleKey(instrument);
+      const build = async () => {
+        if (rec.released) return; // 차례를 기다리는 사이 악보에서 빠졌다 — 만들지 않는다(버스도 만들지 않음)
+        const inst = createSampleInstrument(mod, instrument, partId);
+        rec.instrument = inst;
+        await (inst.ready || inst.load || Promise.resolve(inst));
+      };
+      await (SAMPLE_MAP[kind].kind === "splendid" ? inTurn(kind, build) : build());
+      if (rec.released) return rec; // 로딩 중에 해제됨(악기는 releaseUnused가 이미 dispose) — 준비 표시를 하지 않는다
       rec.ready = true;
       setSampleStatus("ready", "샘플 준비", `${(SAMPLE_MAP[sampleKey(instrument)] || SAMPLE_MAP.piano).label} 샘플 음원 준비 완료`);
       return rec;
     })().catch(err => {
       rec.failed = true;
+      if (rec.released) return rec; // 해제하려고 dispose한 악기의 뒤늦은 오류는 알리지 않는다
       setSampleStatus("fallback", "신스 사용", "샘플 음원을 불러오지 못해 내장 신스로 재생합니다.");
       console.warn("[ScoreForge] smplr sample load failed:", err);
       return rec;
@@ -212,6 +314,47 @@
 
   function warmSamplesForScore(score) {
     return Promise.all(score.parts.map(part => ensureSampleInstrument(part.instrument, part.id)));
+  }
+
+  /* ---------------- 수명 관리 ---------------- */
+  let releasePending = false; // 재생 중에 불려 미뤄 둔 정리가 있다
+
+  function disposeRec(rec) {
+    rec.released = true;
+    const inst = rec.instrument;
+    rec.instrument = null;
+    try { inst?.dispose?.(); } catch (err) { console.warn("[ScoreForge] sample instrument dispose failed:", err); }
+  }
+
+  /* 지금 악보가 쓰지 않는 샘플 악기·loader·믹서 버스를 메모리에서 내린다(백로그 #3: 악보를 바꿀 때마다 인스턴스가 쌓이던 문제).
+   * - 키(파트ID:악기)가 악보의 파트·악기와 맞지 않는 인스턴스를 dispose한다. 건반 미리 듣기('preview')는 남긴다.
+   * - 어느 인스턴스도 쓰지 않는 kind의 loader는 버려 디코딩된 버퍼를 GC에 넘긴다.
+   * - 악보에 없는 파트의 버스는 연결을 끊고 지운다(악기만 바뀐 파트의 버스는 신스도 쓰므로 남긴다).
+   * 재생·재생 준비 중이면 하지 않고 멈출 때(stop)로 미룬다 — 쓰는 중인 악기를 dispose하면 곡 도중에 샘플이 끊겨 신스로 바뀐다.
+   * 돌려주는 값: 지금 정리했으면 true, 미뤘으면 false. */
+  function releaseUnused(score = C.state.score) {
+    if (!score) return false;
+    if (player.playing || player.loading) { releasePending = true; return false; }
+    releasePending = false;
+    const partIds = new Set(score.parts.map(part => part.id));
+    const wanted = new Set(score.parts.map(part => part.id + ":" + sampleKey(part.instrument)));
+    for (const [key, rec] of sampleInstruments) {
+      if (key.startsWith("preview:") || wanted.has(key)) continue;
+      disposeRec(rec);
+      sampleInstruments.delete(key);
+    }
+    const used = new Set([...sampleInstruments.keys()].map(key => key.slice(key.indexOf(":") + 1)));
+    for (const kind of [...loaders.keys()]) if (!used.has(kind)) { loaders.delete(kind); loadTurns.delete(kind); }
+    for (const [partId, bus] of partBuses) {
+      if (partId === "preview" || partIds.has(partId)) continue;
+      try { bus.input.disconnect(); bus.pan?.disconnect(); } catch (err) { /* 이미 끊김 */ }
+      partBuses.delete(partId);
+    }
+    return true;
+  }
+
+  function debugStats() {
+    return { instances: sampleInstruments.size, loaders: loaders.size, buses: partBuses.size };
   }
 
   function delay(ms) {
@@ -785,6 +928,7 @@
   async function play(fromSec = 0, opts = {}) {
     stop(false);
     const token = ++player.startToken, score = C.state.score, ac = audio();
+    releaseUnused(score); // 악기를 바꾸거나 파트를 뺀 뒤 첫 재생 준비 — 멈춘 직후라 지금 정리해도 안전하다
     player.score = score; player.compiled = compile(score, opts);
     if (opts.rate !== undefined) player.rate = Math.max(0.5, Math.min(2, +opts.rate || 1));
     if (opts.loop !== undefined) setLoop(opts.loop);
@@ -829,6 +973,7 @@
     if (player.playing) player.startOffset = pausePos();
     player.playing = false; player.loading = false; silence();
     if (notify && wasPlaying) player.onState?.(false);
+    if (releasePending) releaseUnused(); // 재생 중이라 미뤄 둔 정리
   }
 
   /* 미리듣기(클릭/입력 피드백) */
@@ -900,5 +1045,8 @@
     play, stop, previewNote, pausePos, player, compile, exportMidi,
     setRate, setLoop, seek, updateMixer, partBuses, buildTempoMap,
     getSampleStatus, setSampleStatusHandler, ensureSampleInstrument, buildPlaybackPlan,
+    limitedStorage, // 테스트용: 동시 요청 제한 유틸
+    releaseUnused, debugStats, getPianoQuality, setPianoQuality,
+    __setSmplrModuleForTest, // 테스트 전용
   };
 })(window.SF);
