@@ -1,14 +1,16 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
+import { launchOptions, pageOptions, preparePage } from './browser-launch.mjs';
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const base = process.env.SF_URL || 'http://127.0.0.1:8000';
 const dir = 'output/playwright/v3';
 await mkdir(dir, { recursive: true });
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
-const context = await browser.newContext({ viewport: { width: 1440, height: 1080 }, serviceWorkers: 'block' });
+const browser = await chromium.launch(launchOptions());
+const context = await browser.newContext(pageOptions({ viewport: { width: 1440, height: 1080 }, serviceWorkers: 'block' }));
 const page = await context.newPage();
+await preparePage(page);
 page.setDefaultTimeout(8000);
 const errors = [], results = [];
 page.on('pageerror', e => errors.push(e.message));
@@ -31,7 +33,7 @@ try {
     return await page.evaluate(() => Object.keys(SF));
   });
   await check('Four demo MusicXML round trips', async () => {
-    const p = await context.newPage();
+    const p = await context.newPage(); await preparePage(p);
     await p.goto(`${base}/tests/browser.html`);
     await p.waitForFunction(() => window.__TEST_RESULT);
     const result = await p.evaluate(() => window.__TEST_RESULT);
@@ -40,7 +42,7 @@ try {
     return result;
   });
   await check('Extended MusicXML, MXL and MIDI browser regressions', async () => {
-    const p = await context.newPage();
+    const p = await context.newPage(); await preparePage(p);
     await p.goto(`${base}/tests/browser.html`);
     await p.addScriptTag({ url: `${base}/tests/audioio-browser.js` });
     const result = await p.evaluate(() => window.__AUDIOIO_DONE);

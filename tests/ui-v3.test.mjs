@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile, mkdir } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import vm from 'node:vm';
+import { launchOptions, pageOptions, preparePage } from './browser-launch.mjs';
 const require = createRequire(import.meta.url);
 
 test('UI architecture and shortcut table have one authoritative definition', async () => {
@@ -25,8 +26,9 @@ test('UI architecture and shortcut table have one authoritative definition', asy
 
 test('real browser UI editing, persistence, pagination, exports and responsive controls', { skip: !process.env.PLAYWRIGHT_MODULE, timeout: 180000 }, async t => {
   const { chromium } = require(process.env.PLAYWRIGHT_MODULE);
-  const browser = await chromium.launch({ channel: 'msedge', headless: true });
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1080 } });
+  const browser = await chromium.launch(launchOptions());
+  const page = await browser.newPage(pageOptions({ viewport: { width: 1440, height: 1080 } }));
+  await preparePage(page);
   page.setDefaultTimeout(8000);
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.addInitScript(() => localStorage.setItem('scoreforge.welcomed', '1'));
@@ -169,10 +171,10 @@ test('real browser UI editing, persistence, pagination, exports and responsive c
       const stream=await download.createReadStream(),chunks=[];for await(const chunk of stream)chunks.push(chunk);const buffer=Buffer.concat(chunks);
       assert.equal(buffer.readUInt32BE(16),2480);assert.equal(buffer.readUInt32BE(20),3508);
       const density=buffer.indexOf(Buffer.from('pHYs'));assert.ok(density>0);assert.equal(buffer.readUInt32BE(density+4),11811);
-      const regression=await browser.newPage();await regression.goto((process.env.SF_URL||'http://127.0.0.1:8000')+'/tests/browser.html');await regression.waitForFunction(()=>window.__TEST_RESULT);assert.equal(await regression.evaluate(()=>window.__TEST_RESULT.fail),0);await regression.close();
+      const regression=await browser.newPage(pageOptions());await preparePage(regression);await regression.goto((process.env.SF_URL||'http://127.0.0.1:8000')+'/tests/browser.html');await regression.waitForFunction(()=>window.__TEST_RESULT);assert.equal(await regression.evaluate(()=>window.__TEST_RESULT.fail),0);await regression.close();
     });
     await t.test('touch tap input, long press context menu and two-finger pinch work on a phone', async () => {
-      const phone=await browser.newPage({viewport:{width:375,height:812},hasTouch:true,isMobile:true,deviceScaleFactor:1});
+      const phone=await browser.newPage(pageOptions({viewport:{width:375,height:812},hasTouch:true,isMobile:true,deviceScaleFactor:1}));await preparePage(phone);
       phone.on('pageerror',e=>errors.push(e.message));await phone.addInitScript(()=>localStorage.setItem('scoreforge.welcomed','1'));await phone.goto(process.env.SF_URL||'http://127.0.0.1:8000',{waitUntil:'networkidle'});
       await phone.evaluate(()=>{SF.core.setScore(SF.core.createScore({measureCount:4}));SF.app.actions.setInputMode(true);SF.app.update({immediate:true});});
       const point=await phone.evaluate(()=>{const le=SF.engrave.getLayout().eventsById.values().next().value,svg=document.querySelector('#svg-host svg'),r=svg.getBoundingClientRect(),s=r.width/svg.viewBox.baseVal.width;return{x:r.left+le.x*s,y:r.top+le.staff.middleY*s};});
