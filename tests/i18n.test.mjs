@@ -119,6 +119,7 @@ test('exact toast/hint/import mappings and variables use proper English', () => 
     ['실행 취소: 마디 추가', 'Undo: Add measures'],
     ['실행 취소 (Ctrl+Z)', 'Undo (Ctrl+Z)'],
     ['내비게이터 (F12)', 'Navigator (F12)'],
+    ['내비게이터 (Alt+Shift+N)', 'Navigator (Alt+Shift+N)'],   // P9-1: 새 첫 단축키
     ['코드 기호 입력 (Ctrl+K)', 'Enter chord symbol (Ctrl+K)'],
     ['리허설 마크 (R)', 'Rehearsal mark (R)'],
     ['파트 4개 중 첫 번째만 가져왔어요', 'Imported only the first of 4 parts'],

@@ -34,6 +34,7 @@
   "js/ui-dialog.js",
   "js/ui-v3.js",
   "js/version.js",
+  "js/view-level.js",
   "js/zip.js",
   "licenses.html",
   "manifest.webmanifest",

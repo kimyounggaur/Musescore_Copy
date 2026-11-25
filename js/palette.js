@@ -19,7 +19,7 @@
       {
         "id": "voice-buttons",
         "label": "성부 선택",
-        "markup": "<span id=\"voice-buttons\" class=\"voice-buttons\" role=\"group\" aria-label=\"성부 선택\">\n    <button class=\"tbtn voice-btn\" data-voice=\"1\" title=\"Voice 1 (Alt+1)\">V1</button>\n    <button class=\"tbtn voice-btn\" data-voice=\"2\" title=\"Voice 2 (Alt+2)\">V2</button>\n    <button class=\"tbtn voice-btn\" data-voice=\"3\" title=\"Voice 3 (Alt+3)\">V3</button>\n    <button class=\"tbtn voice-btn\" data-voice=\"4\" title=\"Voice 4 (Alt+4)\">V4</button>\n  </span>"
+        "markup": "<span id=\"voice-buttons\" class=\"voice-buttons\" role=\"group\" aria-label=\"성부 선택\">\n    <button class=\"tbtn voice-btn\" data-voice=\"1\" title=\"성부 1 (Alt+1)\">성부 1</button>\n    <button class=\"tbtn voice-btn\" data-voice=\"2\" title=\"성부 2 (Alt+2)\">성부 2</button>\n    <button class=\"tbtn voice-btn\" data-voice=\"3\" title=\"성부 3 (Alt+3)\">성부 3</button>\n    <button class=\"tbtn voice-btn\" data-voice=\"4\" title=\"성부 4 (Alt+4)\">성부 4</button>\n  </span>"
       },
       {
         "id": "btn-delete",
@@ -92,17 +92,17 @@
       {
         "id": "btn-gliss",
         "label": "글리산도",
-        "markup": "<button id=\"btn-gliss\" class=\"tbtn\" title=\"글리산도\">Gliss.</button>"
+        "markup": "<button id=\"btn-gliss\" class=\"tbtn\" title=\"글리산도\">글리산도</button>"
       },
       {
         "id": "btn-arpeggio",
         "label": "아르페지오",
-        "markup": "<button id=\"btn-arpeggio\" class=\"tbtn\" title=\"아르페지오\">Arp.</button>"
+        "markup": "<button id=\"btn-arpeggio\" class=\"tbtn\" title=\"아르페지오\">아르페지오</button>"
       },
       {
         "id": "btn-tremolo",
         "label": "트레몰로",
-        "markup": "<button id=\"btn-tremolo\" class=\"tbtn\" title=\"트레몰로\">Trem.</button>"
+        "markup": "<button id=\"btn-tremolo\" class=\"tbtn\" title=\"트레몰로\">트레몰로</button>"
       },
       {
         "label": "스타카토 — 짧게 끊어서 (Shift+S)",
@@ -163,7 +163,7 @@
       {
         "id": "btn-chord-symbol",
         "label": "코드 기호 입력 (Ctrl+K)",
-        "markup": "<button id=\"btn-chord-symbol\" class=\"tbtn\" title=\"코드 기호 입력 (Ctrl+K)\">C7</button>"
+        "markup": "<button id=\"btn-chord-symbol\" class=\"tbtn\" title=\"코드 기호 입력 (Ctrl+K)\">코드</button>"
       },
       {
         "id": "btn-tempo-mark",
@@ -173,12 +173,12 @@
       {
         "id": "btn-rehearsal",
         "label": "리허설 마크 (R)",
-        "markup": "<button id=\"btn-rehearsal\" class=\"tbtn\" title=\"리허설 마크 (R)\">R</button>"
+        "markup": "<button id=\"btn-rehearsal\" class=\"tbtn\" title=\"리허설 마크 (R)\">리허설</button>"
       },
       {
         "id": "btn-staff-text",
         "label": "스태프 텍스트 (Shift+L)",
-        "markup": "<button id=\"btn-staff-text\" class=\"tbtn\" title=\"스태프 텍스트 (Shift+L)\">Txt</button>"
+        "markup": "<button id=\"btn-staff-text\" class=\"tbtn\" title=\"스태프 텍스트 (Shift+L)\">스태프 텍스트</button>"
       },
       {
         "id": "lyric-verse",
@@ -224,12 +224,12 @@
       {
         "id": "btn-break-page",
         "label": "선택 마디 뒤 페이지 나눔",
-        "markup": "<button id=\"btn-break-page\" class=\"tbtn\" title=\"선택 마디 뒤 페이지 나눔\">Pg</button>"
+        "markup": "<button id=\"btn-break-page\" class=\"tbtn\" title=\"선택 마디 뒤 페이지 나눔\">쪽나눔</button>"
       },
       {
         "id": "btn-break-section",
         "label": "선택 마디 뒤 섹션 브레이크",
-        "markup": "<button id=\"btn-break-section\" class=\"tbtn\" title=\"선택 마디 뒤 섹션 브레이크\">Sec</button>"
+        "markup": "<button id=\"btn-break-section\" class=\"tbtn\" title=\"선택 마디 뒤 섹션 브레이크\">구역나눔</button>"
       },
       {
         "id": "btn-measure-insert",
@@ -310,7 +310,8 @@
       buttons.forEach((b,j)=>b.tabIndex=j===next?0:-1);buttons[next].focus();
       if(buttons[next].getAttribute("role")==="tab")buttons[next].click();
     });
-    for(const panel of panels.children) [...panel.querySelectorAll("button")].forEach((b,i)=>{b.tabIndex=i===0?0:-1;});
+    refreshView();
+    if(!listening){listening=true;document.addEventListener("sf:view-level",refreshView);}
   }
   function quickAccess() {
     const host=document.createElement("div");host.className="palette-quick";host.setAttribute("role","toolbar");host.setAttribute("aria-label","자주 쓰는 입력");
@@ -319,7 +320,25 @@
       button.addEventListener("click",()=>target.click());host.append(button);
     }
     document.querySelector(".palette-bar").append(host);
-    for(const panel of document.querySelectorAll(".palette-group")) [...panel.querySelectorAll("button")].forEach((b,i)=>b.tabIndex=i===0?0:-1);
+    refreshView();
   }
-  SF.palette={PALETTE,init,quickAccess};
+  /* 보기 수준(P9-1)에 맞춰 모음마다 "탭으로 들어가는 단추"(보이는 첫 단추)를 다시 정하고, 단추가 모두 숨은 모음은 탭·본문째 숨긴다.
+     숨은 첫 단추가 tabindex=0을 쥐고 있으면 그 모음에 키보드로 들어갈 길이 없어지기 때문이다. 쓰던 모음이 비면 보이는 첫 모음으로 옮긴다. */
+  let listening=false;
+  const viewHidden=el=>document.documentElement.dataset.view==="basic"&&!!el.closest('[data-tier="advanced"],[data-tier="rare"]');
+  function refreshView() {
+    const host=document.querySelector(".palette-bar");if(!host)return;
+    let current=null,firstOpen=null;
+    for(const panel of host.querySelectorAll(".palette-group")) {
+      const buttons=[...panel.querySelectorAll("button")],shown=buttons.filter(b=>!viewHidden(b)),empty=shown.length===0;
+      const tab=host.querySelector("#palette-tab-"+panel.id.slice("palette-".length));
+      panel.hidden=empty;if(tab)tab.hidden=empty;
+      buttons.forEach(b=>{b.tabIndex=-1;});
+      if(!empty)shown[0].tabIndex=0;
+      if(panel.classList.contains("active"))current={empty};
+      if(!empty&&!firstOpen)firstOpen=tab;
+    }
+    if(current?.empty&&firstOpen)firstOpen.click();
+  }
+  SF.palette={PALETTE,init,quickAccess,refreshView};
 })(window.SF);

@@ -25,6 +25,9 @@
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
+/* 기본 보기(P9-1): js/view-level.js의 분류표가 data-tier를 붙인 고급·드묾 요소를 뺀다. display:none이라 탭 순서·스크린리더에서도 빠진다.
+   고급 보기(기본값)에서는 이 규칙이 아무것도 건드리지 않는다. 아이디 선택자의 display 규칙에 지지 않도록 !important를 쓴다. */
+html[data-view="basic"] [data-tier="advanced"], html[data-view="basic"] [data-tier="rare"] { display: none !important; }
 html, body { height: 100%; }
 body {
   margin: 0;

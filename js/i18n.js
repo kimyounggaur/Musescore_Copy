@@ -236,6 +236,7 @@
     empty | 음표나 쉼표를 선택하면 이곳에서 보임, 색상, 오프셋, 기호, 브레이크를 바로 조정할 수 있어요. | Select a note or rest to adjust visibility, color, offsets, symbols, and breaks here.
     note | 음표 | Note
     position | 위치 | Position
+    where | {name} · 성부 {voice} · 마디 {measure} | {name} · Voice {voice} · Measure {measure}
     visible | 보임 | Visible
     color | 색상 | Color
     break | 마디 브레이크 | Measure break
@@ -859,6 +860,45 @@
     addMeasure | ＋마디 | ＋Measure
     removeMeasure | −마디 | −Measure
   `);
+  group("viewLevel", `
+    basicView | 기본 보기 | Basic view
+    basicViewOn | 기본 보기 — 자주 쓰는 조작만 보여 줘요(켜짐) | Basic view — shows only the common controls (on)
+    basicViewOff | 기본 보기 — 자주 쓰는 조작만 보여 줘요(꺼짐) | Basic view — shows only the common controls (off)
+    basicViewCommand | 기본 보기 켜기/끄기 | Turn basic view on/off
+    pageBreak | 쪽나눔 | Page break
+    sectionBreak | 구역나눔 | Section break
+    navShort | 내비 | Nav
+    timeShort | 타임 | Time
+    themeShort | 테마 | Theme
+    themeDark | 어두운 | Dark
+    themeLight | 밝은 | Light
+    themePretty | 예쁜 | Pretty
+    themeCute | 귀여운 | Cute
+    themeDarkUi | 어두운 UI | Dark UI
+    themeLightUi | 밝은 UI | Light UI
+    themePrettyUi | 예쁜 UI | Pretty UI
+    themeCuteUi | 귀여운 UI | Cute UI
+    offsetX | 가로 이동 | X offset
+    offsetY | 세로 이동 | Y offset
+    velocity | 세기 | Velocity
+    mixVolume | 음량 | Volume
+    mixPan | 좌우 | Pan
+    noteheadX | X자 | X
+    kick | 킥 | Kick
+    snare | 스네어 | Snare
+    closedHihat | 닫힌 하이햇 | Closed HH
+    openHihat | 열린 하이햇 | Open HH
+    crash | 크래시 | Crash
+    ride | 라이드 | Ride
+    lowTom | 낮은 탐 | Low Tom
+    midTom | 중간 탐 | Mid Tom
+    highTom | 높은 탐 | High Tom
+    kickTitle | 킥 (K) | Kick (K)
+    snareTitle | 스네어 (S) | Snare (S)
+    closedHihatTitle | 닫힌 하이햇 (H) | Closed hihat (H)
+    openHihatTitle | 열린 하이햇 (O) | Open hihat (O)
+    crashTitle | 크래시 (C) | Crash (C)
+  `);
   group("validation", `
     goToLabel | 마디 번호 또는 r:A | Measure number or r:A
     goTo | 마디 번호 또는 r:A 형식으로 입력하세요. | Enter a measure number or use the format r:A.
@@ -1183,7 +1223,8 @@
   pattern("toast.ending", /^(\d+)번 엔딩을 표시했어요$/, ["count"]);
   pattern("toast.tempo", /^템포 ♩=(\d+)$/, ["tempo"]);
   pattern("toast.rehearsal", /^리허설 ([\s\S]+)$/, ["text"]);
-  pattern("toast.theme", /^(Dark|Light|Pretty|Cute)(?: UI)?로 전환했어요$/, ["theme"]);
+  pattern("toast.theme", /^(어두운 UI|밝은 UI|예쁜 UI|귀여운 UI)로 전환했어요$/, ["theme"], ["theme"]);
+  pattern("properties.where", /^([\s\S]+) · 성부 (\d+) · 마디 (\d+)$/, ["name", "voice", "measure"]);
   pattern("toast.openError", /^열 수 없어요: ([\s\S]*)$/, ["name"]);
   pattern("session.beforeReplace", /^([\s\S]+) 전에 현재 악보를 어떻게 할까요\?$/, ["reason"], ["reason"]);
   pattern("boot.safeMessage", /^지난번에 ‘([\s\S]*)’을\(를\) 여는 중 문제가 있었어요\. 어떻게 할까요\?$/, ["title"]);
