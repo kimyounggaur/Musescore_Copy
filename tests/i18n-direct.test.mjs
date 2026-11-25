@@ -22,12 +22,13 @@ const MESSAGE_CALLS = String.raw`(?:[\w$.?]*\.)?(?:toast|longToast|flashHint)|(?
 const isMessageCall = (file, call) => !/^(confirm|prompt)$/.test(call.name) || file === 'cloud.js';
 
 /**
- * 한글이 그대로 남아도 되는 곳. { file, call(호출 이름 정규식), has(리터럴에 들어 있어야 할 글자), reason }
+ * 한글이 그대로 남아도 되는 곳. { file, call(호출 이름 정규식), match(리터럴 본문 전체가 맞아야 하는 정규식), reason }
+ * 본문 일부만 맞는 느슨한 규칙은 쓰지 않는다(변이 검사에서 " 사본"이 든 새 문구가 빠져나갔다).
  * 새 항목을 더할 때는 사유를 꼭 적는다. 쓰이지 않는 항목은 아래 시험이 잡는다.
  */
 const ALLOWED = [
-  { file: 'cloud.js', call: /^prompt$/, has: ' 사본', reason: '사용자가 고칠 사본 이름의 기본값(저장되는 데이터이지 화면 문구가 아니다)' },
-  { file: 'pwa.js', call: /confirmDialog/, has: '', reason: 'message(key, 대체 문구) 도우미가 SF.t를 먼저 쓰고 i18n 없이 불릴 때만 대체 문구를 쓴다' },
+  { file: 'cloud.js', call: /^prompt$/, match: /^\$\{titleOf\(job\.data\.meta\.title\)\} 사본$/, reason: '사용자가 고칠 사본 이름의 기본값(저장되는 데이터이지 화면 문구가 아니다)' },
+  { file: 'pwa.js', call: /confirmDialog/, match: /^(?:새 버전 적용|현재 악보를 파일로 저장한 뒤 새 버전을 적용할까요\?|저장 후 새로고침)$/, reason: 'message(key, 대체 문구) 도우미가 SF.t를 먼저 쓰고 i18n 없이 불릴 때만 대체 문구를 쓴다' },
 ];
 
 function findHangul() {
@@ -36,7 +37,7 @@ function findHangul() {
     for (const call of calls(source(file), MESSAGE_CALLS)) {
       if (!isMessageCall(file, call)) continue;
       for (const literal of hangulLiterals(call.args)) {
-        const allowed = ALLOWED.findIndex(rule => rule.file === file && rule.call.test(call.name) && literal.body.includes(rule.has));
+        const allowed = ALLOWED.findIndex(rule => rule.file === file && rule.call.test(call.name) && rule.match.test(literal.body));
         if (allowed >= 0) { used.add(allowed); continue; }
         hits.push(`${file}:${call.line} ${call.name}(${literal.quote}${literal.body.slice(0, 50)}${literal.quote})`);
       }
