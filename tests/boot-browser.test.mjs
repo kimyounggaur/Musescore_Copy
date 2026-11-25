@@ -17,6 +17,16 @@ async function newContext(browser, { locale = 'ko-KR' } = {}) {
   await context.addInitScript(() => localStorage.setItem('scoreforge.welcomed', '1'));
   return context;
 }
+/** 다음 로드부터 제목이 title인 악보를 그릴 때 TypeError가 나게 한다(검사를 지나도 그릴 때 예외가 나는 경우를 흉내 낸다 — 방어선이 따로 있다는 것을 확인하려고). */
+const failRender = (page, title) => page.addInitScript(title => {
+  document.addEventListener('DOMContentLoaded', () => {
+    const render = SF.engrave.render;
+    SF.engrave.render = function (...args) {
+      if (SF.core.state.score?.meta?.title === title) throw new TypeError('그리기 예외(시험이 심음)');
+      return render.apply(this, args);
+    };
+  }, { capture: true });
+}, title);
 /** 앱을 연다. expect: 'score'(그려진 악보를 기다림) | 'dialog'(안전 모드 대화상자를 기다림) */
 async function openPage(context, { expect = 'score', init } = {}) {
   const page = await context.newPage();
@@ -39,7 +49,8 @@ async function reload(page, expect = 'score') {
   await page.reload({ waitUntil: 'networkidle' });
   await waitReady(page, expect);
 }
-/** 저장소에 문서를 심는다. fault: 'dur'(dur 0/0 — 모양 검사에 걸림) · 'render'(모양은 맞지만 그릴 때 예외). */
+/** 저장소에 문서를 심는다. fault: 'dur'(dur 0/0 — 고칠 수 없어 거절·격리) · 'nullnote'(음 목록에 null — 예전에는 모양 검사를 지나 그릴 때 예외가 났지만,
+ * P8-2부터는 검사(SF.schema)가 그 음을 지우고 고쳐서 연다). 그릴 때 예외가 나는 경우는 데이터가 아니라 그리는 함수에 예외를 심어 만든다(failRender). */
 const plant = (page, specs) => page.evaluate(async specs => {
   await SF.store.open();
   for (const spec of specs) {
@@ -47,7 +58,7 @@ const plant = (page, specs) => page.evaluate(async specs => {
     const data = SF.core.toJSON(score);
     const first = data.parts[0].staves[0].measures[0].voices[0];
     if (spec.fault === 'dur') first[0].dur = { n: 0, d: 0, dots: 0 };
-    if (spec.fault === 'render') first.find(event => event.type === 'note').notes = [null];
+    if (spec.fault === 'nullnote') first.find(event => event.type === 'note').notes = [null];
     await SF.store.saveDoc({ id: spec.id, title: spec.title, createdAt: 1, updatedAt: spec.at, revision: 1, origin: 'new', cloudId: null, measures: data.parts[0].staves[0].measures.length, bytes: 1, schema: 1, fileSavedAt: 0, data, ...(spec.extra || {}) });
   }
 }, specs);
@@ -144,7 +155,8 @@ test('부팅 안전 모드', { skip: !process.env.PLAYWRIGHT_MODULE, timeout: 42
     await t.test('모양 검사는 통과해도 그리다 예외가 나면 → 격리 + 데모 + 안내, 표시·잠금도 정리된다', async () => {
       const context = await newContext(browser);
       const page = await openPage(context);
-      await plant(page, [{ id: 'render-1', title: '그리다 죽는 악보', at: 20, fault: 'render' }]);
+      await plant(page, [{ id: 'render-1', title: '그리다 죽는 악보', at: 20 }]);   // 내용은 정상 — 그리는 함수가 이 제목의 악보에서 예외를 낸다
+      await failRender(page, '그리다 죽는 악보');
       await point(page, 'render-1');
       await reload(page);
       assert.equal(await toastText(page), PROBLEM);
@@ -271,6 +283,31 @@ test('부팅 안전 모드', { skip: !process.env.PLAYWRIGHT_MODULE, timeout: 42
       await page.click('#dlg-choice button[data-choice="open"]');
       await page.waitForSelector('#svg-host .ev');
       assert.equal(await titleOf(page), '미뤄 둔 악보');
+      await context.close();
+    });
+
+    await t.test('예전에는 그리다 죽던 손상(음 목록의 null)이 이제는 검사가 고쳐서 연다 — 격리하지 않고, 고친 항목을 결과 창으로 알린다(P8-2)', async () => {
+      const context = await newContext(browser);
+      const page = await openPage(context);
+      await plant(page, [{ id: 'fixable-1', title: '고쳐 열 악보', at: 20, fault: 'nullnote' }]);
+      await point(page, 'fixable-1');
+      await reload(page);
+      assert.equal(await titleOf(page), '고쳐 열 악보'); assert.equal(await docId(page), 'fixable-1');
+      assert.equal(await toastText(page), RESTORED, '문제 안내가 아니라 평소의 복원 안내');
+      assert.equal((await record(page, 'fixable-1')).quarantined, undefined, '격리하지 않는다');
+      await page.waitForFunction(() => document.querySelector('#dlg-import').open);
+      assert.equal((await page.locator('#imp-fixes-title').textContent()).trim(), '자동으로 고친 항목');
+      const items = await page.locator('#imp-list li').allTextContents();
+      assert.equal(items.length, 2, items.join(' | '));
+      assert.ok(items.some(item => /^올바르지 않은 음높이를 바로잡거나 그 음을 지웠어요 \(1건\)$/.test(item)), items.join(' | '));
+      assert.ok(items.some(item => /^음이 하나도 없는 음표를 쉼표로 바꿨어요 \(1건\)$/.test(item)), items.join(' | '));
+      const stored = (await record(page, 'fixable-1')).data.parts[0].staves[0].measures[0].voices[0];
+      assert.ok(stored.some(event => event.notes?.[0] === null), '보관 기록은 편집 전까지 그대로다');
+      await page.click('#dlg-import .dlg-actions button');
+      assert.equal(await pending(page), null); quiet(page);
+      await reload(page);                                                                // 같은 탭에서 다시 새로고침해도 같은 창을 또 띄우지 않는다
+      assert.equal(await page.evaluate(() => document.querySelector('#dlg-import').open), false);
+      assert.equal(await titleOf(page), '고쳐 열 악보');
       await context.close();
     });
 

@@ -641,7 +641,8 @@
 
   /* ---------------- 악보 교체 (열기·드롭·앱 파일 실행·새 악보·데모·클라우드) ---------------- */
   /** 악보를 실제로 갈아 끼운다. 직접 부르지 말고 SF.session.replaceScore를 거친다(저장 확인·순서 보장). 부팅 때 데모·복원도 여기를 거친다.
-   * opts: readOnly, name, report(가져오기 보고서), toast(문구 / false=표시 안 함), boot(부팅 중 — 부팅 흐름이 자기 안내를 직접 보여 주므로 "불러왔어요" 생략) */
+   * opts: readOnly, name, report(가져오기 보고서), reportKind("fixes"면 report는 열면서 자동으로 고친 항목 — 결과 창 문구가 다르다),
+   *       toast(문구 / false=표시 안 함), boot(부팅 중 — 부팅 흐름이 자기 안내를 직접 보여 주므로 "불러왔어요" 생략) */
   function installScore(score, opts = {}) {
     setReadOnly(!!opts.readOnly);
     C.setScore(score);
@@ -650,7 +651,7 @@
     stopPlayback();
     P.releaseUnused(C.state.score); // 새 악보에 없는 악기·믹서 버스를 메모리에서 내림(재생은 바로 위에서 멈춤)
     update();
-    if (opts.report && opts.report.length) showImportReport(opts.name, score, opts.report);
+    if (opts.report && opts.report.length) showImportReport(opts.name, score, opts.report, opts.reportKind);
     else if (opts.toast !== false && !opts.boot) toast(opts.toast || `"${score.meta.title || opts.name}" 불러왔어요`);
   }
   /** 파일·클라우드에서 읽은 결과를 받는다. 실패는 알리고, 성공은 교체 통로로 보낸다(교체 여부를 Promise로 돌려줌). */
@@ -663,10 +664,15 @@
     return SF.session.replaceScore(loaded, { name, report, readOnly: false, origin, ...opts });
   }
 
-  function showImportReport(name, score, report) {
-    $("#imp-summary").textContent =
-      `"${score.meta.title || name}" — ${score.measures.length}마디를 가져왔어요. ` +
-      `아래 항목은 이 앱이 지원하는 범위로 줄이면서 바뀌거나 무시됐어요.`;
+  /** 가져오기 결과 창. kind가 "fixes"면 변환 보고서가 아니라 "열면서 자동으로 고친 항목"(P8-2 검사)이다. */
+  function showImportReport(name, score, report, kind) {
+    const fixes = kind === "fixes";
+    const title = `"${score.meta.title || name}" — ${score.measures.length}마디를`;
+    $("#imp-summary").textContent = fixes
+      ? `${title} 열었어요. 올바르지 않은 값이 있어 아래처럼 자동으로 고쳤어요.`
+      : `${title} 가져왔어요. 아래 항목은 이 앱이 지원하는 범위로 줄이면서 바뀌거나 무시됐어요.`;
+    const heading = $("#imp-fixes-title");
+    if (heading) heading.hidden = !fixes;
     $("#imp-list").innerHTML = report.map(r => `<li>${r.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</li>`).join("");
     $("#dlg-import").showModal();
   }
@@ -1009,7 +1015,17 @@
       return false;
     }
     await SF.session.bootBegin();   // 렌더 중 멈춰도 다음 부팅이 알 수 있게 "여는 중"을 먼저 적어 둔다
-    installScore(saved, { boot: true });
+    const fixes = SF.session.bootInfo().fixes || [];   // 기록을 읽으며 자동으로 고친 항목(P8-2) — 있을 때만(드묾) 결과 창으로 알린다
+    // 저장된 기록은 편집·자동 저장 전까지 그대로라 새로고침마다 같은 고침이 다시 생긴다 — 같은 탭에서는 문서마다 한 번만 알린다.
+    const shownKey = "scoreforge.fixesShown", docId = saved.meta.docId || "";
+    let announce = fixes.length > 0;
+    if (announce && docId) {
+      try {
+        if (sessionStorage.getItem(shownKey) === docId) announce = false;
+        else sessionStorage.setItem(shownKey, docId);
+      } catch { /* 저장소를 못 쓰는 환경 — 매번 알린다 */ }
+    }
+    installScore(saved, announce ? { boot: true, report: fixes, reportKind: "fixes" } : { boot: true });
     if (SF.session.lockState().locked) setReadOnly(true);   // 다른 탭이 편집 중이던 악보는 읽기 전용으로 되살린다(2-D)
     toast(problem ? BOOT_PROBLEM : "이전 작업을 자동으로 불러왔어요");
     return true;

@@ -83,10 +83,20 @@
     }
     return actor;
   }
+  // 서버(supabase/scoreforge_v4.sql)가 악보 200개·합계 50MB를 넘는 저장을 이 두 글자로 거절한다. 사용자에게는 쉬운 문구만 보인다.
+  const QUOTA_CODES = { SCOREFORGE_QUOTA_COUNT: "count", SCOREFORGE_QUOTA_BYTES: "bytes" };
+  function friendly(err) {
+    if (!err || typeof err !== "object") return err;
+    const text = [err.message, err.details, err.hint].filter(part => typeof part === "string").join(" ");
+    const code = Object.keys(QUOTA_CODES).find(name => text.includes(name));
+    if (!code) return err;
+    return Object.assign(error("QUOTA_EXCEEDED", "악보 저장 한도(200개·50MB)에 도달했어요. 안 쓰는 악보를 지운 뒤 다시 저장해 주세요."),
+      { quota: QUOTA_CODES[code], cause: err });
+  }
   async function result(query, actor) {
     const response = await query;
     if (actor) assertActor(actor);
-    if (response.error) throw response.error;
+    if (response.error) throw friendly(response.error);
     return response.data;
   }
   function storeQueue() {
@@ -125,7 +135,9 @@
   }
   function notifyError(err, quiet = false) {
     const code = err && err.code;
-    status(code === "CONFLICT" ? "다른 기기에서 수정됨 · 눌러서 해결" : `클라우드 저장 대기 · ${err.message || "연결을 확인해 주세요."}`);
+    status(code === "CONFLICT" ? "다른 기기에서 수정됨 · 눌러서 해결"
+      : code === "QUOTA_EXCEEDED" ? "클라우드 저장 한도 도달 · 악보를 정리해 주세요"
+      : `클라우드 저장 대기 · ${err.message || "연결을 확인해 주세요."}`);
     if (!quiet) {
       if (code === "AUTH_REQUIRED" || code === "SESSION_CHANGED" || code === "session_not_found" || /session missing/i.test(err.message || "")) SF.auth.openDialog("member");
       else toast(err.message || "클라우드 작업을 마치지 못했어요.");
@@ -216,7 +228,7 @@
       return row;
     } catch (err) {
       const latest = queue.get(key);
-      if (latest && (err.code === "CONFLICT" || err.code === "CANCELLED")) latest.blocked = true;
+      if (latest && (err.code === "CONFLICT" || err.code === "CANCELLED" || err.code === "QUOTA_EXCEEDED")) latest.blocked = true;
       storeQueue();
       throw err;
     } finally { state.saving = false; }
@@ -297,8 +309,14 @@
     clean.meta = { ...clean.meta, title: titleOf(title) };
     for (const key of [...META_KEYS, ...LOCAL_META_KEYS]) delete clean.meta[key];
     snapshot(clean); // Enforce the client-side limit before normalizing.
-    return C.fromJSON(clean);
+    // 파일 열기와 같은 검사(P8-2): 고칠 수 있는 값은 고쳐서 열고(installScore가 결과 창으로 알린다), 고칠 수 없으면 ScoreFormatError로 거절한다.
+    const checked = SF.schema?.validate ? SF.schema.validate(clean) : null;
+    if (checked?.fatal) throw checked.fatal;
+    const score = C.fromJSON(checked ? checked.score : clean);
+    if (checked && checked.fixes.length) fixedLines.set(score, SF.schema.fixLines(checked.summary));
+    return score;
   }
+  const fixedLines = new WeakMap();   // decode가 자동으로 고친 악보 → 고친 항목 문구(installScore가 한 번 읽는다)
   async function load(id) {
     validateId(id);
     const actor = await requireUser();
@@ -323,7 +341,8 @@
     if (!SF.app.setReadOnly || !SF.app.handleLoadedScore) throw error("INTEGRATION_REQUIRED", "악보 열기 연결이 준비되지 않았어요.");
     suppressChange = true;
     try {
-      const ok = await SF.app.handleLoadedScore(score, score.meta.title, null, [], { readOnly, ...opts });
+      const fixed = fixedLines.get(score) || [];
+      const ok = await SF.app.handleLoadedScore(score, score.meta.title, null, fixed, { readOnly, ...(fixed.length ? { reportKind: "fixes" } : {}), ...opts });
       if (ok) onScoreLoaded(C.state.score);
       return ok;
     } finally { suppressChange = false; }
@@ -419,6 +438,20 @@
     const counts = Object.fromEntries(ids.map(id => [id, 0]));
     for (const row of data || []) if (ids.includes(row.owner)) counts[row.owner] = Number(row.score_count);
     return counts;
+  }
+  // 탈퇴(P8-4d)한 계정이 이 브라우저에 남긴 것만 지운다: 그 계정의 저장 대기 작업, 읽어 둔 목록, 열려 있는 악보의 클라우드 식별 정보.
+  // 다른 계정의 대기 작업과 악보 내용 자체(로컬 악보)는 건드리지 않는다. 서버에는 아무것도 보내지 않는다(서버 쪽 삭제는 Edge Function의 일).
+  function purgeOwner(owner) {
+    if (typeof owner !== "string" || !UUID.test(owner)) return 0;
+    const activeJob = active && queue.get(active.key);
+    let removed = 0;
+    for (const [key, job] of queue) if (job.owner === owner) { queue.delete(key); removed++; }
+    for (const [id, row] of rows) if (row.owner === owner) rows.delete(id);
+    const own = Boolean(active && active.owner === owner);
+    if (own) { active.id = null; active.version = null; active.owner = null; writeMetadata({}); }
+    if (own || (activeJob && activeJob.owner === owner)) { state.dirty = false; status("클라우드 저장 준비"); }
+    storeQueue();
+    return removed;
   }
 
   function element(tag, text, className) {
@@ -564,8 +597,13 @@
     });
     window.addEventListener("online", () => drain());
     window.addEventListener("offline", () => { if (state.dirty) status("오프라인 · 최신 악보 저장 대기 중"); });
+    // 한글 입력 상태(e.key가 "Process"·"ㄴ")에서도 Ctrl+Shift+S가 먹도록 keymap과 같은 판정(combo)을 쓴다.
+    // keymap이 없는 환경이면 예전처럼 e.key로 판정한다(e.key가 없는 이벤트에도 던지지 않는다).
+    const isCloudSaveKey = event => SF.keymap?.combo
+      ? SF.keymap.combo(event) === "Ctrl+Shift+S"
+      : (event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && String(event.key).toLowerCase() === "s";
     document.addEventListener("keydown", event => {
-      if ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.key.toLowerCase() === "s") {
+      if (isCloudSaveKey(event)) {
         event.preventDefault(); event.stopImmediatePropagation(); runUI(saveCurrent);
       }
     }, true);
@@ -576,5 +614,5 @@
   }
   SF.cloud = { state, init, list, save, saveCurrent, load, remove, rename, setPublic, loadShared,
     open: id => openScore(id), openShared: slug => openScore(slug, true), openList, shareCurrent,
-    makeLocalCopy, setAutoSave, onScoreLoaded, onAuthChanged, drain, countByOwner };
+    makeLocalCopy, setAutoSave, onScoreLoaded, onAuthChanged, drain, countByOwner, purgeOwner };
 })(window.SF);

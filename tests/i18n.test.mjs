@@ -205,3 +205,42 @@ test('all current generated keymap and palette labels have an approved mapping',
   assert.ok(labels.length > 50);
   for (const label of labels) assert.ok(SF.i18n.lookup(label), `Unmapped UI label: ${label}`);
 });
+
+test('P8-2 자동으로 고친 항목: 결과 창 요약문과 규칙 문구가 모두 영어로 번역된다(schema.js RULES와 같은 글자)', () => {
+  const { SF } = setup();
+  SF.i18n.setLanguage('en');
+  assert.equal(SF.i18n.translate('"곡" — 3마디를 열었어요. 올바르지 않은 값이 있어 아래처럼 자동으로 고쳤어요.'),
+    'Opened 3 measures from "곡". Some values were invalid, so they were fixed automatically as listed below.', '사용자 제목은 그대로');
+  assert.equal(SF.i18n.translate('자동으로 고친 항목'), 'Fixed automatically');
+  // 규칙 문구는 schema.js가 정한다 — 거기서 글자를 바꾸면 이 시험이 번역 행을 같이 고치라고 알려 준다.
+  const context = vm.createContext({});
+  context.window = context; context.SF = {};
+  vm.runInContext(readFileSync(new URL('../js/schema.js', import.meta.url), 'utf8'), context, { filename: 'schema.js' });
+  const { RULES, fixLines } = context.SF.schema;
+  assert.equal(Object.keys(RULES).length, 13);
+  for (const [rule, { label }] of Object.entries(RULES)) {
+    const line = fixLines([{ rule, count: 3, label }])[0];
+    assert.equal(line, `${label} (3건)`);
+    const english = SF.i18n.translate(line);
+    assert.notEqual(english, line, `${rule}: 번역 행이 없다`);
+    assert.match(english, /\(3 occurrences\)$/);
+    assert.doesNotMatch(english, /[가-힣]/, `${rule}: 한글이 남았다 — ${english}`);
+  }
+});
+
+test('P8-5 클라우드 저장 한도: 알림 문구와 상태 줄 문구가 영어로 번역되고, 한글은 그대로(번역 행이 cloud.js 글자와 같다)', () => {
+  const { SF } = setup();
+  const cloud = readFileSync(new URL('../js/cloud.js', import.meta.url), 'utf8');
+  const message = '악보 저장 한도(200개·50MB)에 도달했어요. 안 쓰는 악보를 지운 뒤 다시 저장해 주세요.';
+  const status = '클라우드 저장 한도 도달 · 악보를 정리해 주세요';
+  // cloud.js가 실제로 쓰는 글자와 같은지 먼저 확인한다(한쪽만 고치면 여기서 알려 준다).
+  assert.ok(cloud.includes(message), 'cloud.js의 알림 문구');
+  assert.ok(cloud.includes(status), 'cloud.js의 상태 줄 문구');
+  assert.equal(SF.i18n.translate(message), message, '한국어 모드에서는 그대로');
+  SF.i18n.setLanguage('en');
+  assert.equal(SF.i18n.translate(message), 'You have reached the cloud limit (200 scores · 50 MB). Delete scores you no longer use, then save again.');
+  assert.equal(SF.i18n.translate(status), 'Cloud limit reached · Delete some scores');
+  for (const text of [message, status]) assert.doesNotMatch(SF.i18n.translate(text), /[가-힣]/, text);
+  // 기존 "저장 대기" 문구(오류 글자를 끼워 넣는 틀)와 섞이지 않는다
+  assert.notEqual(SF.i18n.translate(status), '클라우드 저장 대기 · 악보를 정리해 주세요');
+});

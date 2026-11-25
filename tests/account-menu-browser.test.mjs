@@ -71,7 +71,7 @@ test('P6-2 375px: 회원 메뉴가 👤 계정 메뉴 안에 있고, 열면 로�
     assert.equal(await page.getAttribute('#btn-account', 'aria-expanded'), 'true');
     const box = await page.evaluate(() => { const r = document.querySelector('#account-menu').getBoundingClientRect(); return { left: r.left, right: r.right, bottom: r.bottom, w: document.documentElement.clientWidth, h: innerHeight }; });
     assert.ok(box.left >= 7.5 && box.right <= box.w - 7.5 && box.bottom <= box.h - 7.5, `계정 메뉴가 화면 안: ${JSON.stringify(box)}`);
-    for (const id of ['#btn-signup', '#btn-member-login', '#btn-admin-login']) assert.equal(await clickable(page, id), true, `${id} 한가운데를 누를 수 있다`);
+    for (const id of ['#btn-signup', '#btn-member-login']) assert.equal(await clickable(page, id), true, `${id} 한가운데를 누를 수 있다`);
     assert.equal(await page.isVisible('#auth-status'), true, '로그인 상태 글자도 보인다');
     assert.equal(await page.isVisible('#btn-logout'), false, '로그아웃은 로그인했을 때만(hidden 유지)');
 
@@ -173,7 +173,7 @@ test('P6-2 키보드: 👤을 Enter로 열면 첫 버튼(회원가입)에 포커
     await page.waitForFunction(() => document.activeElement?.id === 'btn-signup');
     assert.equal(await active(), 'btn-signup', '열면 첫 버튼에 포커스(로그인 전이라 보이는 버튼은 회원가입부터)');
     await page.keyboard.press('ArrowDown'); assert.equal(await active(), 'btn-member-login');
-    await page.keyboard.press('End'); assert.equal(await active(), 'btn-admin-page', '숨겨진 로그아웃은 건너뛴다');
+    await page.keyboard.press('End'); assert.equal(await active(), 'btn-member-login', '숨겨진 로그아웃·관리자 페이지(P8-4b)는 건너뛴다');
     await page.keyboard.press('Escape');
     assert.equal(await accountOpen(page), false);
     assert.equal(await active(), 'btn-account', '포커스가 👤으로 돌아온다');

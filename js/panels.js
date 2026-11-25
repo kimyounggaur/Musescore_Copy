@@ -397,6 +397,7 @@
     $("#set-system-gap").value = layout.systemGap || 1;
     $("#set-staff-gap").value = layout.staffGap || 1;
     $("#set-beam-thickness").value = layout.beamThickness || 1;
+    $("#set-transpose-chords").checked = true;                        // 창을 열 때마다 "코드 기호도 조옮김"은 켜진 채로 시작 — 예전에 끈 것을 잊어 코드만 안 따라가는 일을 막는다
     SF.uiV3?.loadSettingsExtras();
     SF.ui.open($("#dlg-settings"));
   }
@@ -471,9 +472,12 @@
       btn.addEventListener("click", (e) => {
         e.preventDefault();
         const semis = +btn.dataset.transpose;
-        C.mutate("조옮김", (s2) => C.transposeScore(s2, semis));
+        const chords = $("#set-transpose-chords")?.checked !== false;   // 코드 기호도 함께(기본 켬)
+        const result = C.mutate("조옮김", (s2) => C.transposeScore(s2, semis, { chords }));
         update();
-        toast(semis > 0 ? `${semis}반음 올렸어요` : `${-semis}반음 내렸어요`);
+        const handmade = result?.manualFretboards || 0;                  // 직접 만든 코드 다이어그램은 그대로 둔다 — 알려 준다
+        if (handmade) toast(`직접 만든 코드 다이어그램 ${handmade}개는 그대로 두었어요`, { duration: 4200 });
+        else toast(semis > 0 ? `${semis}반음 올렸어요` : `${-semis}반음 내렸어요`);
         $("#set-key").value = String(C.state.score.keySig);
       });
     });

@@ -217,6 +217,7 @@
     addFour | ＋ 마디 4개 추가 | ＋ Add four measures
     deleteLast | － 마지막 마디 삭제 | － Delete last measure
     transpose | 조옮김 | Transpose
+    transposeChords | 코드 기호도 조옮김 | Transpose chord symbols too
     semitoneUp | 반음 ↑ | Semitone ↑
     semitoneDown | 반음 ↓ | Semitone ↓
     toneUp | 온음 ↑ | Whole tone ↑
@@ -451,6 +452,7 @@
     pasted | {count}개를 붙여넣었어요 | Pasted {count} items
     transposeUp | {count}반음 올렸어요 | Transposed up {count} semitones
     transposeDown | {count}반음 내렸어요 | Transposed down {count} semitones
+    transposeKeptDiagrams | 직접 만든 코드 다이어그램 {count}개는 그대로 두었어요 | Left {count} hand-made chord diagrams unchanged
     tuplet | {count}잇단음표로 나눴어요 | Split into a {count}-tuplet
     repeat | {count}번 반복으로 설정했어요 | Set to repeat {count} times
     ending | {count}번 엔딩을 표시했어요 | Added ending {count}
@@ -615,7 +617,6 @@
     signup | 회원가입 | Sign up
     signupTitle | Supabase 회원가입 | Sign up with Supabase
     memberLogin | 회원 로그인 | Member sign-in
-    adminLogin | 관리자 로그인 | Admin sign-in
     adminPage | 관리자 페이지 | Admin panel
     logout | 로그아웃 | Sign out
     login | 로그인 | Sign in
@@ -630,7 +631,6 @@
     minPassword | 6자 이상 | At least 6 characters
     signupHelp | 이메일과 비밀번호로 새 계정을 만들어요. 이메일 확인이 켜져 있으면 인증 메일 확인 뒤 로그인됩니다. | Create an account with your email and password. If email confirmation is enabled, confirm your email before signing in.
     memberHelp | 가입한 회원 계정으로 로그인합니다. | Sign in with your member account.
-    adminHelp | 관리자 페이지는 profiles.role 값이 admin인 계정만 열 수 있어요. | Only accounts with profiles.role set to admin can open the admin panel.
     configureFirst | Supabase Project URL과 publishable key를 먼저 저장하세요. | Save the Supabase Project URL and publishable key first.
     libraryFailed | Supabase JS 라이브러리를 불러오지 못했어요. 네트워크 연결을 확인하세요. | Could not load the Supabase JS library. Check your network connection.
     invalidCredentials | 이메일 또는 비밀번호가 올바르지 않습니다. | Incorrect email or password.
@@ -643,15 +643,54 @@
     storageError | 브라우저 저장소에 Supabase 설정을 저장하지 못했어요. | Could not save Supabase settings in browser storage.
     configSaved | Supabase 연결 정보를 저장했어요. | Supabase connection saved.
     configReset | Supabase 연결 설정을 초기화했어요. | Supabase connection settings reset.
+    customConnection | 사용자 지정 연결 사용 중 | Using a custom connection
+    useDefault | 기본값으로 | Use default
+    defaultRestored | 기본 연결로 돌아왔어요. | Switched back to the default connection.
+    notReady | 이 주소에서는 회원 기능을 쓸 수 없어요. | Member features are not available at this address.
+    forgotPassword | 비밀번호를 잊으셨나요? | Forgot your password?
+    resetNeedEmail | 비밀번호를 재설정할 이메일을 입력하세요. | Enter the email address to reset the password for.
+    badEmail | 이메일 형식이 올바르지 않아요. | The email address is not valid.
+    resetSent | 입력한 이메일로 가입한 계정이 있으면 재설정 메일이 곧 도착해요. 받은 편지함과 스팸함을 확인하세요. | If an account exists for that email, a reset email will arrive shortly. Check your inbox and spam folder.
+    rateLimited | 요청이 너무 잦아요. 잠시 뒤에 다시 시도하세요. | Too many requests. Try again in a little while.
+    sameAsOld | 이전과 다른 비밀번호를 입력하세요. | Enter a password different from the old one.
+    tooShort | 비밀번호가 너무 짧아요. 더 길게 만들어 주세요. | That password is too short. Make it longer.
+    weakPassword | 너무 흔한 비밀번호예요. 다른 비밀번호를 고르세요. | That password is too common. Choose a different one.
+    sessionMissing | 로그인 상태가 풀렸어요. 다시 로그인하거나 재설정 메일을 다시 받으세요. | You are no longer signed in. Sign in again or request a new reset email.
+    linkExpired | 재설정 링크가 만료됐거나 이미 사용됐어요. "비밀번호를 잊으셨나요?"를 눌러 메일을 다시 받으세요. | The reset link has expired or was already used. Choose "Forgot your password?" to get a new email.
+    newPasswordTitle | 새 비밀번호 설정 | Set a new password
+    newPasswordHelp | 새 비밀번호를 입력하세요. 6자 이상이어야 해요. | Enter a new password. It must contain at least 6 characters.
+    newPasswordLabel | 새 비밀번호 | New password
+    changePassword | 비밀번호 바꾸기 | Change password
+    passwordChanged | 비밀번호를 바꿨어요 | Password changed
+    passwordKept | 비밀번호는 바꾸지 않았어요 | The password was not changed
+    passwordFailed | 비밀번호를 바꾸지 못했어요. 재설정 메일을 다시 요청해 주세요. | Could not change the password. Request a new reset email.
+    deleteAccount | 회원 탈퇴 | Delete account
+    deleteHelp | 계정과 클라우드에 저장한 악보가 모두 지워지고 되돌릴 수 없어요. 계속하려면 비밀번호를 입력하세요. | Your account and all scores saved in the cloud will be deleted, and this cannot be undone. Enter your password to continue.
+    enterPassword | 비밀번호를 입력하세요. | Enter your password.
+    wrongPassword | 비밀번호가 맞지 않아요. 다시 입력하세요. | That password is not correct. Enter it again.
+    deleteConfirmTitle | 정말 탈퇴할까요? | Really delete your account?
+    deleteConfirmHelp | 되돌릴 수 없어요. 계속하려면 아래 칸에 "탈퇴"라고 입력하세요. | This cannot be undone. To continue, type "DELETE" in the box below.
+    deleteConfirmLabel | 확인 문구 | Confirmation word
+    deleteConfirmMismatch | "탈퇴"를 그대로 입력하세요. | Type "DELETE" exactly.
+    deleteNeedLogin | 로그인한 뒤에 탈퇴할 수 있어요. | You can delete your account after signing in.
+    deleteCancelled | 탈퇴를 취소했어요. | Account deletion was cancelled.
+    deleteBadPassword | 비밀번호가 맞지 않아 탈퇴를 진행하지 못했어요. | The password was not correct, so the account was not deleted.
+    deleteChanged | 로그인한 계정이 바뀌었어요. 탈퇴를 진행하지 않았어요. 다시 시도해 주세요. | The signed-in account changed. Nothing was deleted. Please try again.
+    deleteDone | 탈퇴가 끝났어요. 이 기기의 로컬 악보는 그대로 남아 있어요. | Your account was deleted. Scores saved locally on this device are unchanged.
+    deleteExpired | 로그인이 만료됐어요. 다시 로그인한 뒤 시도해 주세요. | Your sign-in expired. Sign in again and retry.
+    deleteBlocked | 이 주소에서는 탈퇴를 처리할 수 없어요. | Account deletion is not available from this address.
+    deleteMissing | 탈퇴 기능을 아직 쓸 수 없어요. | Account deletion is not available yet.
+    deleteFailed | 탈퇴를 처리하지 못했어요. 잠시 뒤에 다시 시도해 주세요. | Could not delete the account. Please try again in a little while.
+    deleteNetwork | 네트워크에 연결하지 못했어요. 탈퇴가 처리됐는지 확인하지 못했어요. 잠시 뒤 다시 로그인해 확인해 주세요. | Could not connect to the network. We could not confirm whether the account was deleted. Sign in again in a little while to check.
+    consent | 개인정보 처리 안내를 읽었고 동의합니다. (필수) | I have read and agree to the privacy notice. (required)
+    privacyNotice | 개인정보 처리 안내 | Privacy notice
+    consentRequired | 가입하려면 개인정보 처리 안내에 동의해 주세요. | Please agree to the privacy notice to sign up.
     saveFirst | Supabase 연결 정보를 먼저 저장하세요. | Save the Supabase connection details first.
     configSuffix | {message} 먼저 Supabase 연결 정보를 저장하세요. | {message} Save the Supabase connection details first.
     needCredentials | 이메일과 비밀번호를 입력하세요. | Enter your email and password.
     shortPassword | 비밀번호는 6자 이상이어야 합니다. | The password must contain at least 6 characters.
     signupDone | 회원가입 완료. 로그인했어요 | Account created. You are signed in
     confirmEmail | 회원가입 요청이 완료됐어요. 이메일 인증이 켜져 있다면 받은 편지함에서 확인 링크를 눌러주세요. | Sign-up request complete. If email confirmation is enabled, click the confirmation link in your inbox.
-    checkRls | profiles 테이블 또는 RLS 설정을 확인해야 합니다. | Check the profiles table or RLS settings.
-    noAdmin | 관리자 권한이 없습니다. Supabase SQL Editor에서 해당 계정의 role을 admin으로 승격하세요. | This account has no admin access. Set its role to admin in the Supabase SQL Editor.
-    adminDone | 관리자로 로그인했어요 | Signed in as administrator
     memberDone | 회원 로그인 완료 | Signed in as member
     logoutDone | 로그아웃했어요 | Signed out
     adminRequired | 관리자 권한이 필요합니다. 관리자 계정으로 다시 로그인하세요. | Admin access is required. Sign in again with an admin account.
@@ -686,6 +725,8 @@
     pendingError | 클라우드 저장 대기 · {error} | Cloud save pending · {error}
     checkConnection | 연결을 확인해 주세요. | Check your connection.
     failed | 클라우드 작업을 마치지 못했어요. | Could not complete the cloud operation.
+    quotaReached | 악보 저장 한도(200개·50MB)에 도달했어요. 안 쓰는 악보를 지운 뒤 다시 저장해 주세요. | You have reached the cloud limit (200 scores · 50 MB). Delete scores you no longer use, then save again.
+    quotaStatus | 클라우드 저장 한도 도달 · 악보를 정리해 주세요 | Cloud limit reached · Delete some scores
     dialogUnavailable | 앱 다이얼로그를 사용할 수 없어요. | App dialogs are unavailable.
     title | 클라우드 악보 | Cloud scores
     otherAccount | 다른 계정의 악보예요. 사본으로 저장해 주세요. | This score belongs to another account. Save a copy.
@@ -935,6 +976,24 @@
     drumFallback | {name}: 드럼 {midi}의 표기는 스네어로 대체했어요 (원래 소리 유지) | {name}: used snare notation for drum {midi} (original sound kept)
     partReport | {name}: {report} | {name}: {report}
   `);
+  // P8-2: 파일·클라우드·최근 작업·부팅 복원에서 읽은 악보를 검사하며 자동으로 고친 항목(js/schema.js RULES의 label과 같은 글자)
+  group("import", `
+    fixSummary | "{title}" — {measures}마디를 열었어요. 올바르지 않은 값이 있어 아래처럼 자동으로 고쳤어요. | Opened {measures} measures from "{title}". Some values were invalid, so they were fixed automatically as listed below.
+    fixesTitle | 자동으로 고친 항목 | Fixed automatically
+    fixMeta | 곡 정보(제목·작곡가 등)의 모양이나 글자 수를 바로잡았어요 | Corrected the shape or length of the score info (title, composer, …)
+    fixText | 너무 긴 글(리허설·스태프 텍스트·코드)을 잘랐어요 | Trimmed text that was too long (rehearsal marks, staff text, chord symbols)
+    fixTempo | 템포를 10~999 범위로 맞췄어요 | Clamped the tempo to the 10–999 range
+    fixSignature | 올바르지 않은 조표·박자·마디 길이를 기본값으로 바꾸거나 지웠어요 | Reset or removed invalid key signatures, time signatures, and measure lengths
+    fixVoices | 마디당 성부는 4개까지라서 5번째 이후 성부를 뺐어요 | Removed the fifth and later voices (a measure holds up to four)
+    fixDuration | 음표 길이의 점·잇단음표 값을 바로잡았어요 | Corrected the dots and tuplet values of note durations
+    fixHugeDuration | 너무 큰 길이를 가진 음표·쉼표를 지웠어요 | Removed notes and rests with an excessively long duration
+    fixEventType | 음표·쉼표 종류가 올바르지 않아 바로잡았어요 | Corrected invalid note and rest types
+    fixPitch | 올바르지 않은 음높이를 바로잡거나 그 음을 지웠어요 | Corrected or removed notes with an invalid pitch
+    fixEmptyNote | 음이 하나도 없는 음표를 쉼표로 바꿨어요 | Replaced notes without any pitch with rests
+    fixVoiceLength | 마디 길이와 맞지 않는 성부를 쉼표로 채우거나 잘랐어요 | Filled voices that were too short with rests and trimmed voices that were too long
+    fixField | 모양이 올바르지 않은 항목(장식·가사·보표 설정 등)을 지웠어요 | Removed malformed items (ornaments, lyrics, staff settings, …)
+    fixId | 빠졌거나 올바르지 않은 번호(id)를 새로 붙였어요 | Assigned new ids to missing or invalid ones
+  `);
   group("error.midi", `
     truncated | 잘린 MIDI 파일이에요 | Truncated MIDI file
     variableLength | MIDI 가변 길이 값이 너무 길어요 | MIDI variable-length value is too long
@@ -1097,6 +1156,7 @@
   pattern("toast.pasted", /^(\d+)개를 붙여넣었어요$/, ["count"]);
   pattern("toast.transposeUp", /^(\d+)반음 올렸어요$/, ["count"]);
   pattern("toast.transposeDown", /^(\d+)반음 내렸어요$/, ["count"]);
+  pattern("toast.transposeKeptDiagrams", /^직접 만든 코드 다이어그램 (\d+)개는 그대로 두었어요$/, ["count"]);
   pattern("toast.tuplet", /^(\d+)잇단음표로 나눴어요$/, ["count"]);
   pattern("toast.repeat", /^(\d+)번 반복으로 설정했어요$/, ["count"]);
   pattern("toast.ending", /^(\d+)번 엔딩을 표시했어요$/, ["count"]);
@@ -1121,6 +1181,7 @@
   pattern("history.undo", /^실행 취소: ([\s\S]+)$/, ["action"], ["action"]);
   pattern("history.redo", /^다시 실행: ([\s\S]+)$/, ["action"], ["action"]);
   pattern("import.summary", /^"([\s\S]*)" — (\d+)마디를 가져왔어요\.\s*아래 항목은 이 앱이 지원하는 범위로 줄이면서 바뀌거나 무시됐어요\.$/, ["title", "measures"]);
+  pattern("import.fixSummary", /^"([\s\S]*)" — (\d+)마디를 열었어요\. 올바르지 않은 값이 있어 아래처럼 자동으로 고쳤어요\.$/, ["title", "measures"]);
   pattern("import.firstPart", /^파트 (\d+)개 중 첫 번째만 가져왔어요$/, ["count"]);
   pattern("import.tooManyMeasures", /^마디가 많아 앞 500마디만 가져왔어요 \(전체 (\d+)마디\)$/, ["count"]);
   pattern("import.counted", /^([\s\S]+) \((\d+)건\)$/, ["message", "count"], ["message"]);

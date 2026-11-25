@@ -79,7 +79,11 @@ test('P2-E ② 기록이 손상된 것뿐이면 null(데모는 호출한 쪽) + 
 
 test('P2-E ③ checkShape는 통과해도 fromJSON이 던지는 기록·parts가 문자열인 기록도 격리한다(코드는 오류 이름)', async () => {
   const h = boot();
-  const odd = h.SF.core.toJSON(h.SF.core.createScore({ measureCount: 1 })); odd.spanners = 'x';   // 모양 검사는 통과, fromJSON에서 예외
+  const odd = h.SF.core.toJSON(h.SF.core.createScore({ measureCount: 1 })); odd.meta.title = '이상';
+  // P8-2: 예전에는 odd.spanners = 'x'가 "모양 검사는 통과, fromJSON에서 예외"였지만 이제 검사가 그 값을 고쳐서 열기 때문에(③b),
+  // "검사를 통과한 뒤 core가 던지는 경우"는 core.fromJSON을 바꿔 흉내 낸다 — 기대값(격리·코드=오류 이름)은 그대로다.
+  const real = h.SF.core.fromJSON;
+  h.SF.core.fromJSON = data => { if (data?.meta?.title === '이상') throw new TypeError('예상 못 한 예외'); return real(data); };
   await h.plant('odd', '이상', 30, odd); await h.plant('str', '문자열', 20, { parts: 'x' }); await h.plant('fine', '멀쩡', 10);
   const score = await h.session.restoreOnBoot();
   assert.equal(score.meta.title, '멀쩡');
@@ -87,6 +91,21 @@ test('P2-E ③ checkShape는 통과해도 fromJSON이 던지는 기록·parts가
   same(found, { odd: 'TypeError', str: 'PARTS_NOT_ARRAY' });
   assert.equal((await h.load('odd')).quarantined, true); assert.equal((await h.load('str')).quarantined, true);
   assert.equal((await h.load('fine')).quarantined, undefined);
+});
+
+test('P8-2 P2-E ③b 값만 틀린 기록(spanners가 문자열)은 격리하지 않고 고쳐서 열며, 고친 항목을 bootInfo().fixes로 알린다', async () => {
+  const h = boot();
+  const odd = h.SF.core.toJSON(h.SF.core.createScore({ measureCount: 1 })); odd.spanners = 'x'; odd.meta.title = '이상';
+  await h.plant('odd', '이상', 30, odd); await h.plant('fine', '멀쩡', 10);
+  const score = await h.session.restoreOnBoot();
+  assert.equal(score.meta.title, '이상', '가장 최근 기록이 그대로 열린다');
+  assert.equal(h.session.bootInfo().quarantined.length, 0, '격리하지 않았다');
+  assert.equal((await h.load('odd')).quarantined, undefined);
+  const fixes = h.session.bootInfo().fixes;
+  assert.equal(fixes.length, 1); assert.match(fixes[0], /\(1건\)$/);
+  assert.equal((await h.session.restoreOnBoot()).meta.title, '이상', '기록 자체는 고치지 않았으니 다음 부팅도 같은 결과(편집·저장 때 고쳐진 모양으로 덮인다)');
+  // 정상 기록은 고친 항목이 없다
+  h.tab.setItem(TAB_KEY, 'fine'); assert.equal((await h.session.restoreOnBoot()).meta.title, '멀쩡'); same(h.session.bootInfo().fixes, []);
 });
 
 test('P2-E ④ schema.js 없이 로드돼도(옛 테스트 환경) 복원은 그대로 동작하고 fromJSON 실패만 격리한다', async () => {
@@ -295,8 +314,11 @@ test('P2-E ⑳ 저장소를 못 쓰는 환경(옛 localStorage 방식)에서도 
 test('구조 고정: 부팅 안전 모드 호출은 session.js·app.js에 한 벌씩 — schema는 선택 호출, 부팅의 직접 setScore는 없다', () => {
   const strip = text => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
   const session = strip(readFileSync('js/session.js', 'utf8')), app = strip(readFileSync('js/app.js', 'utf8'));
-  assert.equal((session.match(/SF\.schema\?\.checkShape\(/g) || []).length, 2, 'tryRecord·openDoc에서만 부른다');
-  assert.doesNotMatch(session, /SF\.schema\.checkShape\(/, 'schema.js 없이 로드되는 테스트를 보호하려면 ?.로만 부른다');
+  // P8-2: 보관된 기록을 읽는 길은 readRecord 한 곳 — 거기서만 검사(validate)를 부르고, 기록을 core에 바로 넣는 곳은 없다.
+  assert.equal((session.match(/SF\.schema\?\.validate\?\.\(/g) || []).length, 1, 'readRecord에서만 검사를 부른다');
+  assert.equal((session.match(/\breadRecord\(/g) || []).length, 6, '정의 1 + 옛 자동 저장 이전·tryRecord·plan·openDoc·copyForEditing');
+  assert.doesNotMatch(session, /SF\.schema\.(?:checkShape|validate)\(/, 'schema.js 없이 로드되는 테스트를 보호하려면 ?.로만 부른다');
+  assert.doesNotMatch(session, /C\.fromJSON\((?:doc|existing|obj\.score)\b/, '보관된 기록·옛 자동 저장을 core에 바로 넣지 않는다(검사 없이 열리는 길 금지)');
   for (const call of ['bootBegin', 'bootDone', 'bootFailed', 'bootOpenPending', 'bootSkipPending', 'bootDownloadPending', 'bootInfo'])
     assert.ok(app.includes(`SF.session.${call}(`), `app.js가 ${call}을 부른다`);
   assert.equal((app.match(/\bC\.setScore\(/g) || []).length, 1, 'installScore 한 곳');

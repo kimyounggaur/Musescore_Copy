@@ -3,7 +3,7 @@
 import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 
-const TOP_LEVEL = ['index.html', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'fonts/Bravura.woff2'];
+const TOP_LEVEL = ['index.html', 'privacy.html', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'fonts/Bravura.woff2'];
 const SHELL_DIRS = ['js', 'css', 'vendor', 'manual'];
 const SHELL_FILE = /\.(js|mjs|css|html|svg|png|jpe?g|woff2)$/;
 /** 문자열로 읽어 줄바꿈을 LF로 맞춘 뒤 해시하는 확장자. 그 밖(png·woff2 등)은 바이트 그대로. */

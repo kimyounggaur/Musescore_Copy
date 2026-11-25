@@ -36,6 +36,8 @@
 
   // Compatibility alias; all file loading goes through the unified dialog.
   function openJSON(onLoaded) { return openScoreDialog(onLoaded); }
+  /** 이보다 큰 .json 파일은 읽지 않고 거절한다(이벤트 20만 개 한도로도 이 안에 들어온다 — schema.js LIMITS 참고). */
+  const MAX_JSON_BYTES = 64 * 1024 * 1024;
 
   /* ---------------- 자동 저장 ---------------- */
   const AUTOSAVE_KEY = "scoreforge.autosave.v1";
@@ -86,13 +88,18 @@
     if (!job && C.isAutosaved?.()) return Promise.resolve(true);
     return Promise.resolve(runAutosave(C.state.score, C.state.revision, job?.options || {}));
   }
-  function loadAutosave() {
+  /** 예전 방식(localStorage 1칸)의 자동 저장을 읽는다. 파일 열기와 같은 검사(P8-2)를 거치며, 고칠 수 없으면 null.
+   * fixes(배열)를 넘기면 자동으로 고친 항목 문구를 거기에 담는다. */
+  function loadAutosave(fixes) {
     try {
       const raw = localStorage.getItem(AUTOSAVE_KEY);
       if (!raw) return null;
       const obj = JSON.parse(raw);
       if (!obj.score || (!obj.score.measures && !obj.score.parts)) return null;
-      return C.fromJSON(obj.score);
+      const checked = SF.schema?.validate ? SF.schema.validate(obj.score) : null;
+      if (checked?.fatal) return null;
+      if (checked && Array.isArray(fixes)) fixes.push(...SF.schema.fixLines(checked.summary));
+      return C.fromJSON(checked ? checked.score : obj.score);
     } catch (e) { return null; }
   }
   function clearAutosave() {
@@ -1066,6 +1073,7 @@
         .then(xml => { const r = parseMusicXML(xml); onLoaded(r.score, name, null, r.report); return r; })
         .catch(fail);
     }
+    if (/\.json$/i.test(lower) && file.size > MAX_JSON_BYTES) { fail(new Error("파일이 너무 커요(64MB 초과)")); return; }   // 읽기 전에 거른다 — 문자열·파싱이 탭을 죽이지 않게
     const reader = new FileReader();
     reader.onload = () => {
       try {
@@ -1075,7 +1083,11 @@
           const obj = JSON.parse(text.replace(/^﻿/, ""));
           const raw = obj.score && (obj.score.measures || obj.score.parts) ? obj.score : (obj.measures || obj.parts ? obj : null);
           if (!raw) throw new Error("ScoreForge 악보 파일이 아니에요");
-          onLoaded(C.fromJSON(raw), name, null, []);
+          // 모양을 거르고 고칠 수 있는 것은 고쳐서 연다(P8-2). 고칠 수 없으면 ScoreFormatError — 아래 catch가 "열 수 없어요"로 알린다.
+          const checked = SF.schema?.validate ? SF.schema.validate(raw) : null;
+          if (checked?.fatal) throw checked.fatal;
+          const lines = checked ? SF.schema.fixLines(checked.summary) : [];
+          onLoaded(C.fromJSON(checked ? checked.score : raw), name, null, lines, lines.length ? { reportKind: "fixes" } : undefined);
         } else if (head.startsWith("<")) {
           const r = parseMusicXML(text);
           onLoaded(r.score, name, null, r.report);
