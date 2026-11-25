@@ -220,7 +220,7 @@
       C.setActiveStaff(score, ctx.partIdx, ctx.staffIdx);
       inserted = C.inputAt(score, mIdx, tick, dur, pitches, { ...ctx, voice: ui.currentVoice });
       if (inserted && pitches && pitches.length) mirrorLinkedTab(score, ctx, mIdx, tick, dur, pitches, inserted);
-    });
+    }, { local: true }); // P9-8: 입력은 replaceRange로만 악보를 고친다 → 조판기가 바뀐 마디가 있는 줄만 다시 그린다
     ui.lastInsertedId = inserted;
     if (pitches && pitches.length) {
       ui.lastPitch = pitches[pitches.length - 1];
