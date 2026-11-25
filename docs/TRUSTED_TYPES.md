@@ -17,34 +17,35 @@ P9-6에서 만든 보고서입니다. 앱 코드가 HTML 문자열을 DOM에 넣
 
 | 파일 | 합계 | 지움 | 고정 문구 | 값 섞임 |
 |---|---:|---:|---:|---:|
-| js/app.js | 10 | 0 | 0 | 10 |
+| js/app.js | 11 | 0 | 0 | 11 |
 | js/auth.js | 6 | 0 | 4 | 2 |
 | js/engrave.js | 10 | 7 | 0 | 3 |
 | js/export-ui.js | 2 | 0 | 0 | 2 |
 | js/input.js | 3 | 0 | 2 | 1 |
 | js/palette.js | 2 | 0 | 0 | 2 |
 | js/panels.js | 6 | 0 | 0 | 6 |
-| **합계** | **39** | **7** | **6** | **26** |
+| **합계** | **40** | **7** | **6** | **27** |
 
 ## 값 섞임 목록
 
 아래 사용처가 Trusted Types 도입 시 `TrustedHTML` 변환(또는 `textContent`·DOM 만들기로 대체)이 필요한 곳입니다. 내용은 줄 번호 기준이며 코드가 바뀌면 도구로 다시 뽑습니다.
 
-- js/app.js:87 `.innerHTML = res.svg`
-- js/app.js:425 `.innerHTML = DURS.map((b, i) => '<button class="tbtn dur" data-i`
-- js/app.js:433 `.innerHTML = E.iconAcc("sharp")`
-- js/app.js:434 `.innerHTML = E.iconAcc("flat")`
-- js/app.js:435 `.innerHTML = E.iconAcc("natural")`
-- js/app.js:436 `.innerHTML = E.iconRest() + "<span>쉼표</span>"`
-- js/app.js:440 `.innerHTML = Object.entries(P.INSTRUMENTS).map(([k, v]) => '<option va`
-- js/app.js:573 `.innerHTML = staffOptions`
-- js/app.js:579 `.innerHTML = viewOptions`
-- js/app.js:708 `.innerHTML = report.map(r => '<li>${r.replace(/&/g, "&amp;").replace(/`
+- js/app.js:87 `.innerHTML = markup`
+- js/app.js:129 `.innerHTML = res.svg`
+- js/app.js:468 `.innerHTML = DURS.map((b, i) => '<button class="tbtn dur" data-i`
+- js/app.js:476 `.innerHTML = E.iconAcc("sharp")`
+- js/app.js:477 `.innerHTML = E.iconAcc("flat")`
+- js/app.js:478 `.innerHTML = E.iconAcc("natural")`
+- js/app.js:479 `.innerHTML = E.iconRest() + "<span>쉼표</span>"`
+- js/app.js:483 `.innerHTML = Object.entries(P.INSTRUMENTS).map(([k, v]) => '<option va`
+- js/app.js:616 `.innerHTML = staffOptions`
+- js/app.js:622 `.innerHTML = viewOptions`
+- js/app.js:751 `.innerHTML = report.map(r => '<li>${r.replace(/&/g, "&amp;").replace(/`
 - js/auth.js:683 `.innerHTML = [ ["계정", user && user.email ? user.email : profile.`
 - js/auth.js:725 `.innerHTML = '<div class="admin-empty">회원 목록을 불러오지 못했어요. ${htmlEsc(aut`
-- js/engrave.js:1824 `.innerHTML = s`
-- js/engrave.js:1836 `.innerHTML = '<line class="input-caret" x1="${r2(x)}" y1="${ST.y`
-- js/engrave.js:1874 `.innerHTML = s`
+- js/engrave.js:1914 `.innerHTML = s`
+- js/engrave.js:1926 `.innerHTML = '<line class="input-caret" x1="${r2(x)}" y1="${ST.y`
+- js/engrave.js:1964 `.innerHTML = s`
 - js/export-ui.js:68 `.innerHTML=result.pages.join("")`
 - js/export-ui.js:99 `.innerHTML=result.pages.join("")`
 - js/input.js:869 `.innerHTML = html`

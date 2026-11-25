@@ -78,13 +78,56 @@
   let changeRevision = 0, renderedRevision = -1, renderedScore = null, renderKey = "", frame = null;
   let saveTimer = null, savedRevision = 0;
   let propertiesScore = null, propertiesKey = "", propertiesRevision = -1;
+  /* P9-8: 지난번에 DOM에 그린 조각(parts)과 그때의 <svg>. 이번 조각과 글자로 비교해 달라진 시스템(줄)·꼬리(타이·스패너)만 바꾼다.
+   * 어느 하나라도 이상하면(구조가 다름·노드가 사라짐·예외) false를 돌려주고, 부른 쪽이 예전처럼 통째로 갈아끼운다. */
+  let hostParts = null, hostSvg = null;
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  function svgNodes(markup) {
+    const holder = document.createElementNS(SVG_NS, "g");
+    holder.innerHTML = markup; // 조판기가 esc()로 거른 SVG 조각만 들어온다(악보 글자는 모두 이스케이프됨)
+    return Array.from(holder.childNodes);
+  }
+  const isOverlay = node => node.nodeType === 1 && (/(^|\s)overlay-/.test(node.getAttribute("class") || "") || node.getAttribute("id") === "play-cursor" || /(^|\s)play-cursor(\s|$)/.test(node.getAttribute("class") || ""));
+  function patchHost(host, parts) {
+    const prev = hostParts;
+    if (!parts || !prev || !hostSvg || host.children.length !== 1 || host.firstElementChild !== hostSvg) return false;
+    const was = prev.segments, now = parts.segments;
+    if (parts.rest !== prev.rest || was.length !== now.length || now.some((seg, i) => seg.type !== was[i].type)) return false;
+    const main = hostSvg.querySelector(":scope > #score-main");
+    if (!main) return false;
+    const systemEl = index => main.querySelector(`:scope > g.system[data-system="${index}"]`);
+    if (main.querySelectorAll(":scope > g.system").length !== now.filter(seg => seg.type === "system").length) return false;
+    try {
+      now.forEach((seg, i) => {
+        if (seg.svg === was[i].svg) return;
+        if (seg.type === "system") {
+          const old = systemEl(seg.index);
+          if (!old) throw new Error("missing system");
+          old.replaceWith(...svgNodes(seg.svg));
+          return;
+        }
+        // 꼬리: 같은 페이지의 마지막 시스템 바로 뒤부터 다음 시스템·덮개 앞까지의 노드
+        const anchor = i > 0 && now[i - 1].type === "system" ? systemEl(now[i - 1].index) : null;
+        if (!anchor) throw new Error("missing anchor");
+        let node = anchor.nextSibling;
+        while (node && !(node.nodeType === 1 && node.matches("g.system")) && !isOverlay(node)) { const next = node.nextSibling; node.remove(); node = next; }
+        anchor.after(...svgNodes(seg.svg));
+      });
+      for (const [name, value] of Object.entries(parts.rootAttrs)) if (hostSvg.getAttribute(name) !== value) hostSvg.setAttribute(name, value);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
   function relayout() {
     const score = C.state.score;
     const res = E.render(score, { cache: true, selection: selectedIds(), selectedNoteIdx: ui.selectedNoteIdx,
       viewMode: ui.viewMode, pageMode: ui.pageMode, multiRest: ui.viewMode.type === "part" && ui.multiRest && !ui.inputMode && !ui.speedy,
       hideEmptyStaves: ui.hideEmptyStaves, activeVoice: ui.currentVoice });
     layoutCache = res.layout;
-    $("#svg-host").innerHTML = res.svg;
+    const host = $("#svg-host");
+    if (!patchHost(host, res.parts)) host.innerHTML = res.svg;
+    hostParts = res.parts; hostSvg = res.parts ? host.firstElementChild : null;
     // 음표머리 클릭 영역은 조판기(engrave.js)가 그림과 함께 그린다 — 여기서 따로 붙이지 않는다.
     renderedScore = score; renderedRevision = changeRevision;
     const svg = $("#score-svg");

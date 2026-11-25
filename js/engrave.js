@@ -639,6 +639,60 @@
   // 클릭 영역(.note-hit)을 그릴지. render()가 opts.export를 보고 호출마다 정하고 되돌린다 — 내보낸 SVG·PNG·인쇄물에는 넣지 않는다.
   let emitHits = true;
   const renderCache = new WeakMap();
+  // P9-8 증분 조판. 시험 전용 계수기(이름이 __): 시스템을 새로 그린 횟수·이전 조각을 재사용한 횟수.
+  const stats = { systemsBuilt: 0, systemsReused: 0 };
+  const replaceSets = (_key, value) => value instanceof Set ? [...value] : value;
+  /* 시스템 키: 이 줄의 좌표를 정하는 값 전부. 마디 내용 자체는 담지 않는다 — 내용은 dirty 기록(core.dirtySince)이 대신 보증한다.
+   * (마디 x0·x1·scale·prefixW에 음자리표·조·박자 표지 폭과 배율이 이미 녹아 있다)
+   * 마디 목록 항목은 줄 첫 마디 번호(SL.mIdx)와 마디 폭으로도 정해져 일부 겹치지만, 줄 나눔 규칙이 바뀌어도 안전하도록 남긴다
+   * (변이 검사: 지워도 시험 결과가 같다 — 겹침임을 추가 시드 60개로 확인) */
+  function systemKey(S, L) {
+    return JSON.stringify([S.index, S.page, S.x0, S.x1, S.yTop, S.headerW, S.nameW, S.height, S.pageY, S.contentTop, S.lyricOff, S.breakAfter || null,
+      S.first ? 1 : 0, L.hasLyrics ? 1 : 0, L.multiRest ? 1 : 0, L.pageMode,
+      S.staffLayouts.map(SL => [SL.yTop, SL.clef, SL.mIdx, SL.laneY]),
+      S.measures.map(M => [M.idx, M.span, M.collapsed ? 1 : 0, M.x0, M.x1, M.prefixW, M.scale, M.length])]);
+  }
+  /* 그리면서 레이아웃 이벤트에 남기는 값(le.stemDir: 타이·슬러가 반대쪽을 고를 때, le.noteheads: 클릭·커서·고스트·스패너)은
+   * 그림 문자열을 재사용하면 새로 만든 le에는 채워지지 않는다 → 시스템마다 같이 보관했다가 재사용할 때 같은 id의 새 le에 되돌려 넣는다. */
+  function systemEffects(S) {
+    const out = [];
+    for (const M of S.measures) for (const le of M.events) out.push([le.id, le.stemDir, le.noteheads]);
+    return out;
+  }
+  function replayEffects(L, effects) {
+    for (const [id, stemDir, heads] of effects) {
+      const le = L.eventsById.get(id);
+      if (!le) continue;
+      if (stemDir !== undefined) le.stemDir = stemDir;
+      le.noteheads = heads.slice();
+    }
+  }
+  /* 이 시스템 안의 음·쉼표 중 선택된 것만 모은 글자열. 선택이 바뀌어도 이 글자열이 같으면 그 줄은 그대로다. */
+  function selectionKeys(sel, L) {
+    const bySystem = new Map();
+    if (!sel || !sel.size) return bySystem;
+    for (const id of sel) {
+      const le = L.eventsById.get(String(id).split("#")[0]);
+      if (!le) continue;
+      const list = bySystem.get(le.sys.index);
+      if (list) list.push(id); else bySystem.set(le.sys.index, [id]);
+    }
+    for (const [index, list] of bySystem) bySystem.set(index, list.sort().join(","));
+    return bySystem;
+  }
+  /* 시스템이 건드려졌는지: 그 줄의 마디(멀티레스트면 묶인 마디 전체)가 바뀐 마디 집합에 있는지.
+   * 묶음 안쪽까지 보는 것도 겹치는 보험이다 — 묶음 안쪽에 음이 들어가면 묶음(span) 자체가 달라져 좌표 키가 먼저 걸린다. */
+  function systemTouched(S, dirty) {
+    for (const M of S.measures) for (let k = M.idx; k < M.idx + (M.span || 1); k++) if (dirty.has(k)) return true;
+    return false;
+  }
+  /* 바뀐 마디의 앞뒤 한 마디까지 넓힌다: 붙임줄 정리(normalizeTies)가 이웃 마디 끝 음의 tie를 고치고,
+   * 붙임줄로 이어 오는 음은 임시표를 다시 안 붙이므로 이웃 마디의 모양이 달라질 수 있다. */
+  function widenDirty(measures) {
+    const out = new Set();
+    for (const m of measures) { out.add(m - 1); out.add(m); out.add(m + 1); }
+    return out;
+  }
 
   function render(score, opts = {}) {
     const savedLayout = lastLayout, savedFont = fontReady, savedHits = emitHits;
@@ -656,13 +710,37 @@
       return cached.result;
     }
     const L = layout(score, opts);
+    // P9-8: 화면용(cache:true·내보내기 아님) 렌더만 지난번에 그린 시스템 조각을 재사용할 수 있다. 판단의 근거는 세 가지가 모두 맞을 때뿐이다 —
+    //  ① 선택을 뺀 전역 키가 같다 ② core.dirtySince가 "이 마디들만 바뀜"을 보증한다 ③ 그 시스템의 좌표 키·선택 키가 같다.
+    const incremental = opts.cache === true && !opts.export;
+    const { selection: _selection, selectedNoteIdx: _selectedNoteIdx, ...restOpts } = opts;
+    const globalKey = incremental ? JSON.stringify([fontReady, score.meta, score.layout, score.style, score.activeStaff, score.activePartIdx, score.activeStaffIdx, restOpts], replaceSets) : null;
+    const rev = score.__cache?.rev;
+    const prevMemo = incremental && cached?.memo && cached.memo.global === globalKey ? cached.memo : null;
+    let dirty = null;
+    if (prevMemo && Number.isInteger(prevMemo.rev)) {
+      const since = C.dirtySince(score, prevMemo.rev);
+      if (since) dirty = widenDirty(since);
+    }
     let sel = opts.selection || null;
     if (sel && typeof sel === "object" && !(sel instanceof Set) && sel.id) sel = sel.noteIdx == null ? sel.id : `${sel.id}#${sel.noteIdx}`;
     if (sel && !(sel instanceof Set)) sel = new Set([sel]);
     if (sel && Number.isInteger(opts.selectedNoteIdx)) sel = new Set([...sel].map(id => `${id}#${opts.selectedNoteIdx}`));
-    const contents = new Map(L.pages.map(p => [p.index, ""]));
+    const selKeys = incremental ? selectionKeys(sel, L) : null;
+    const memoSys = [];
+    const pageSegments = new Map(L.pages.map(p => [p.index, []]));
 
     for (const S of L.systems) {
+      const geo = incremental ? systemKey(S, L) : null, selKey = incremental ? selKeys.get(S.index) || "" : null;
+      const old = dirty && prevMemo.sys[S.index];
+      if (old && old.geo === geo && old.sel === selKey && !systemTouched(S, dirty)) {
+        stats.systemsReused++;
+        replayEffects(L, old.effects);
+        memoSys[S.index] = old;
+        pageSegments.get(S.page).push({ type: "system", index: S.index, svg: old.svg });
+        continue;
+      }
+      stats.systemsBuilt++;
       let svg = staffLines(S);
       svg += clefAndKey(S, score);
       if (S.first || score.measures[S.measures[0].idx]?.timeSig) svg += timeSig(S, score);
@@ -679,24 +757,36 @@
           svg += renderMeasure(score, SM, SM.staff, beams, sel);
         }
       }
-      contents.set(S.page, contents.get(S.page) + `<g class="system" data-system="${S.index}" data-page="${S.page}">${svg}</g>`);
+      const group = `<g class="system" data-system="${S.index}" data-page="${S.page}">${svg}</g>`;
+      if (incremental) memoSys[S.index] = { geo, sel: selKey, svg: group, effects: systemEffects(S) };
+      pageSegments.get(S.page).push({ type: "system", index: S.index, svg: group });
     }
-    for (const page of L.pages) contents.set(page.index, contents.get(page.index) + renderTies(score, L, page.index) + renderSpanners(score, L, sel, page.index));
+    for (const page of L.pages) pageSegments.get(page.index).push({ type: "tail", page: page.index, svg: renderTies(score, L, page.index) + renderSpanners(score, L, sel, page.index) });
+    const contents = new Map([...pageSegments].map(([index, list]) => [index, list.map(seg => seg.svg).join("")]));
     const pagesMode = L.pageMode === "pages";
-    const build = (page, body) => {
+    const pieces = (page, body) => {
       const index = page?.index ?? 0;
       const height = pagesMode ? page.height : L.height;
       const offset = pagesMode ? page.offsetY : 0;
       const attrs = pagesMode ? `class="page" data-page="${index}" id="score-svg-page-${index}"` : 'id="score-svg"';
       const overlays = opts.export ? "" : ["ghost", "cursor", "speedy"].map(name => `<g ${pagesMode ? `class="overlay-${name}" data-page="${index}"` : `id="overlay-${name}" class="overlay-${name}"`} pointer-events="none"></g>`).join("") +
         `<line ${pagesMode ? 'class="play-cursor"' : 'id="play-cursor" class="play-cursor"'} x1="0" x2="0" y1="0" y2="0" stroke="var(--accent,#e8590c)" stroke-width="2" opacity="0" pointer-events="none"/>`;
-      return `<svg ${attrs} viewBox="0 0 ${L.pageW} ${height}" width="${L.pageW}" height="${height}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${esc(score.meta?.title || "Score")}, ${countMeasures(L)} measures, page ${index + 1}" font-family="Arial,sans-serif" style="color:var(--ink,#161a20);background:var(--paper,#fff)" preserveAspectRatio="xMidYMin meet">` +
-        `<style>${svgStyles(L.style, opts.export)}</style>${renderPageText(score, L, page, opts)}` +
-        `<g ${pagesMode ? 'class="page-content"' : 'id="score-main"'} transform="translate(0,${-offset})">${body}${overlays}</g></svg>`;
+      const rootAttrs = { viewBox: `0 0 ${L.pageW} ${height}`, width: String(L.pageW), height: String(height),
+        "aria-label": `${esc(score.meta?.title || "Score")}, ${countMeasures(L)} measures, page ${index + 1}` };
+      const open = `<svg ${attrs} viewBox="${rootAttrs.viewBox}" width="${rootAttrs.width}" height="${rootAttrs.height}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${rootAttrs["aria-label"]}" font-family="Arial,sans-serif" style="color:var(--ink,#161a20);background:var(--paper,#fff)" preserveAspectRatio="xMidYMin meet">`;
+      const rest = `<style>${svgStyles(L.style, opts.export)}</style>${renderPageText(score, L, page, opts)}` +
+        `<g ${pagesMode ? 'class="page-content"' : 'id="score-main"'} transform="translate(0,${-offset})">`;
+      return { open, rest, body, foot: `${overlays}</g></svg>`, rootAttrs };
     };
+    const build = (page, body) => { const p = pieces(page, body); return p.open + p.rest + p.body + p.foot; };
     const pageSVGs = pagesMode ? L.pages.map(p => build(p, contents.get(p.index))) : [build(null, [...contents.values()].join(""))];
-    const result = { svg: pageSVGs.join(""), pages: pageSVGs, pageSVGs, layout: L };
-    if (opts.cache === true) renderCache.set(score, { key: cacheKey, result });
+    const result = { svg: pageSVGs.join(""), pages: pageSVGs, pageSVGs, layout: L, parts: null };
+    if (!pagesMode) {
+      // 연속 보기: 앱이 바뀐 시스템·꼬리(타이·스패너)만 DOM에서 바꾸도록 조각으로도 돌려준다. open+rest+조각들+foot === svg.
+      const p = pieces(null, "");
+      result.parts = { open: p.open, rest: p.rest, foot: p.foot, rootAttrs: p.rootAttrs, segments: L.pages.flatMap(page => pageSegments.get(page.index)) };
+    }
+    if (opts.cache === true) renderCache.set(score, { key: cacheKey, result, memo: incremental ? { global: globalKey, rev, sys: memoSys } : cached?.memo });
     return result;
     } finally {
       fontReady = savedFont;
@@ -1918,5 +2008,6 @@
     drawGhost, drawInputCursor, drawSpeedy, clearOverlays,
     iconNote, iconRest, iconAcc,
     getLayout: () => lastLayout,
+    __stats: stats,
   };
 })(window.SF);

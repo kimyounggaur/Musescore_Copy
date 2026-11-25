@@ -196,7 +196,8 @@
     const duration=A.$("#play-duration");if(duration){const total=(A.P.player.compiled?.totalSec||0)/A.ui.playbackRate;duration.textContent=total?`${Math.floor(total/60)}:${String(Math.round(total%60)).padStart(2,"0")}`:"";}
     for(const grid of A.$$(".prop-grid"))for(const label of grid.querySelectorAll("label:not([for])")){const control=label.nextElementSibling;if(control?.matches("input,select,textarea")){control.id||=`prop-${control.dataset.prop||Math.random().toString(36).slice(2)}`;label.htmlFor=control.id;}}
     document.querySelectorAll("button,select,input").forEach(el=>{
-      if(!el.getAttribute("aria-label")&&!el.labels?.length&&!el.getAttribute("aria-labelledby")&&(el.tagName!=="BUTTON"||!el.textContent.trim())){const label=el.title||el.placeholder||el.id;if(label)el.setAttribute("aria-label",label);}
+      // el.labels는 문서 전체를 훑는 비싼 조회(악보 SVG 노드가 많을수록, DOM이 바뀔 때마다 다시 계산) — 값싼 검사를 앞에 두고 맨 끝에서만 부른다(조건 자체는 그대로).
+      if(!el.getAttribute("aria-label")&&!el.getAttribute("aria-labelledby")&&(el.tagName!=="BUTTON"||!el.textContent.trim())&&!el.labels?.length){const label=el.title||el.placeholder||el.id;if(label)el.setAttribute("aria-label",label);}
       if(el.matches("button.tbtn,button.dur"))el.setAttribute("aria-pressed",String(el.classList.contains("on")));
     });
   }
