@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 const context = { window: { SF: {core: {}} }, atob };
+vm.runInNewContext(readFileSync('js/safe-html.js', 'utf8'), context);
 vm.runInNewContext(readFileSync('js/auth.js', 'utf8'), context);
 test('browser configuration accepts publishable/anon keys only', () => {
   const isPublic = context.window.SF.auth.isPublicKey;

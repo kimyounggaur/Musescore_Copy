@@ -15,9 +15,7 @@
   const toast = (...args) => api.toast(...args);
   const flashHint = (...args) => api.flashHint(...args);
   /* ---------------- 속성 패널 ---------------- */
-  function htmlEsc(s) {
-    return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
-  }
+  const htmlEsc = SF.html.esc;
   function checked(v) { return v ? "checked" : ""; }
   function selectedPropIds() {
     const ids = selectedIds();
@@ -80,7 +78,7 @@
     }
     html += `<section class="prop-sec"><h3>기호/텍스트</h3><div class="prop-grid">
       <label>셈여림</label><select data-prop="dynamic">${dynOptions}</select>
-      <label>템포</label><input type="number" data-prop="tempo" min="30" max="280" value="${ev.tempo || ""}" placeholder="없음">
+      <label>템포</label><input type="number" data-prop="tempo" min="30" max="280" value="${SF.html.num(ev.tempo, { min: 30, max: 280 })}" placeholder="없음">
       <label>리허설</label><input type="text" data-prop="rehearsal" value="${htmlEsc(ev.rehearsal || "")}" maxlength="12">
       <label>스태프 텍스트</label><input type="text" data-prop="staffText" value="${htmlEsc(ev.staffText || "")}" maxlength="48">
       <label>코드</label><input type="text" data-prop="chordSymbol" value="${htmlEsc(ev.chordSymbol ? (ev.chordSymbol.normalized || ev.chordSymbol.raw || "") : "")}" maxlength="24">

@@ -8,7 +8,7 @@ import vm from 'node:vm';
 const context = vm.createContext({ console, setTimeout, clearTimeout });
 context.window = context;
 context.document = { getElementById: () => null, querySelectorAll: () => [] };
-for (const name of ['core', 'engrave']) vm.runInContext(readFileSync(new URL(`../js/${name}.js`, import.meta.url), 'utf8'), context, { filename: `${name}.js` });
+for (const name of ['safe-html', 'core', 'engrave']) vm.runInContext(readFileSync(new URL(`../js/${name}.js`, import.meta.url), 'utf8'), context, { filename: `${name}.js` });
 const { core: C, engrave: E, F } = context.SF;
 const pitch = (step = 0, alter = 0, oct = 4) => ({ step, alter, oct });
 const note = (id, notes, d = 4, extra = {}) => ({ id, type: 'note', notes, dur: { n: 1, d, dots: 0 }, voice: 1, ...extra });

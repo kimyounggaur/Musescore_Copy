@@ -4,7 +4,7 @@
   const C = SF.core;
   const $ = selector => document.querySelector(selector);
   const toast = message => SF.app.toast(message);
-  const htmlEsc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const htmlEsc = SF.html.esc;
   const SUPABASE_URL_KEY = "scoreforge.supabase.url";
   const SUPABASE_KEY_KEY = "scoreforge.supabase.publishableKey";
   const AUTH_MODES = {

@@ -161,7 +161,7 @@
     FB[`rest${den}`] = { d };
   }
 
-  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;").replace(/>/g, "&gt;"); }
+  const esc = SF.html.esc;
   function safeColor(s) {
     const v = String(s || "").trim();
     return /^#[0-9a-fA-F]{6}$/.test(v) ? v : "";
@@ -779,7 +779,7 @@
         const g = str.split("").map(ch => TIMESIG_DIGITS[+ch]).join("");
         return `<text x="${x}" y="${y}" font-family="BravuraSF" font-size="40px" text-anchor="middle">${g}</text>`;
       }
-      return `<text x="${x}" y="${y + 7}" font-family="Georgia,'Times New Roman',serif" font-weight="700" font-size="23px" text-anchor="middle">${str}</text>`;
+      return `<text x="${x}" y="${y + 7}" font-family="Georgia,'Times New Roman',serif" font-weight="700" font-size="23px" text-anchor="middle">${esc(str)}</text>`;
     };
     return `<g class="time-signature">${draw(ts.num, SL.yTop + SP)}${draw(ts.den, SL.yTop + 3 * SP)}</g>`;
   }
