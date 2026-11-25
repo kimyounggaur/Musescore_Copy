@@ -139,7 +139,7 @@ test('real browser UI editing, persistence, pagination, exports and responsive c
     await t.test('MIDI options, safe names, responsive properties and accessibility', async () => {
       await reset();
       await page.evaluate(()=>{SF.io.requestMidiOptions({tracks:[{index:0,name:'<img src=x onerror=alert(1)>'}]},{name:'검증.mid'}).then(v=>window.midiOptionResult=v);});
-      await page.locator('#midi-grid').selectOption(String(1/32));await page.locator('#midi-triplets').check();await page.locator('#dlg-midi-import button[type=submit]').click();assert.deepEqual(await page.evaluate(()=>window.midiOptionResult),{grid:1/32,detectTriplets:true,tracks:[0]});
+      await page.locator('#midi-grid').selectOption(String(1/32));await page.locator('#midi-triplets').check();await page.locator('#dlg-midi-import button[type=submit]').click();await page.waitForFunction(()=>window.midiOptionResult!==undefined);assert.deepEqual(await page.evaluate(()=>window.midiOptionResult),{grid:1/32,detectTriplets:true,tracks:[0]});
       await page.evaluate(()=>{SF.core.mutate('이름',s=>{s.parts[0].name='<img src=x onerror=alert(1)>';});SF.app.update({immediate:true});});assert.equal(await page.locator('#staff-select img,#view-select img').count(),0);
       for(const [width,height]of [[375,812],[768,1024]]) {
         await page.setViewportSize({width,height});await page.evaluate(()=>{document.querySelector('#properties-panel').classList.add('collapsed');SF.app.update();});await settle();

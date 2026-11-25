@@ -49,7 +49,7 @@ test('release manifest references local files and matching version', () => {
   assert.ok(files.includes('vendor/supabase.js'));
   assert.equal(JSON.parse(readFileSync('manifest.webmanifest', 'utf8')).display, 'standalone');
   const version = readFileSync('js/version.js', 'utf8').match(/SF\.VERSION = "([^"]+)"/)[1];
-  assert.ok(readFileSync('sw.js', 'utf8').includes('CACHE_VERSION = "' + version + '"'));
+  assert.match(readFileSync('sw.js', 'utf8'), new RegExp('CACHE_VERSION = "' + version.replace(/\./g, '\\.') + '\\+[0-9a-f]{8}"'));   // 버전 + 앱 셸 해시(Step 3-5)
 });
 test('cleanUrls redirected HTML can be returned to an offline navigation', async () => {
   const { context } = serviceWorker();
