@@ -286,3 +286,61 @@ test('③ 2도가 없는 화음·낱음표와 점 2개의 위치는 그대로다
   const third = chordGeometry([[2, 0], [4, 0]], { dots: 1 });
   assert.deepEqual(third.dots.map(d => d.x), [third.le.x + 9.5, third.le.x + 9.5]);
 });
+
+/* ============ ④ 파트 이름과 묶음 괄호 ============ */
+function nameGeometry(score, opts = {}) {
+  const r = render(score, opts);
+  const names = [...r.svg.matchAll(/<text class="part-name" x="([-.\d]+)" y="([-.\d]+)" text-anchor="end">([^<]*)<\/text>/g)].map(m => ({ x: +m[1], y: +m[2], text: m[3] }));
+  const braces = [...r.svg.matchAll(/<path class="brace" d="M ([-.\d]+) ([-.\d]+) C ([-.\d]+) ([-.\d]+)/g)].map(m => ({ left: +m[3], y: +m[2] }));
+  return { r, names, braces, systems: r.layout.systems, margin: r.layout.metrics.marginLeft };
+}
+const cjkWidth = text => Array.from(text).reduce((w, ch) => w + (ch === ' ' ? 4 : 13), 0); // 한글 13px, 공백 4px
+
+test('④ 피아노(묶음 괄호 있음): 이름 오른쪽 끝이 괄호 왼쪽 끝보다 4 이상 왼쪽이다', () => {
+  const g = nameGeometry(C.createScore({ measureCount: 4, ensemble: 'piano' }));
+  assert.equal(g.names.length, 1);
+  assert.equal(g.braces.length, 1);
+  assert.ok(g.names[0].x <= g.braces[0].left - 4 + 0.01, `이름 끝 ${g.names[0].x} > 괄호 왼쪽 ${g.braces[0].left} − 4`);
+});
+test('④ 괄호 없는 파트의 이름 위치는 그대로다(현악 4중주: x0−12)', () => {
+  const g = nameGeometry(C.createScore({ measureCount: 4, ensemble: 'string-quartet' }));
+  assert.equal(g.braces.length, 0);
+  assert.equal(g.names.length, 4);
+  for (const n of g.names) assert.equal(n.x, g.systems[0].x0 - 12);
+});
+test('④ 플루트 + 피아노: 플루트 이름은 그대로, 피아노 이름만 괄호 왼쪽으로 비킨다', () => {
+  const g = nameGeometry(C.createScore({ measureCount: 4, ensemble: 'flute-piano' }));
+  const [flute, pno] = g.names, x0 = g.systems[0].x0;
+  assert.equal(flute.x, x0 - 12);
+  assert.ok(pno.x <= g.braces[0].left - 4 + 0.01);
+  assert.ok(pno.x < flute.x);
+});
+test('④ 이어지는 줄(짧은 이름)에도 같은 규칙이 적용된다', () => {
+  const s = C.createScore({ measureCount: 24, ensemble: 'piano' });
+  const g = nameGeometry(s);
+  assert.ok(g.systems.length >= 2, '줄이 둘 이상이어야 한다');
+  const later = [...g.r.svg.matchAll(/<text class="part-name" x="([-.\d]+)"[^>]*>([^<]*)<\/text>/g)].map(m => ({ x: +m[1], text: m[2] }));
+  assert.equal(later.length, g.systems.length);
+  const braceLefts = [...g.r.svg.matchAll(/<path class="brace" d="M [-.\d]+ [-.\d]+ C ([-.\d]+)/g)].map(m => +m[1]);
+  later.forEach((n, i) => assert.ok(n.x <= braceLefts[i] - 4 + 0.01, `${i + 1}째 줄 이름 끝 ${n.x} > 괄호 ${braceLefts[i]}`));
+  assert.ok(later.some(n => n.text === 'Pno.'), '둘째 줄부터는 짧은 이름');
+});
+test('④ 이름이 길면 이름 칸이 늘어나 이름이 쪽 왼쪽 여백 밖으로 나가지 않는다', () => {
+  for (const [ens, longName] of [['piano', '아주 긴 건반 악기 이름'], ['string-quartet', '아주 긴 현악기 이름입니다']]) {
+    const s = C.createScore({ measureCount: 4, ensemble: ens });
+    s.parts[0].name = longName;
+    if (C.invalidate) C.invalidate(s);
+    const g = nameGeometry(s);
+    const n = g.names.find(item => item.text === longName);
+    assert.ok(n, `긴 이름이 그려져야 한다(${ens})`);
+    assert.ok(n.x - cjkWidth(longName) >= g.margin + 3.99, `${ens}: 이름 왼쪽 끝 ${n.x - cjkWidth(longName)} < 쪽 여백 ${g.margin}`);
+    assert.equal(g.systems[0].x0, g.margin + g.systems[0].nameW);
+    assert.ok(g.systems[0].nameW > 96, `${ens}: 이름 칸이 늘어나야 한다(${g.systems[0].nameW})`);
+  }
+});
+test('④ 기본 이름은 첫 줄 이름 칸 폭(96)을 그대로 쓰고, 한 보표 악보는 이름 칸이 0이다', () => {
+  for (const ens of ['piano', 'flute-piano', 'string-quartet']) assert.equal(nameGeometry(C.createScore({ measureCount: 4, ensemble: ens })).systems[0].nameW, 96, ens);
+  const single = nameGeometry(C.createScore({ measureCount: 4 }));
+  assert.equal(single.names.length, 0);
+  assert.equal(single.systems[0].nameW, 0);
+});
