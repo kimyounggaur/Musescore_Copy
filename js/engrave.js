@@ -1464,6 +1464,16 @@
     });
     y1 += sgn * shift; y2 += sgn * shift;
 
+    // 덧줄 쪽으로 멀리 떨어진 묶음은 낱음표(아래 stem 규칙)처럼 빔이 중앙줄까지 닿게 한다.
+    // 기울기는 그대로 두고 줄 전체를 평행 이동하므로 기둥은 늘기만 한다.
+    if (pitched) {
+      const mid = items[0].staff.middleY;
+      const nearHead = dir === "up" ? Math.min(...headYs) : Math.max(...headYs);
+      const farFromStaff = dir === "up" ? nearHead > mid + 3 * SP : nearHead < mid - 3 * SP;
+      const nearEnd = dir === "up" ? Math.min(y1, y2) : Math.max(y1, y2);
+      if (farFromStaff && (dir === "up" ? nearEnd > mid : nearEnd < mid)) { y1 += mid - nearEnd; y2 += mid - nearEnd; }
+    }
+
     let s = `<g class="beam-group">`;
     // 주 빔(8분)
     s += beamPoly(x1, lineY2(x1), x2, lineY2(x2), 0);
