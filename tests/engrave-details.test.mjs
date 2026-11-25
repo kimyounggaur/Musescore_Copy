@@ -205,3 +205,84 @@ test('② 점 오른쪽 끝과 다음 음의 임시표 사이가 비어 있다(�
     assert.ok(accLeft - dotsRight >= 1, `${d}분 점${dots}: 점 끝 ${dotsRight} ~ 임시표 ${accLeft}`);
   }
 });
+
+/* ============ ③ 2도 화음·임시표 ============ */
+// 임시표 글자가 음 위치를 중심으로 위·아래로 차지하는 높이(px). 샤프·제자리표 ±14, 플랫 위 17.5·아래 7, 폭 11 안팎.
+const ACC_BOX = { sharp: { w: 11, up: 14, down: 14 }, natural: { w: 8.5, up: 14, down: 14 }, flat: { w: 9, up: 17.5, down: 7 } };
+/** [[온음계 번호, 변화표]...] 화음 하나를 그리고 임시표·머리·점 좌표를 돌려준다. */
+function chordGeometry(arr, { dots = 0, d = 4 } = {}) {
+  const s = C.createScore({ measureCount: 1 });
+  const ev = note('c', arr.map(([a, al]) => P(a, al)), d); ev.dur.dots = dots;
+  put(s, 0, [ev]);
+  const r = render(s);
+  const le = r.layout.eventsById.get('c');
+  const accNotes = ev.notes.filter(n => n.__acc).sort((a, b) => C.absStep(b) - C.absStep(a)); // 높은 음부터(SVG 순서)
+  const accs = [...r.svg.matchAll(/<g class="accidental" transform="translate\(([-.\d]+),([-.\d]+)\)/g)].map((m, i) => {
+    const box = ACC_BOX[accNotes[i].__acc];
+    return { name: accNotes[i].__acc, step: C.absStep(accNotes[i]), x: +m[1], y: +m[2], x0: +m[1], x1: +m[1] + box.w, y0: +m[2] - box.up, y1: +m[2] + box.down };
+  });
+  const heads = le.noteheads.map(h => ({ x: h.x, y: h.y, x0: h.x - 6, x1: h.x + 6, y0: h.y - 5, y1: h.y + 5 }));
+  const dotList = [...r.svg.matchAll(/class="dot" cx="([-.\d]+)" cy="([-.\d]+)"/g)].map(m => ({ x: +m[1], y: +m[2] }));
+  return { r, le, accs, heads, dots: dotList, staff: le.staff, dir: le.stemDir };
+}
+const overlap = (a, b) => Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0) > 0.5 && Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0) > 0.5;
+
+test('③ 플랫이 샤프 아래 6스텝이면 다른 열, 샤프끼리 6스텝이면 같은 열', () => {
+  const flatBelow = chordGeometry([[8, 1], [2, -1]]);
+  assert.notEqual(flatBelow.accs[0].x, flatBelow.accs[1].x, '샤프(위) 6스텝 아래 플랫: 플랫 윗부분이 샤프 아래와 겹치므로 다른 열');
+  const sharps = chordGeometry([[8, 1], [2, 1]]);
+  assert.equal(sharps.accs[0].x, sharps.accs[1].x, '샤프끼리 6스텝은 같은 열');
+});
+test('③ 샤프가 플랫 아래 6스텝, 플랫이 샤프 위 5스텝이면 위아래가 겹치지 않아 같은 열에 둔다', () => {
+  const flatAbove = chordGeometry([[7, -1], [2, 1]]);            // 플랫 위, 샤프 5스텝 아래
+  assert.equal(flatAbove.accs[0].x, flatAbove.accs[1].x);
+  const sharpAbove = chordGeometry([[8, 1], [1, -1]]);           // 샤프 위, 플랫 7스텝 아래
+  assert.equal(sharpAbove.accs[0].x, sharpAbove.accs[1].x);
+});
+test('③ 표준 쌓기: 가장 높은 음 → 가장 낮은 음 → 가운데 순서로 가까운 열에 둔다(2도 샤프 3개)', () => {
+  const g = chordGeometry([[4, 1], [3, 1], [2, 1]]);             // 높음·가운데·낮음
+  const [hi, mid, lo] = g.accs;
+  assert.equal(hi.x - lo.x, 11, '가장 낮은 음은 둘째 열');
+  assert.equal(hi.x - mid.x, 22, '가운데 음은 셋째 열');
+});
+test('③ 3도 간격 샤프 4개는 3열(위·아래 음이 같은 열)', () => {
+  const g = chordGeometry([[8, 1], [6, 1], [4, 1], [2, 1]]);
+  assert.equal(new Set(g.accs.map(a => a.x)).size, 3);
+  assert.equal(g.accs[0].x, g.accs[3].x, '가장 높은 음과 가장 낮은 음은 첫 열을 나눠 쓴다');
+});
+test('③ 무작위 화음 600개: 임시표끼리·임시표와 머리가 겹치지 않는다', () => {
+  const rand = rng(12345);
+  let withAcc = 0;
+  for (let t = 0; t < 600; t++) {
+    const count = 2 + Math.floor(rand() * 4);
+    const set = new Set(); while (set.size < count) set.add(Math.floor(rand() * 12));
+    const arr = [...set].map(a => [a, [1, -1, 0, 1, -1][Math.floor(rand() * 5)]]);
+    const g = chordGeometry(arr);
+    if (g.accs.length > 1) withAcc++;
+    for (let i = 0; i < g.accs.length; i++) {
+      for (let j = i + 1; j < g.accs.length; j++) assert.ok(!overlap(g.accs[i], g.accs[j]), `임시표끼리 겹침 ${JSON.stringify(arr)}`);
+      for (const h of g.heads) assert.ok(!overlap(g.accs[i], h), `임시표와 머리 겹침 ${JSON.stringify(arr)}`);
+    }
+    const columns = new Set(g.accs.map(a => a.x)).size;
+    assert.ok(columns <= g.accs.length, `열 ${columns} > 임시표 ${g.accs.length}`);
+  }
+  assert.ok(withAcc > 300, `임시표가 둘 이상인 화음이 충분해야 한다(${withAcc})`);
+});
+test('③ 2도 화음의 점: 어긋난 머리 오른쪽에 모이고 서로 겹치지 않는다(위·아래 기둥)', () => {
+  for (const base of [2, 12]) {                                   // 보표 아래쪽(기둥 위)·위쪽(기둥 아래)
+    for (const arr of [[[base, 0], [base + 1, 0]], [[base, 0], [base + 1, 0], [base + 2, 0]], [[base, 0], [base + 1, 0], [base + 3, 0], [base + 4, 0]]]) {
+      const g = chordGeometry(arr, { dots: 1 });
+      const rightEdge = Math.max(...g.heads.map(h => h.x1));
+      for (const dot of g.dots) assert.ok(dot.x - 2.1 >= rightEdge, `점 ${dot.x} 이(가) 머리 오른쪽 끝 ${rightEdge} 안쪽 ${JSON.stringify(arr)}`);
+      assert.equal(new Set(g.dots.map(d => `${d.x}/${d.y}`)).size, g.dots.length, `점이 같은 자리에 겹침 ${JSON.stringify(arr)}`);
+      for (const dot of g.dots) assert.equal(((dot.y - g.staff.yTop) % SP + SP) % SP, SP / 2, `점이 칸(줄 사이) 안에 있어야 한다 ${dot.y}`);
+      assert.equal(g.dots.length, arr.length);
+    }
+  }
+});
+test('③ 2도가 없는 화음·낱음표와 점 2개의 위치는 그대로다', () => {
+  const single = chordGeometry([[2, 0]], { dots: 2 });
+  assert.deepEqual(single.dots.map(d => d.x), [single.le.x + 9.5, single.le.x + 15.5]);
+  const third = chordGeometry([[2, 0], [4, 0]], { dots: 1 });
+  assert.deepEqual(third.dots.map(d => d.x), [third.le.x + 9.5, third.le.x + 9.5]);
+});
