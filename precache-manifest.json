@@ -34,6 +34,7 @@
   "js/ui-dialog.js",
   "js/ui-v3.js",
   "js/version.js",
+  "js/zip.js",
   "licenses.html",
   "manifest.webmanifest",
   "manual/scoreforge_quick_start_overview.svg",

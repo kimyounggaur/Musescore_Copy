@@ -67,6 +67,7 @@
     midiIcon | 🎵 MIDI 내보내기 (.mid) | 🎵 Export MIDI (.mid)
     print | 인쇄 / PDF 저장 | Print / Save PDF
     printIcon | 🖨️ 인쇄 / PDF 저장 | 🖨️ Print / Save PDF
+    exportTitle | 내보내기 | Export
     manuals | 설명서 | Manuals
     quick | 🚀 퀵스타트 한글 설명서 | 🚀 Quick start guide (Korean)
     quickTime | 10분 입문 | 10-minute introduction
@@ -959,8 +960,11 @@
     pngError | PNG 변환에 실패했어요. | PNG conversion failed.
     pngDone | 300dpi PNG를 내보냈어요. | Exported a 300 dpi PNG.
     svgDone | 글꼴을 포함한 SVG를 내보냈어요. | Exported an SVG with the font included.
+    pngZipDone | 300dpi PNG를 ZIP 파일 하나로 묶어 내보냈어요. | Exported the 300 dpi PNGs as one ZIP file.
+    svgZipDone | 글꼴을 포함한 SVG를 ZIP 파일 하나로 묶어 내보냈어요. | Exported the SVGs with the font included as one ZIP file.
+    zipTooBig | 내보낼 파일이 너무 커서 ZIP으로 묶을 수 없어요. | The files are too large to bundle into a ZIP.
     print | 인쇄 · PDF | Print · PDF
-    printHelp | 인쇄 설정에서 배율 100%, 여백 없음, 머리글·바닥글 끄기를 선택하세요. PDF로 저장하면 벡터 품질로 보관할 수 있어요. | In print settings, choose 100% scale, no margins, and no headers or footers. Save as PDF to keep vector quality.
+    printHelp | 인쇄 창에서 '대상'을 'PDF로 저장'으로 고르면 PDF 파일로 보관할 수 있어요(악보가 벡터 품질로 저장돼요). 배율은 100%, 여백은 없음, 머리글·바닥글은 끄기로 설정하세요. | In the print window, set the destination to "Save as PDF" to keep a vector-quality PDF. Use 100% scale, no margins, and turn off headers and footers.
     printOpen | 인쇄 열기 | Open print dialog
     midiImport | MIDI 가져오기 | Import MIDI
     grid | 리듬 격자 | Rhythm grid
