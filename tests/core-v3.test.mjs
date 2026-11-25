@@ -61,9 +61,13 @@ test('events getter/setter and serialized legacy aliases remain compatible', () 
   mm.voices[0] = [{ ...rest, id: C.newId() }]; C.invalidate(score);
   assert.equal(mm.events, mm.voices[0]);
   assert.equal(JSON.stringify(mm).includes('"events"'), false);
-  const saved = C.toJSON(score);
+  const saved = C.toJSON(score, { format: 1 });   // 구버전 호환 출력(P7-B1): legacy 별칭은 { format: 1 }에서만 나온다
   assert.deepEqual(saved.measures[0].events, saved.measures[0].voices[0]);
   assert.equal(JSON.stringify(saved).includes('__cache'), false);
+  const v2 = C.toJSON(score);                     // 기본은 v2: 별칭·최상위 measures 없음
+  assert.equal('measures' in v2, false);
+  assert.equal(v2.schema, 2);
+  assert.equal('events' in v2.parts[0].staves[0].measures[0], false);
   const legacy = { timeSig: { num: 3, den: 4 }, keySig: 0, measures: [{ events: [{ id: 'e900000', type: 'rest', dur: { n: 3, d: 4 }, notes: [] }] }] };
   const loaded = C.fromJSON(legacy);
   assert.equal(C.findEvent(loaded, 'e900000').voice, 1);
@@ -351,4 +355,62 @@ test('style tokens, GM inference, and custom multistaff templates are compatible
   assert.deepEqual([0, 4, 10, 19, 24, 48, 73, 80].map(gm => C.instrumentForGm(gm)), ['piano', 'epiano', 'musicbox', 'organ', 'guitar', 'strings', 'flute', 'chiptune']);
   assert.equal(C.instrumentForGm(48, { channel: 10 }), 'drums'); assert.equal(C.instrumentForGm(NaN), 'piano');
   invariant(s);
+});
+
+// P7-B2: 실행 취소 기록은 악보를 압축 JSON 글자로 담는다(예산 48MB·개수 200). 빈 성부 쉼표 ID까지 정확히 돌아와야 한다.
+const exact = () => JSON.stringify(C.toJSON(C.state.score, { keepSilentVoices: true }));   // 빈 성부 쉼표 ID까지 본다
+
+test('실행 취소 기록(글자): 편집 3회 → 실행 취소 3회면 처음과 똑같고, 다시 실행하면 편집한 상태로 돌아온다', () => {
+  C.__setHistoryBudget();
+  C.setScore(C.createScore({ measureCount: 2 }));
+  const states = [exact()], defaults = [JSON.stringify(C.toJSON(C.state.score))];
+  const steps = [
+    ['음 입력', s => C.inputAt(s, 0, F(0, 1), quarter, [pitch(0)])],
+    ['템포', s => { s.tempo = 77; }],
+    ['2성부 음', s => C.inputAt(s, 1, F(0, 1), quarter, [pitch(2)], { voice: 2 })],
+  ];
+  for (const [label, fn] of steps) { C.mutate(label, fn); states.push(exact()); defaults.push(JSON.stringify(C.toJSON(C.state.score))); }
+  assert.equal(C.__history().undo, 3);
+  for (let i = 2; i >= 0; i--) {
+    assert.ok(C.undo(), `실행 취소 ${3 - i}번째`);
+    assert.equal(exact(), states[i], `실행 취소 뒤 = ${i}번째 상태(쉼표 ID까지)`);
+    assert.equal(JSON.stringify(C.toJSON(C.state.score)), defaults[i], `실행 취소 뒤 toJSON = ${i}번째 상태`);
+  }
+  assert.equal(C.canUndo(), false); assert.equal(C.state.dirty, false);
+  for (let i = 1; i <= 3; i++) { assert.ok(C.redo(), `다시 실행 ${i}번째`); assert.equal(exact(), states[i], `다시 실행 뒤 = ${i}번째 상태`); }
+  assert.equal(C.canRedo(), false); assert.equal(C.state.dirty, true);
+});
+
+test('실행 취소 기록(글자): 예산을 넘으면 오래된 것부터 버리고, 남은 것은 정확히 복원한다', () => {
+  C.__setHistoryBudget();
+  C.setScore(C.createScore({ measureCount: 2 }));
+  const states = [exact()];
+  for (let i = 1; i <= 6; i++) { C.mutate(`템포 ${i}`, s => { s.tempo = 100 + i; }); states.push(exact()); }
+  assert.equal(C.__history().undo, 6);
+  const each = C.__history().bytes / 6;
+  C.__setHistoryBudget(Math.floor(each * 3.5));                     // 3개쯤 들어가는 예산
+  const stats = C.__history();
+  assert.equal(stats.undo, 3, '가장 오래된 3개가 버려졌다');
+  assert.ok(stats.bytes <= stats.maxBytes, '예산 이내');
+  for (let i = 5; i >= 3; i--) { assert.ok(C.undo()); assert.equal(exact(), states[i], `남은 것: ${i}번째 상태가 정확히 돌아온다`); }
+  assert.equal(C.canUndo(), false, '더 오래된 것은 버려졌다');
+  assert.equal(C.state.dirty, true, '저장한 처음 상태는 이제 돌아갈 수 없으니 계속 바뀐 상태다');
+  C.__setHistoryBudget();
+});
+
+test('실행 취소 기록(글자): 빈 성부 쉼표에 커서를 두고 편집 → 실행 취소해도 커서가 가리키던 쉼표 ID가 그대로다', () => {
+  C.__setHistoryBudget();
+  C.setScore(C.createScore({ measureCount: 2 }));
+  const rest = C.getVoiceEvents(C.state.score.parts[0].staves[0].measures[0], 2, C.state.score)[0];
+  assert.equal(rest.type, 'rest');
+  const id = rest.id;                                               // 입력 커서·선택이 가리키는 값
+  C.mutate('1성부 음', s => C.inputAt(s, 0, F(0, 1), quarter, [pitch(0)]));
+  assert.equal(C.findEvent(C.state.score, id)?.ev.id, id, '편집 뒤에도 그대로');
+  C.mutate('템포', s => { s.tempo = 90; });
+  assert.ok(C.undo()); assert.ok(C.undo());
+  const found = C.findEvent(C.state.score, id);
+  assert.ok(found, '실행 취소 뒤에도 같은 ID의 쉼표가 있다');
+  assert.equal(found.ev.type, 'rest'); assert.equal(found.voice, 2); assert.equal(found.m, 0);
+  assert.ok(C.redo()); assert.ok(C.redo());
+  assert.equal(C.findEvent(C.state.score, id)?.ev.id, id, '다시 실행 뒤에도 그대로');
 });

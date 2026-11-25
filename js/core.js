@@ -45,6 +45,9 @@ window.SF = window.SF || {};
    * the escape hatch after direct structural writes by importers/UI code. */
   let cacheRevision = 0;
   const measureOwners = new WeakMap();
+  // 테스트 전용 계수기(이름이 __). 복잡도를 시간 대신 횟수로 단언한다 — 모두 "악보 전체를 한 번 훑는" 일의 횟수라서, 음마다 일어나면 가져오기가 O(N²)이 된다.
+  //  indexBuilds: eventIndex가 악보 전체 색인을 새로 만든 횟수 · tieSweeps: normalizeTies가 악보 전체 타이를 훑은 횟수 · timingBuilds: timingOf가 마디 길이·조표 표를 새로 계산한 횟수
+  const stats = { indexBuilds: 0, tieSweeps: 0, timingBuilds: 0 };
   function cacheOf(score) {
     if (!score.__cache) Object.defineProperty(score, "__cache", {
       configurable: true, writable: true, enumerable: false,
@@ -60,6 +63,13 @@ window.SF = window.SF || {};
     });
   }
   function edited(score) { invalidate(score, { keepNormalized: true }); }
+  /* 일괄 입력(ctx.batch) 전용: 이벤트 내용만 바뀌는 편집이라 마디 길이·조표(timing)는 그대로이니 그 캐시는 살린다.
+   * 일반 편집으로 넓히지 않는다 — 박자·조표·마디 길이를 바꾸는 함수가 모두 스스로 캐시를 버리는지 확인되기 전에는 묵은 timing이 남을 수 있다. */
+  function editedContent(score) {
+    const timing = score.__cache?.timing;
+    invalidate(score, { keepNormalized: true });
+    if (timing) score.__cache.timing = timing;
+  }
 
   function cloneData(value) {
     if (value === undefined) return undefined;
@@ -548,6 +558,7 @@ window.SF = window.SF || {};
   function timingOf(score) {
     const cache = cacheOf(score);
     if (cache.timing) return cache.timing;
+    stats.timingBuilds++;
     let key = score.keySig ?? 0, ts = score.timeSig || { num: 4, den: 4 };
     const keys = [], times = [], lengths = [], starts = [Fraction.ZERO];
     for (const [m, mm] of canonicalMeasures(score).entries()) {
@@ -1123,6 +1134,7 @@ window.SF = window.SF || {};
     ensureParts(score);
     const cache = cacheOf(score);
     if (cache.index) return cache.index;
+    stats.indexBuilds++;
     const index = new Map(), order = new Map();
     for (const ref of staffRefs(score)) {
       for (let m = 0; m < ref.measures.length; m++) {
@@ -1201,16 +1213,18 @@ window.SF = window.SF || {};
     if (!inserted) out.push(...replacement); // 빈 마디 안전망
     measure.voices[voice - 1] = out;
     syncMeasureEvents(measure);
-    edited(score);
+    if (ctx?.batch) editedContent(score); else edited(score);
   }
 
-  /* 음표/쉼표 입력. 마디를 넘으면 다음 마디로 타이 분할. 입력된 첫 이벤트 ref 반환 */
-  function inputAt(score, mIdx, tick, dur, pitches /* null=쉼표 */, ctx) {
+  /* 음표/쉼표 입력. 마디를 넘으면 다음 마디로 타이 분할. 입력된 첫 이벤트의 { id, ev }를 돌려준다(ev는 악보 안의 그 객체).
+   * ctx.batch(MIDI 가져오기처럼 한 번에 많이 놓을 때): 입력마다 하던 악보 전체 타이 정리(normalizeTies)를 건너뛰고(부른 쪽이 마지막에 한 번),
+   * 내용만 바뀌는 편집이라 timing 캐시를 유지한다. 돌려준 ev로 바로 후처리하므로 findEvent(악보 전체 색인)가 필요 없다. */
+  function inputAtEvent(score, mIdx, tick, dur, pitches /* null=쉼표 */, ctx) {
     const ref = staffRef(score, ctx);
     const voice = voiceFromCtx(ctx);
     let remaining = durValue(dur);
     if (remaining.n <= 0) throw new RangeError("Duration must be positive");
-    let firstId = null;
+    let firstId = null, firstEv = null;
 
     const place = (m, t, pieces, tieOut) => {
       const evs = pieces.map((d, i) => {
@@ -1222,10 +1236,10 @@ window.SF = window.SF || {};
           notes: pitches ? pitches.map(p => ({ step: p.step, alter: p.alter, oct: p.oct, tie: false })) : [],
         };
         if (pitches && (i < pieces.length - 1 || tieOut)) ev.notes.forEach(n => n.tie = true);
-        if (!firstId) firstId = ev.id;
+        if (!firstId) { firstId = ev.id; firstEv = ev; }
         return ev;
       });
-      replaceRange(score, m, t, pieces.reduce((a, d) => a.add(durValue(d)), Fraction.ZERO), () => evs, { ...ref, voice });
+      replaceRange(score, m, t, pieces.reduce((a, d) => a.add(durValue(d)), Fraction.ZERO), () => evs, { ...ref, voice, batch: ctx?.batch });
     };
 
     let m = mIdx;
@@ -1247,8 +1261,12 @@ window.SF = window.SF || {};
       t = Fraction.ZERO;
       firstChunk = false;
     }
-    normalizeTies(score);
-    return firstId;
+    if (!ctx?.batch) normalizeTies(score);
+    return { id: firstId, ev: firstEv };
+  }
+  /* 기존 API 그대로: 첫 이벤트 ID만 돌려준다 */
+  function inputAt(score, mIdx, tick, dur, pitches /* null=쉼표 */, ctx) {
+    return inputAtEvent(score, mIdx, tick, dur, pitches, ctx).id;
   }
 
   /** Re-enter an event at its original location, preserving its decorations and
@@ -1438,6 +1456,7 @@ window.SF = window.SF || {};
 
   /* 타이 정합성: 다음 이벤트에 같은 음높이가 없으면 tie 해제 */
   function normalizeTies(score) {
+    stats.tieSweeps++;
     for (const ref of staffRefs(score)) {
       for (let m = 0; m < ref.measures.length; m++) {
         for (let voice = 1; voice <= VOICE_COUNT; voice++) {
@@ -1788,19 +1807,40 @@ window.SF = window.SF || {};
   }
 
   /* ---------------- 직렬화 ---------------- */
-  function toJSON(score) {
+  /** 저장용 복사본. 기본은 v2(schema 2): 같은 음표를 여러 번 적던 중복을 뺀다.
+   *  - 마디의 `events` 별칭과 최상위 `measures`는 쓰지 않는다(읽을 때 ensureMeasureVoices·syncLegacyFields가 되살린다).
+   *  - 이벤트가 쉼표뿐인 2~4성부는 `[]`로 적고 읽을 때 온쉼표로 다시 채운다. 단 스패너(헤어핀·옥타브 등)의 시작·끝점이
+   *    그 성부의 쉼표를 가리키면 ID가 바뀌어 스패너가 지워지므로 그 성부는 그대로 둔다(pinned). 끝의 빈 성부는 자른다.
+   *  - opts.keepSilentVoices: 빈 성부도 그대로 둔다(실행 취소 기록용 — 입력 커서·선택이 가리키는 쉼표 ID를 지키려고).
+   *  - opts.format === 1: 구버전 호환 출력(예전 모양 그대로: 마디 `events` 별칭 + 최상위 `measures`, schema 없음). */
+  function toJSON(score, opts = {}) {
     ensureParts(score);
     const out = cloneData(score);
-    // Serialized compatibility only: old applications read events, while the
-    // live model and structuredClone history contain voices just once per bar.
-    for (const part of out.parts) for (const staff of part.staves)
-      for (const mm of staff.measures) mm.events = mm.voices[0];
-    out.measures = out.parts[0].staves[0].measures;
+    if (opts.format === 1) {
+      // Serialized compatibility only: old applications read events, while the
+      // live model and history snapshots contain voices just once per bar.
+      for (const part of out.parts) for (const staff of part.staves)
+        for (const mm of staff.measures) mm.events = mm.voices[0];
+      out.measures = out.parts[0].staves[0].measures;
+      return out;
+    }
+    const silent = ev => ev.type === "rest" && !hasVisibleContent(ev);
+    const pinned = new Set((out.spanners || []).flatMap(sp => [sp.startId, sp.endId]));
+    for (const part of out.parts) for (const staff of part.staves) for (const mm of staff.measures) {
+      delete mm.events;
+      if (opts.keepSilentVoices) continue;
+      for (let v = 1; v < mm.voices.length; v++)
+        if (mm.voices[v].every(ev => silent(ev) && !pinned.has(ev.id))) mm.voices[v] = [];
+      while (mm.voices.length > 1 && !mm.voices[mm.voices.length - 1].length) mm.voices.pop();
+    }
+    delete out.measures;
+    out.schema = 2;
     return out;
   }
   function fromJSON(obj) {
     const score = JSON.parse(JSON.stringify(obj));
     delete score.__cache;
+    delete score.schema;   // 파일 머리 정보일 뿐 모델의 일부가 아니다(가져오기는 안에서 fromJSON(toJSON())을 한다)
     // Reserve imported IDs before migration allocates silent voices/parts.
     const reserveIds = value => {
       if (!value || typeof value !== "object") return;
@@ -1848,7 +1888,10 @@ window.SF = window.SF || {};
     lastAutosaveAt: 0,
     listeners: new Set(),
   };
-  const history = { undo: [], redo: [], max: 200 };
+  /* 실행 취소 기록: 항목마다 악보를 압축 JSON 글자로 담는다(객체째 복사한 것보다 훨씬 작고 크기를 잴 수 있다).
+   * 개수(max)와 메모리 예산(maxBytes)을 넘으면 가장 오래된 것부터 버린다 — trimHistory. */
+  const HISTORY_BUDGET = 48 * 1024 * 1024;
+  const history = { undo: [], redo: [], max: 200, maxBytes: HISTORY_BUDGET };
   let contentVersion = 0, nextContentVersion = 0, savedVersion = 0, mutationDepth = 0;
 
   function onChange(fn) { state.listeners.add(fn); return () => state.listeners.delete(fn); }
@@ -1857,9 +1900,44 @@ window.SF = window.SF || {};
     for (const fn of state.listeners) fn(state.score, { type, label, revision: state.revision, dirty: state.dirty });
   }
   function bumpRevision() { state.rev = ++state.revision; }
-  function snapshot(score) {
-    ensureParts(score);
-    return typeof structuredClone === "function" ? structuredClone(score) : cloneData(score);
+  /** 지금 악보를 글자로 찍는다. keepSilentVoices: 빈 성부의 쉼표를 남겨 둔다 — 입력 커서·선택이 가리키는
+   * 쉼표 ID가 되돌린 뒤에도 같아야 하기 때문이다(파일 저장용 v2와 달리 버리지 않는다). toJSON이 ensureParts를 먼저 한다. */
+  function snapshot(score) { return JSON.stringify(toJSON(score, { keepSilentVoices: true })); }
+  /** snapshot의 글자를 새 악보 모델로 되살린다(fromJSON이 한 번 더 깊은 복사를 하므로 기록 글자는 건드려지지 않는다). */
+  function restore(text) { return fromJSON(JSON.parse(text)); }
+  /** 기록 항목. bytes는 글자 수 × 2 — UTF-16으로 본 어림값이다(V8은 한글이 없으면 글자당 1바이트라 실제는 더 작을 수 있다). */
+  function historyEntry(label, text, version, at, coalesce = null) {
+    return { label, snapshot: text, bytes: text.length * 2, version, at, coalesce };
+  }
+  function historyBytes() {
+    let sum = 0;
+    for (const entry of history.undo) sum += entry.bytes;
+    for (const entry of history.redo) sum += entry.bytes;
+    return sum;
+  }
+  /** 개수 상한(max)과 메모리 예산(maxBytes)을 지킨다. 가장 오래된 것부터 버리되, 되돌리기 쪽과 다시 실행 쪽의
+   * 가장 가까운 항목 1개씩은 예산을 넘어도 남긴다 — 아주 큰 악보에서도 한 번은 늘 되돌릴 수 있게. */
+  function trimHistory() {
+    while (history.undo.length > history.max) history.undo.shift();
+    let total = historyBytes();
+    while (total > history.maxBytes) {
+      const stack = history.undo.length > 1 ? history.undo : history.redo.length > 1 ? history.redo : null;
+      if (!stack) break;
+      total -= stack.shift().bytes;
+    }
+  }
+  /** 시험용: 실행 취소 기록의 예산(바이트)을 바꾸고 바로 적용한다. 값 없이 부르면 기본값(48MB)으로 돌아간다. */
+  function setHistoryBudget(bytes) {
+    history.maxBytes = Number.isFinite(bytes) && bytes >= 0 ? bytes : HISTORY_BUDGET;
+    trimHistory();
+    return history.maxBytes;
+  }
+  /** 시험·측정용: 실행 취소 기록이 지금 얼마나 쌓였나. chars는 기록 글자의 총 길이. */
+  function historyStats() {
+    let chars = 0;
+    for (const entry of history.undo) chars += entry.snapshot.length;
+    for (const entry of history.redo) chars += entry.snapshot.length;
+    return { undo: history.undo.length, redo: history.redo.length, chars, bytes: historyBytes(), maxBytes: history.maxBytes, max: history.max };
   }
   function breakCoalescing() {
     const last = history.undo[history.undo.length - 1];
@@ -1900,13 +1978,13 @@ window.SF = window.SF || {};
       ensureParts(state.score);
       normalizeSpanners(state.score);
     } catch (error) {
-      state.score = fromJSON(before);
+      state.score = restore(before);
       throw error;
     } finally { mutationDepth--; }
     if (coalesced) { last.label = label; last.at = at; }
-    else history.undo.push({ label, snapshot: before, version: previousVersion, at, coalesce: opt.coalesce || null });
-    if (history.undo.length > history.max) history.undo.shift();
+    else history.undo.push(historyEntry(label, before, previousVersion, at, opt.coalesce || null));
     history.redo.length = 0;
+    trimHistory();
     contentVersion = ++nextContentVersion;
     bumpRevision();
     emit("mutate", label);
@@ -1916,9 +1994,10 @@ window.SF = window.SF || {};
     if (state.readOnly) return false;
     if (!history.undo.length) return false;
     const entry = history.undo.pop();
-    history.redo.push({ label: entry.label, snapshot: snapshot(state.score), version: contentVersion, at: Date.now() });
-    state.score = fromJSON(entry.snapshot);
+    history.redo.push(historyEntry(entry.label, snapshot(state.score), contentVersion, Date.now()));
+    state.score = restore(entry.snapshot);
     contentVersion = entry.version;
+    trimHistory();
     breakCoalescing(); bumpRevision();
     emit("undo", entry.label); return true;
   }
@@ -1926,9 +2005,10 @@ window.SF = window.SF || {};
     if (state.readOnly) return false;
     if (!history.redo.length) return false;
     const entry = history.redo.pop();
-    history.undo.push({ label: entry.label, snapshot: snapshot(state.score), version: contentVersion, at: Date.now(), coalesce: null });
-    state.score = fromJSON(entry.snapshot);
+    history.undo.push(historyEntry(entry.label, snapshot(state.score), contentVersion, Date.now()));
+    state.score = restore(entry.snapshot);
     contentVersion = entry.version;
+    trimHistory();
     bumpRevision();
     emit("redo", entry.label); return true;
   }
@@ -1966,12 +2046,13 @@ window.SF = window.SF || {};
     toggleStartRepeat, toggleEndRepeat, setRepeatCount, setEnding, clearEndings, setMeasureBreak, clearMeasureBreak,
     JUMP_TYPES, MARKERS, setMeasureJump, setMeasureMarker,
     eventStartTick, findEvent, nextEvent, prevEvent,
-    replaceRange, inputAt, addDrumNote, deleteEvent, makeTupletAt, consolidateRests, normalizeTies, isTiedFrom,
+    replaceRange, inputAt, inputAtEvent, addDrumNote, deleteEvent, makeTupletAt, consolidateRests, normalizeTies, isTiedFrom,
     removeNoteFromChord, transposeNote, setNoteAccidental, toggleNoteTie,
     addGraceBefore, findGrace, cloneGraceList,
     invalidate, eventIndex, eventOrderMap, normalizeSpanners, slurCoverMap, addOttava, ottavaShiftAt,
     rebar, transposeScore, toJSON, fromJSON,
     state, mutate, undo, redo, canUndo, canRedo, undoLabel, redoLabel, resetHistory, setScore, onChange,
     markSaved, markAutosaved, isAutosaved,
+    __stats: stats, __setHistoryBudget: setHistoryBudget, __history: historyStats,
   };
 })(window.SF);

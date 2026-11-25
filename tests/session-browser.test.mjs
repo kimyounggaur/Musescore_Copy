@@ -291,7 +291,9 @@ test('P2-B 이전: 예전 자동 저장(localStorage v1)이 첫 부팅 때 문�
     }));
     assert.equal(first.title, '옛 작업'); assert.equal(first.id, 'legacy-v1');
     assert.equal(first.docs.length, 1); assert.equal(first.record.origin, 'legacy'); assert.equal(first.record.updatedAt, 1700000000000);
-    assert.equal(JSON.stringify(first.record.data.measures), JSON.stringify(JSON.parse(payload).score.measures));   // 내용 동일
+    const staffMeasures = data => data.parts[0].staves[0].measures;   // v2 데이터에는 최상위 measures가 없다(P7-B1)
+    assert.ok(staffMeasures(first.record.data).length > 0);
+    assert.equal(JSON.stringify(staffMeasures(first.record.data)), JSON.stringify(staffMeasures(JSON.parse(payload).score)));   // 내용 동일
     assert.equal(first.original, payload); assert.ok(first.migrated);
     assert.match(await page.textContent('#toast'), /이전 작업을 자동으로 불러왔어요/);
     await reopen(page);                                                           // 다시 부팅해도 문서는 1개

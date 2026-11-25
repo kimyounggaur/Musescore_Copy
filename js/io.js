@@ -20,14 +20,17 @@
     return (title || "악보").replace(/[\\/:*?"<>|]/g, "_").slice(0, 60);
   }
 
-  /** 악보 파일(.scoreforge.json)의 본문. data는 C.toJSON의 결과 — 최근 작업 창이 보관된 기록을 내려받을 때도 같은 모양을 쓴다. */
+  /** 악보 파일(.scoreforge.json)의 본문. data는 C.toJSON의 결과 — 최근 작업 창이 보관된 기록을 내려받을 때도 같은 모양을 쓴다.
+   *  머리의 version은 데이터의 형식을 따른다: v2 데이터(schema 2)면 2, 구버전 호환 출력이나 옛 기록이면 1.
+   *  읽는 쪽(loadScoreFile·loadAutosave)은 version을 보지 않고 score·parts·measures만 보므로 1·2 모두 열린다. */
   function jsonFileText(data) {
-    return JSON.stringify({ app: "scoreforge", version: 1, score: data }, null, 1);
+    return JSON.stringify({ app: "scoreforge", version: data?.schema === 2 ? 2 : 1, score: data }, null, 1);
   }
 
-  function saveJSON(score) {
+  /** 파일로 저장. opts.legacy면 구버전 호환(v1) 형식 — 옛 버전 앱에서 열 파일용(한 릴리스 동안만 둔다). */
+  function saveJSON(score, opts = {}) {
     const revision = C.state.revision;
-    download(safeName(score.meta.title) + ".scoreforge.json", jsonFileText(C.toJSON(score)), "application/json");
+    download(safeName(score.meta.title) + ".scoreforge.json", jsonFileText(C.toJSON(score, opts.legacy ? { format: 1 } : undefined)), "application/json");
     if (score === C.state.score) C.markSaved?.(revision);
   }
 
@@ -1006,8 +1009,9 @@
           if (!tuplets.has(groupKey)) tuplets.set(groupKey, C.newId());
           dur = { n: 1, d: 8, dots: 0, tuplet: { id: tuplets.get(groupKey), actual: 3, normal: 2 } };
         }
-        const ctx = { partIdx, staffIdx: entry.staff, voice }, id = C.inputAt(score, pos.m, pos.tick, dur, pitches, ctx);
-        const found = C.findEvent(score, id);
+        // 일괄 입력: 음마다 악보 전체 색인(findEvent)·타이 정리를 하지 않는다 — 놓은 이벤트 객체를 바로 받고, 타이는 아래에서 한 번만 정리한다
+        const ctx = { partIdx, staffIdx: entry.staff, voice, batch: true }, { ev: placedEv } = C.inputAtEvent(score, pos.m, pos.tick, dur, pitches, ctx);
+        const found = placedEv ? { ev: placedEv } : null;
         if (found) {
           found.ev.velocityOffset = Math.round(entry.notes.reduce((n, note) => n + note.velocity, 0) / entry.notes.length - 82);
           if (group.percussion) {
@@ -1020,6 +1024,7 @@
         }
       }
     });
+    C.normalizeTies(score); // 일괄 입력 동안 미룬 타이 정리를 한 번에
     for (const change of parsed.tempoMap) {
       const raw = F(change.tick, 4 * ppq), quantized = F(Math.round(raw.value / grid), Math.round(1 / grid)), pos = locate(quantized);
       const target = directionAnchor(score, 0, 0, pos.m, pos.tick);

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SF } from './shim.mjs';
+import { eighthNotesMidi } from './golden-utils.mjs';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 const C = SF.core, P = SF.playback, IO = SF.io, F = SF.F;
@@ -205,4 +206,39 @@ test('scheduler locks late samples per session and both engines share live gain/
     assert.equal(playback.pausePos(), 0);
     const tempo = C.state.score.tempo; playback.setRate(0.5); assert.equal(C.state.score.tempo, tempo);
   } finally { playback.stop(); }
+});
+
+// P7-A1: 시간 대신 복잡도를 단언한다. 옛 구현은 음 하나마다 악보 전체를 세 번 훑었다(색인 재구축·타이 정리·마디 길이 표 재계산) — 4,000음에 13초.
+// 세 훑기가 각각 몇 번 일어났는지 센다(C.__stats, 테스트 전용 계수기). 옛 코드의 값: 4,001회·4,000회·4,000회 이상.
+test('MIDI 가져오기는 음마다 악보 전체를 훑지 않는다(일괄 입력 — 4,000음에서 인덱스 재구축 ≤ 2회·타이 정리 ≤ 2회·마디 길이 표는 음 4개당 1번 이하)', () => {
+  const parsed = IO.parseMidi(eighthNotesMidi(4000));
+  const before = { ...C.__stats };
+  const result = IO.midiToScore(parsed, { grid: 1 / 16 });
+  const used = key => C.__stats[key] - before[key];
+  assert.equal(result.placed, 4000, '4,000음을 모두 놓았다');
+  assert.ok(used('indexBuilds') <= 2, `인덱스 재구축 ${used('indexBuilds')}회(≤ 2)`);
+  assert.ok(used('tieSweeps') <= 2, `타이 정리(악보 전체 훑기) ${used('tieSweeps')}회(≤ 2) — 일괄 입력은 마지막에 한 번만 한다`);
+  // 마디를 비우는 준비 단계에서 마디마다 한 번쯤은 다시 계산된다(약 500번). 음마다(4,000번 이상)는 아니어야 한다.
+  assert.ok(used('timingBuilds') * 4 <= result.placed, `마디 길이·조표 표 계산 ${used('timingBuilds')}회(음 4개당 1번 이하)`);
+});
+
+test('복잡도 계수기는 정직하다: 색인은 새로 만들 때만, 타이 정리·마디 길이 표는 실제로 훑거나 계산할 때만 센다', () => {
+  const s = C.createScore({ measureCount: 3, tempo: 120 });
+  const at = () => ({ ...C.__stats });
+  let b = at();
+  C.eventIndex(s);
+  assert.equal(C.__stats.indexBuilds - b.indexBuilds, 1, '처음 만들면 1');
+  C.eventIndex(s); C.findEvent(s, 'nope');
+  assert.equal(C.__stats.indexBuilds - b.indexBuilds, 1, '캐시가 살아 있으면 늘지 않는다');
+  C.invalidate(s); C.eventIndex(s);
+  assert.equal(C.__stats.indexBuilds - b.indexBuilds, 2, '캐시를 버린 뒤에는 다시 센다');
+  b = at(); C.normalizeTies(s); C.normalizeTies(s);
+  assert.equal(C.__stats.tieSweeps - b.tieSweeps, 2, '타이 정리는 부를 때마다 한 번 훑는다');
+  C.invalidate(s); b = at(); C.measureStarts(s); C.measureStarts(s);
+  assert.equal(C.__stats.timingBuilds - b.timingBuilds, 1, '마디 길이 표는 캐시가 없을 때 한 번만 계산한다');
+  // 일반 입력(옛 방식 그대로)은 음마다 훑는다 — 계수기가 이 문제를 실제로 보여 준다
+  b = at();
+  for (let i = 0; i < 6; i++) { const id = C.inputAt(s, i % 3, F(0), { n: 1, d: 4 }, [pitch(60 + i)]); C.findEvent(s, id); }
+  assert.ok(C.__stats.indexBuilds - b.indexBuilds >= 6, '입력 6번 + 찾기 6번이면 색인을 6번 이상 다시 만든다');
+  assert.ok(C.__stats.tieSweeps - b.tieSweeps >= 6, '입력마다 타이 정리를 한다');
 });
