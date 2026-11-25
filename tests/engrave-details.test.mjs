@@ -73,6 +73,60 @@ test('① 16분·32분 묶음과 2음 화음 묶음도 중앙줄에 닿고 기�
     for (const st of g.stems) assert.ok(st.len >= minStem(d) - 0.01, `${d}분 기둥 길이 ${st.len} < ${minStem(d)}`);
   }
 });
+test('① 중앙줄까지 닿게 하는 규칙은 첫 덧줄 밖에서만 적용한다(경계 사례는 그대로)', () => {
+  // 가장 가까운 머리가 첫 덧줄(중앙줄에서 3칸)에 있으면 "먼 묶음"이 아니다 → 빔 끝은 옮기지 않는다.
+  const up = beamInfo(beamScore([-7, 0]));          // 위 기둥: 가장 위 머리가 첫 덧줄 아래 C4
+  assert.equal(up.dir, 'up');
+  assert.ok(Math.abs(up.near - (up.mid + 4)) < 0.01, `위 기둥 경계 묶음 빔 끝 ${up.near - up.mid} (그대로 +4)`);
+  const down = beamInfo(beamScore([19, 12]));       // 아래 기둥: 가장 아래 머리가 첫 덧줄 위
+  assert.equal(down.dir, 'down');
+  assert.ok(Math.abs(down.near - (down.mid - 4)) < 0.01, `아래 기둥 경계 묶음 빔 끝 ${down.near - down.mid} (그대로 -4)`);
+  // 한 칸 더 바깥으로 나가면 규칙이 적용되어 정확히 중앙줄에 닿는다.
+  const upFar = beamInfo(beamScore([-7, -1]));
+  assert.ok(Math.abs(upFar.near - upFar.mid) < 0.01, `위 기둥 먼 묶음 빔 끝 ${upFar.near - upFar.mid}`);
+  const downFar = beamInfo(beamScore([19, 13]));
+  assert.ok(Math.abs(downFar.near - downFar.mid) < 0.01, `아래 기둥 먼 묶음 빔 끝 ${downFar.near - downFar.mid}`);
+});
+test('① 먼 묶음의 빔 끝은 중앙줄에 정확히 닿는다(부족하면 딱 그만큼만 평행 이동)', () => {
+  for (const steps of [[-7, -6, -7, -6], [-1, -2, -3], [-9, -8, -7, -6], [-8, -2]]) {
+    const g = beamInfo(beamScore(steps));
+    assert.equal(g.dir, 'up');
+    assert.ok(Math.abs(g.near - g.mid) < 0.01, `${JSON.stringify(steps)}: 빔 끝 ${g.near - g.mid} (정확히 0이어야 한다)`);
+  }
+  for (const steps of [[13, 14, 15], [19, 18, 19, 18], [13, 14, 13, 14], [14, 20]]) {
+    const g = beamInfo(beamScore(steps));
+    assert.equal(g.dir, 'down');
+    assert.ok(Math.abs(g.near - g.mid) < 0.01, `${JSON.stringify(steps)}: 빔 끝 ${g.near - g.mid} (정확히 0이어야 한다)`);
+  }
+});
+test('① 이미 중앙줄을 넘어 올라온 먼 묶음은 줄이지 않는다(32분 묶음의 긴 기둥)', () => {
+  const up = beamInfo(beamScore([-1, -1], 32));
+  assert.equal(up.dir, 'up');
+  assert.ok(Math.abs(up.near - (up.mid - 2)) < 0.01, `위 기둥 ${up.near - up.mid} (그대로 -2)`);
+  const down = beamInfo(beamScore([13, 13], 32));
+  assert.equal(down.dir, 'down');
+  assert.ok(Math.abs(down.near - (down.mid + 2)) < 0.01, `아래 기둥 ${down.near - down.mid} (그대로 +2)`);
+});
+test('① 드럼·TAB 빔 묶음은 중앙줄 규칙을 받지 않는다(예전 좌표 그대로)', () => {
+  // 드럼: 보표 한참 위/아래 줄에 놓인 8분음표 둘. 성부 규칙대로 기둥은 위, 빔 끝은 머리 위 3.3칸(=33px).
+  const d = C.createScore({ measureCount: 1, parts: ['drumkit'] });
+  const dref = C.staffRefs(d)[0];
+  const drum = (id, line) => ({ id, type: 'note', notes: [], drumId: 'crash', midi: 49, staffLine: line, voice: 1, dur: { n: 1, d: 8, dots: 0 } });
+  dref.measures[0].voices[0] = [drum('d0', -4), drum('d1', -4)];
+  dref.measures[0].events = dref.measures[0].voices[0];
+  C.invalidate(d, { keepNormalized: true });
+  const rd = render(d);
+  const polyD = rd.svg.match(/class="beam" points="([-.\d]+),([-.\d]+) ([-.\d]+),([-.\d]+)/);
+  assert.ok(polyD, '드럼 빔이 그려져야 한다');
+  const headD = [...rd.layout.eventsById.values()][0];
+  const headYd = headD.noteheads?.[0]?.y;
+  const stemD = rd.svg.match(/class="stem" x1="[-.\d]+" y1="([-.\d]+)" x2="[-.\d]+" y2="([-.\d]+)"/);
+  assert.ok(stemD, '드럼 기둥');
+  // 빔 끝은 기둥 끝과 같은 높이이고, 기둥은 위·아래 어느 쪽이든 (중앙줄이 아니라) 머리 기준 길이를 쓴다.
+  assert.ok(Math.abs(+polyD[2] - +stemD[2]) < 0.01, `드럼 빔(${polyD[2]})과 기둥 끝(${stemD[2]})이 이어져야 한다`);
+  const lenD = Math.abs(+stemD[2] - +stemD[1]);
+  assert.ok(lenD >= 25 && lenD <= 34, `드럼 기둥 길이 ${lenD} 는 머리 기준 길이여야 한다`);
+});
 test('① 보표 안 묶음의 기둥 길이는 그대로다(오름 음계 4개)', () => {
   const g = beamInfo(beamScore([0, 1, 2, 3]));
   assert.deepEqual(g.stems.map(s => +s.len.toFixed(1)), [32, 30.3, 28.7, 27]);
@@ -128,6 +182,20 @@ test('② 점음표는 더 긴 보통 음표보다 넓지 않다(점 0·1·2개,
   for (let i = 1; i < rows.length; i++) assert.ok(rows[i].width >= rows[i - 1].width - 0.011,
     `${rows[i - 1].d}${'.'.repeat(rows[i - 1].dots)}(${rows[i - 1].width.toFixed(1)}) 보다 더 긴 ${rows[i].d}${'.'.repeat(rows[i].dots)}(${rows[i].width.toFixed(1)}) 가 더 좁다`);
 });
+test('② 점이 셋 이상이면 점 자리를 따로 보장한다(22 + 6×(점 수−1))', () => {
+  for (const dots of [3, 4]) assert.ok(noteGap(16, dots) >= 22 + 6 * (dots - 1) - 0.01, `16분 점 ${dots}개 폭 ${noteGap(16, dots)}`);
+  assert.ok(noteGap(16, 2) < 22 + 6 * 2 + 6, '점 둘까지는 보장 규칙이 아니라 길이 기준 폭');
+});
+test('② 점 자리 보장의 정확한 값: 점 셋 34, 점 넷 40, 점 둘까지는 기본 폭(32분·64분 26)', () => {
+  const near = (got, want, msg) => assert.ok(Math.abs(got - want) < 0.01, `${msg}: ${got} ≠ ${want}`);
+  near(noteGap(16, 3), 34, '16분 점 셋');
+  near(noteGap(16, 4), 40, '16분 점 넷');
+  near(noteGap(32, 3), 34, '32분 점 셋');
+  near(noteGap(64, 4), 40, '64분 점 넷');
+  for (const d of [32, 64]) for (const dots of [0, 1, 2]) near(noteGap(d, dots), 26, `${d}분 점 ${dots}개(보장 규칙이 아닌 기본 최소 폭)`);
+  near(noteGap(16, 1), 27.39, '16분 점 하나');
+  near(noteGap(16, 2), 29.82, '16분 점 둘');
+});
 test('② 한 성부·점 없는 악보의 폭은 그대로다(16분 26 · 8분 31.9 · 4분 42.8 · 2분 53.8)', () => {
   for (const [d, w] of [[16, 26], [8, 31.9], [4, 42.8], [2, 53.8]]) assert.ok(Math.abs(noteGap(d) - w) < 0.06, `${d}분 ${noteGap(d)}`);
 });
@@ -149,7 +217,18 @@ test('② 같은 보표 두 성부: 1성부 2분음표 때문에 2성부 8분음
   const s = C.createScore({ measureCount: 1 }), ref = C.staffRefs(s)[0];
   put(s, 0, [note('v1a', [P(9)], 2), note('v1b', [P(9)], 2)], 1, ref);
   put(s, 0, Array.from({ length: 8 }, (_, i) => note('v2e' + i, [P(2 + (i % 3))], 8, { voice: 2 })), 2, ref);
-  allEqual(gapsOf(xsOf(render(s), 0, 2)), '2성부 8분 간격');
+  const gaps = gapsOf(xsOf(render(s), 0, 2));
+  allEqual(gaps, '2성부 8분 간격');
+  assert.ok(Math.abs(gaps[0] - (31.9 + 8)) < 0.06, `2성부 8분은 8분 간격 31.9에 성부 여백 8을 더한 값이어야 한다(${gaps[0]})`);
+});
+test('② 마지막 시각의 음은 다음 시각이 없으므로 자기 길이대로 폭을 갖는다', () => {
+  const s = piano(1), refs = C.staffRefs(s);
+  put(s, 0, [note('r0', [P(9)], 4), note('r1', [P(9)], 4), note('r2', [P(9)], 2)], 1, refs[0]);
+  put(s, 0, [note('l0', [P(-7)], 2), note('l1', [P(-7)], 2)], 1, refs[1]);
+  const r = render(s), measureRight = r.layout.systems[0].measures[0].x1;
+  const w = [...r.layout.eventsById.values()].filter(le => le.globalIdx === 0).sort((a, b) => a.x - b.x);
+  assert.ok(Math.abs((w[1].x - w[0].x) - 42.8) < 0.06 && Math.abs((w[2].x - w[1].x) - 42.8) < 0.06, '4분 간격');
+  assert.ok(measureRight - w[2].x > 40, `마지막 2분음표 뒤 공간 ${measureRight - w[2].x}`);
 });
 test('② 오른손 4분음표 + 왼손 온마디 쉼표: 오른손 간격이 모두 같다', () => {
   const s = piano(1), refs = C.staffRefs(s);
@@ -161,6 +240,25 @@ test('② 온마디 쉼표만 있는 마디의 폭은 그대로다(74)', () => {
     const r = render(s);
     assert.deepEqual(r.layout.systems.flatMap(sy => sy.measures.map(m => +(m.x1 - m.x0).toFixed(2))), s.measures.map(() => 74));
   }
+});
+test('② 줄 맞춤으로 늘어난 줄에서도 간격이 마디 폭에 비례해 늘고, 마지막 줄은 그대로다', () => {
+  const s = C.createScore({ measureCount: 10 });
+  for (let m = 0; m < 10; m++) put(s, m, [0, 2, 4, 2].map((a, i) => note(`m${m}n${i}`, [P(a + 7)], 4)));
+  const r = render(s);
+  assert.equal(r.layout.systems.length, 3, '네 마디씩 두 줄 + 마지막 짧은 줄');
+  const gapOfMeasure = m => gapsOf(xsOf(r, 0, 1, m));
+  let m = 0;
+  const perSystem = r.layout.systems.map(sy => {
+    const widths = sy.measures.map(mm => mm.x1 - mm.x0);
+    const gaps = sy.measures.map((_, i) => { const g = gapOfMeasure(m + i); allEqual(g, `마디 ${m + i + 1} 간격`); return g[0]; });
+    m += sy.measures.length;
+    return { widths, gaps };
+  });
+  const natural = 42.84;
+  for (const i of [0, 1]) for (const g of perSystem[i].gaps) assert.ok(g > natural + 3, `줄 ${i + 1} 간격 ${g} 이(가) 줄 맞춤으로 늘어나지 않았다`);
+  for (const g of perSystem[2].gaps) assert.ok(Math.abs(g - natural) < 0.06, `마지막 줄은 자연 간격 ${natural} 그대로(${g})`);
+  // 더 넓게 늘어난 줄(마디 폭이 큰 줄)일수록 간격도 크다.
+  assert.ok(perSystem[1].widths[0] > perSystem[0].widths[0] && perSystem[1].gaps[0] > perSystem[0].gaps[0], '마디가 더 넓은 줄의 간격이 더 넓어야 한다');
 });
 /** 16분 단위 길이 → 음표 길이 표기. */
 const SIXTEENTHS = { 12: [2, 1], 8: [2, 0], 6: [4, 1], 4: [4, 0], 3: [8, 1], 2: [8, 0], 1: [16, 0] };
@@ -280,6 +378,35 @@ test('③ 2도 화음의 점: 어긋난 머리 오른쪽에 모이고 서로 겹
     }
   }
 });
+/** 앞 화음의 샤프를 걷어 내는 제자리표 두 개의 열(x) — 같은 마디에서 [a, b] 음을 샤프로 낸 뒤 제자리로 낸다. */
+function naturalColumns(a, b) {
+  const s = C.createScore({ measureCount: 1 });
+  put(s, 0, [note('s', [P(a, 1), P(b, 1)], 4), note('n', [P(a), P(b)], 4)]);
+  const r = render(s);
+  const xs = [...r.svg.matchAll(/<g class="accidental" transform="translate\(([-.\d]+),([-.\d]+)\)/g)].map(m => +m[1]);
+  assert.equal(xs.length, 4, '샤프 둘 + 제자리표 둘');
+  return xs.slice(-2);
+}
+test('③ 제자리표 높이: 5스텝 떨어진 둘은 다른 열, 6스텝 떨어진 둘은 같은 열', () => {
+  for (const base of [1, 2, 3]) {
+    const near = naturalColumns(base, base + 5);
+    assert.notEqual(near[0], near[1], `제자리표 5스텝 간격(${base}, ${base + 5})은 글자가 겹치므로 다른 열`);
+    const far = naturalColumns(base, base + 6);
+    assert.equal(far[0], far[1], `제자리표 6스텝 간격(${base}, ${base + 6})은 같은 열`);
+  }
+});
+test('③ 2도 화음의 점은 위 음부터 차례로 칸을 잡아 자기 머리에서 멀리 밀려나지 않는다', () => {
+  for (const base of [2, 3, 12, 13]) {
+    for (const arr of [[[base, 0], [base + 1, 0]], [[base, 0], [base + 1, 0], [base + 2, 0]], [[base, 0], [base + 1, 0], [base + 3, 0], [base + 4, 0]]]) {
+      const g = chordGeometry(arr, { dots: 1 });
+      const headYs = g.heads.map(h => h.y).sort((a, b) => a - b), dotYs = g.dots.map(d => d.y).sort((a, b) => a - b);
+      assert.equal(dotYs.length, headYs.length);
+      // 서로 맞닿은 머리가 셋이면 점 하나가 한 칸 밀려나는 것까지는 불가피하다(칸마다 점 하나). 둘이면 반 칸 안.
+      const limit = arr.length === 2 ? SP / 2 : SP;
+      dotYs.forEach((y, i) => assert.ok(Math.abs(y - headYs[i]) <= limit + 0.01, `${JSON.stringify(arr)}: ${i + 1}째 점 ${y} 이(가) 자기 머리 ${headYs[i]} 에서 ${limit} 보다 멀다`));
+    }
+  }
+});
 test('③ 2도가 없는 화음·낱음표와 점 2개의 위치는 그대로다', () => {
   const single = chordGeometry([[2, 0]], { dots: 2 });
   assert.deepEqual(single.dots.map(d => d.x), [single.le.x + 9.5, single.le.x + 15.5]);
@@ -324,6 +451,9 @@ test('④ 이어지는 줄(짧은 이름)에도 같은 규칙이 적용된다', 
   const braceLefts = [...g.r.svg.matchAll(/<path class="brace" d="M [-.\d]+ [-.\d]+ C ([-.\d]+)/g)].map(m => +m[1]);
   later.forEach((n, i) => assert.ok(n.x <= braceLefts[i] - 4 + 0.01, `${i + 1}째 줄 이름 끝 ${n.x} > 괄호 ${braceLefts[i]}`));
   assert.ok(later.some(n => n.text === 'Pno.'), '둘째 줄부터는 짧은 이름');
+  // 이어지는 줄의 이름 칸: 짧은 이름 "Pno."(추정 27) + 괄호 쪽 여백 33 + 왼쪽 여백 4 = 64
+  assert.equal(g.systems[1].nameW, 64);
+  assert.equal(g.systems[1].x0, g.margin + 64);
 });
 test('④ 이름이 길면 이름 칸이 늘어나 이름이 쪽 왼쪽 여백 밖으로 나가지 않는다', () => {
   for (const [ens, longName] of [['piano', '아주 긴 건반 악기 이름'], ['string-quartet', '아주 긴 현악기 이름입니다']]) {
@@ -336,6 +466,21 @@ test('④ 이름이 길면 이름 칸이 늘어나 이름이 쪽 왼쪽 여백 �
     assert.ok(n.x - cjkWidth(longName) >= g.margin + 3.99, `${ens}: 이름 왼쪽 끝 ${n.x - cjkWidth(longName)} < 쪽 여백 ${g.margin}`);
     assert.equal(g.systems[0].x0, g.margin + g.systems[0].nameW);
     assert.ok(g.systems[0].nameW > 96, `${ens}: 이름 칸이 늘어나야 한다(${g.systems[0].nameW})`);
+    // 이름 칸 = 오른쪽 여백(괄호 있으면 33, 없으면 12) + 이름 폭 + 왼쪽 여백 4
+    const right = ens === 'piano' ? 33 : 12;
+    assert.equal(g.systems[0].nameW, Math.ceil(right + cjkWidth(longName) + 4), `${ens}: 이름 칸 폭`);
+  }
+});
+test('④ 이어지는 줄의 이름 칸은 짧은 이름이어도 54 아래로 줄지 않는다(첫 줄은 96)', () => {
+  const s = C.createScore({ measureCount: 24, ensemble: 'string-quartet' });
+  s.parts.forEach((p, i) => { p.name = String.fromCharCode(65 + i); p.shortName = String.fromCharCode(97 + i); });
+  if (C.invalidate) C.invalidate(s);
+  const g = nameGeometry(s);
+  assert.ok(g.systems.length >= 2, '줄이 둘 이상이어야 한다');
+  assert.equal(g.systems[0].nameW, 96);
+  for (const sy of g.systems.slice(1)) {
+    assert.equal(sy.nameW, 54, '이어지는 줄 이름 칸');
+    assert.equal(sy.x0, g.margin + 54);
   }
 });
 test('④ 기본 이름은 첫 줄 이름 칸 폭(96)을 그대로 쓰고, 한 보표 악보는 이름 칸이 0이다', () => {
