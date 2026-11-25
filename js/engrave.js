@@ -211,16 +211,26 @@
 
   const accidentalColumns = new WeakMap();
   let nextById = new Map();
+  // 임시표 글자 하나가 음 위치를 중심으로 위·아래로 차지하는 높이(보표 스텝: 1스텝 = 반 칸 = 5px). Bravura 글자 윤곽 기준.
+  const ACC_EXTENT = { sharp: [2.8, 2.8], natural: [2.8, 2.8], flat: [3.5, 1.4], doubleSharp: [1, 1], doubleFlat: [3.5, 1.4] };
+  /**
+   * 화음의 임시표를 열에 나눠 담는다(열 0이 음표머리에 가장 가깝다).
+   * 표준 쌓기: 가장 높은 음 → 가장 낮은 음 → 둘째로 높은 음 → 둘째로 낮은 음 … 순서로, 글자 높이가 겹치지 않는 가장 가까운 열에 둔다.
+   */
   function staggerAccidentals(ev) {
     const columns = [];
     const offsets = new Map();
-    for (const n of ev.notes.slice().sort((a, b) => C.absStep(b) - C.absStep(a))) {
-      if (!n.__acc) continue;
-      const as = C.absStep(n);
-      let col = columns.findIndex(list => list.every(p => Math.abs(p - as) >= 6));
+    const items = ev.notes.filter(n => n.__acc).map(n => {
+      const [up, down] = ACC_EXTENT[n.__acc] || ACC_EXTENT.sharp, step = C.absStep(n);
+      return { n, step, top: step + up, bottom: step - down };
+    }).sort((a, b) => b.step - a.step);
+    const order = [];
+    for (let hi = 0, lo = items.length - 1; hi <= lo; hi++, lo--) { order.push(items[hi]); if (lo !== hi) order.push(items[lo]); }
+    for (const it of order) {
+      let col = columns.findIndex(list => list.every(o => o.bottom >= it.top || it.bottom >= o.top));
       if (col < 0) { col = columns.length; columns.push([]); }
-      columns[col].push(as);
-      offsets.set(n, col);
+      columns[col].push(it);
+      offsets.set(it.n, col);
     }
     const data = { offsets, count: columns.length, width: columns.length * 11 };
     accidentalColumns.set(ev, data);
@@ -1263,6 +1273,19 @@
       }
     }
 
+    // 점의 자리: 가장 오른쪽 머리 열의 오른쪽에 모든 점을 한 줄로 두고, 같은 높이가 겹치면 아래 음의 점을 한 칸 내린다.
+    const dotYs = new Map();
+    const dotOx = Math.max(0, ...offs.values());
+    if (ev.dur.dots) {
+      let lastDotY = -Infinity;
+      for (const n of sorted.slice().reverse()) {          // 높은 음 → 낮은 음(y가 커지는 순서)
+        const y0 = yForStep(S, score, C.absStep(n));
+        let dotY = (C.absStep(n) - bottom) % 2 === 0 ? y0 - SP / 2 : y0; // 줄 위 음표는 점을 위 칸으로
+        if (dotY < lastDotY + SP - 0.01) dotY = lastDotY + SP;
+        dotYs.set(n, dotY); lastDotY = dotY;
+      }
+    }
+
     // 음표머리 + 점
     for (const n of sorted) {
       const y = yForStep(S, score, C.absStep(n));
@@ -1273,10 +1296,9 @@
       const head = noteHeadShape(headX, y, kind, ev.notehead);
       s += `<g class="nh${sel?.has(`${ev.id}#${ni}`) ? " sel-note" : ""}" data-note="${ni}">${scale === 1 ? head : `<g transform="translate(${headX},${y}) scale(${scale}) translate(${-headX},${-y})">${head}</g>`}${noteHit(box)}</g>`;
       if (ev.dur.dots) {
-        const off = C.absStep(n) - bottom;
-        const dotY = off % 2 === 0 ? y - SP / 2 : y; // 줄 위 음표는 점을 위 칸으로
+        const dotY = dotYs.get(n);
         for (let d = 0; d < ev.dur.dots; d++)
-          s += `<circle class="dot" cx="${r2(le.x + 9.5 * headScale + ox + d * 6 + (ev.dur.d === 1 ? 4 : 0))}" cy="${r2(dotY)}" r="2.1" fill="currentColor"/>`;
+          s += `<circle class="dot" cx="${r2(le.x + 9.5 * headScale + dotOx + d * 6 + (ev.dur.d === 1 ? 4 : 0))}" cy="${r2(dotY)}" r="2.1" fill="currentColor"/>`;
       }
     }
 
