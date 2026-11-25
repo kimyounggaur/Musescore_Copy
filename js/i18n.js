@@ -898,7 +898,7 @@
     import | 가져오기 | Import
     selectTrack | 트랙을 하나 이상 선택하세요. | Select at least one track.
     customEnsemble | 현재 사용자 편성 | Current custom ensemble
-    errorRecovery | 문제가 생겼어요. 마지막 자동 저장본을 확인해 주세요. | Something went wrong. Check the last auto-saved copy.
+    errorRecovery | 문제가 생겼어요. 최근 작업에서 확인해 주세요. | Something went wrong. Check Recent work.
   `);
   group("import", `
     durationPreserved | 표기와 duration이 다른 음길이는 duration을 보존했어요 | Preserved durations that differ from the written note values
@@ -946,6 +946,73 @@
     midiInput | MIDI 입력 | MIDI input
     frequentInput | 자주 쓰는 입력 | Frequent input tools
   `);
+  group("session", `
+    unsavedTitle | 저장하지 않은 변경 사항 | Unsaved changes
+    saveAndContinue | 파일로 저장하고 계속 | Save to a file and continue
+    discardAndContinue | 저장하지 않고 계속 | Continue without saving
+    openAnother | 다른 악보 열기 | Open another score
+    openDemo | 데모 열기 | Open a demo score
+    openCloud | 클라우드 악보 열기 | Open a cloud score
+    makeCopy | 로컬 사본 만들기 | Make a local copy
+    kept | 이전 악보는 최근 작업에 보관했어요 | Your previous score is kept in Recent work
+    conflictTitle | 같은 악보의 자동 저장본이 있어요 | An autosaved copy of this score exists
+    conflictMessage | 이 파일과 같은 악보가 이 기기에 자동 저장돼 있는데 내용이 달라요. 어느 쪽을 열까요? | This device has an autosaved copy of the same score, but it differs from this file. Which one should open?
+    openAutosave | 자동 저장본 열기 | Open the autosaved copy
+    openFileAsNew | 파일 그대로 열기(새 문서로) | Open the file as it is (as a new document)
+    neverFileSaved | 파일로 저장한 적 없어요 | Never saved to a file
+    savedHint | 자동 저장은 이 브라우저에만 남아요. 중요한 악보는 파일로 저장해 두세요. | Autosaves stay only in this browser. Save important scores to a file.
+    autosaveFailed | 자동 저장에 실패했어요. 파일 메뉴에서 악보를 저장해 주세요. | Autosave failed. Save the score to a file from the File menu.
+    fileSaved | 마지막 파일 저장 {time} | Last file save {time}
+  `);
+  group("recent", `
+    title | 🕘 최근 작업 | 🕘 Recent work
+    menuHint | 자동 보관된 악보 | Autosaved scores
+    action | 최근 작업 | Recent work
+    quotaWarn | 자동 저장 공간이 부족해요. 쓰지 않는 악보를 지우거나 파일로 내려받아 두세요. | Autosave storage is running out. Delete scores you no longer need or download them as files.
+    empty | 보관된 악보가 아직 없어요. 악보를 고치면 자동으로 여기에 쌓여요. | No saved scores yet. Once you edit a score, it is kept here automatically.
+    unavailable | 이 브라우저에서는 악보별 자동 보관을 쓸 수 없어요. 파일로 저장해 두세요. | This browser can't keep scores automatically one by one. Save them to files instead.
+    untitled | 제목 없음 | Untitled
+    current | 지금 열려 있어요 | Open now
+    elsewhere | 다른 탭에서 편집 중 | Being edited in another tab
+    download | 파일로 내려받기 | Download as file
+    whyOpen | 지금 열려 있는 악보예요 | This score is already open
+    whyDelete | 지금 열려 있는 악보는 지울 수 없어요 | The open score can't be deleted
+    whyLocked | 다른 탭에서 편집 중이라 지울 수 없어요 | Can't delete it while another tab is editing it
+    measureOne | 1마디 | 1 measure
+    measures | {count}마디 | {count} measures
+    usage | 사용 중 {used} / 약 {quota} | Using {used} of about {quota}
+    missing | 이 기록을 찾지 못했어요 — 이미 지워졌을 수 있어요 | Couldn't find this record — it may already be deleted
+    unreadable | 이 기록을 열 수 없어요 — 파일로 내려받아 확인해 보세요 | Couldn't open this record — try downloading it as a file
+    deleteFailed | 기록을 지우지 못했어요 | Couldn't delete the record
+    undo | 되돌리기 | Undo
+    undoFailed | 이전 악보를 열 수 없어요 — 파일 메뉴의 최근 작업에서 확인해 주세요 | Couldn't reopen the previous score — check Recent work in the File menu
+    confirmTitle | 이 악보 기록을 지울까요? | Delete this saved score?
+    confirmMessage | ‘{title}’ 기록을 이 브라우저에서 지워요. 파일로 저장해 둔 적이 없다면 되돌릴 수 없어요. | “{title}” will be deleted from this browser. If you never saved it to a file, this can't be undone.
+    reasonOpen | 최근 작업 열기 | Open from Recent work
+    reasonUndo | 이전 악보로 되돌리기 | Go back to the previous score
+  `);
+  group("lock", `
+    editingElsewhere | 다른 탭에서 편집 중인 악보예요 | This score is being edited in another tab
+    copyToEdit | 사본으로 편집 | Edit a copy
+    nowAvailable | 이제 편집할 수 있어요 | You can edit this score now
+    startEditing | 편집 시작 | Start editing
+    stillLocked | 아직 다른 탭에서 편집 중이에요 | It is still being edited in another tab
+    resumeFailed | 최신 내용을 불러오지 못했어요. 사본으로 편집해 보세요 | Could not load the latest version. Try editing a copy instead
+    copyFailed | 사본을 만들지 못했어요 | Could not make a copy
+    resumed | 이 탭에서 편집을 시작했어요 | Editing started in this tab
+    copyMade | 사본을 만들었어요. 이제 편집할 수 있어요. | Copy created. You can edit it now.
+  `);
+  group("boot", `
+    problem | 저장된 악보를 여는 중 문제가 생겨 안전하게 시작했어요. 최근 작업에서 원본을 내려받을 수 있어요. | We hit a problem opening the saved score, so we started safely. You can download the original from Recent work.
+    safeTitle | 지난번에 여는 중 문제가 있었어요 | There was a problem opening a score last time
+    safeMessage | 지난번에 ‘{title}’을(를) 여는 중 문제가 있었어요. 어떻게 할까요? | There was a problem opening “{title}” last time. What would you like to do?
+    openAnyway | 그래도 열기 | Open anyway
+    startNew | 새 악보로 시작 | Start a new score
+    badge | 열 때 문제가 있었어요 | Had a problem opening
+    badgeWhy | 원본은 그대로 보관돼 있어요. 파일로 내려받아 확인해 보세요. | The original is kept as it was. Download it as a file to check it.
+  `);
+  STRINGS.ko["session.beforeReplace"] = "{reason} 전에 현재 악보를 어떻게 할까요?";
+  STRINGS.en["session.beforeReplace"] = "What should happen to the current score before you continue? ({reason})";
   STRINGS.ko["toast.openErrorDetail"] = "열 수 없어요: {name} — {error}";
   STRINGS.en["toast.openErrorDetail"] = "Cannot open: {name} — {error}";
   group("a11y", `
@@ -1024,6 +1091,12 @@
   pattern("toast.rehearsal", /^리허설 ([\s\S]+)$/, ["text"]);
   pattern("toast.theme", /^(Dark|Light|Pretty|Cute)(?: UI)?로 전환했어요$/, ["theme"]);
   pattern("toast.openError", /^열 수 없어요: ([\s\S]*)$/, ["name"]);
+  pattern("session.beforeReplace", /^([\s\S]+) 전에 현재 악보를 어떻게 할까요\?$/, ["reason"], ["reason"]);
+  pattern("boot.safeMessage", /^지난번에 ‘([\s\S]*)’을\(를\) 여는 중 문제가 있었어요\. 어떻게 할까요\?$/, ["title"]);
+  pattern("session.fileSaved", /^마지막 파일 저장 ([\s\S]+)$/, ["time"]);
+  pattern("recent.measures", /^(\d+)마디$/, ["count"]);
+  pattern("recent.usage", /^사용 중 ([\s\S]+?) \/ 약 ([\s\S]+)$/, ["used", "quota"]);
+  pattern("recent.confirmMessage", /^‘([\s\S]*)’ 기록을 이 브라우저에서 지워요\. 파일로 저장해 둔 적이 없다면 되돌릴 수 없어요\.$/, ["title"]);
   pattern("status.selected", /^(\d+)개 선택$/, ["count"]);
   pattern("status.selectionHint", /^(\d+)개 선택 — Ctrl\+C\/V=복사\/붙여넣기 · S=이음줄 · < >=쐐기$/, ["count"]);
   pattern("hint.held", /^건반 (\d+)개 누름 — 숫자로 입력 · 1~8=입력 · 0=쉼표 · Esc=종료$/, ["count"]);

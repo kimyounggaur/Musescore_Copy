@@ -151,8 +151,14 @@
   function scheduleAutosave() {
     if (C.state.readOnly) return;
     IO.autosave(C.state.score, { onComplete(status) {
-      if (status.error) toast("자동 저장 공간이 부족해요. 파일 메뉴에서 악보를 저장해 주세요.");
-      else { savedRevision = status.revision; $("#status-hint").textContent = "이 기기에 자동 저장했어요"; }
+      if (status.error) {
+        const quota = status.error.name === "QuotaExceededError";
+        // 공간 부족은 처음 한 번 최근 작업 창을 사용량과 함께 열고, 그 뒤로는 토스트의 [최근 작업] 버튼으로 안내한다.
+        if (!(quota && SF.recent?.onQuota())) {
+          toast(quota ? "자동 저장 공간이 부족해요. 파일 메뉴에서 악보를 저장해 주세요." : "자동 저장에 실패했어요. 파일 메뉴에서 악보를 저장해 주세요.",
+            quota ? { action: { label: "최근 작업", run: () => SF.recent?.open({ quota: true }) } } : undefined);
+        }
+      } else { savedRevision = status.revision; $("#status-hint").textContent = "이 기기에 자동 저장했어요"; }
     } });
   }
 
@@ -561,6 +567,14 @@
   }
 
   /* ---------------- 상태바 ---------------- */
+  /** "마지막 파일 저장 시각" — 자동 저장은 이 브라우저에만 남는다는 것을 잊지 않게 한다(Safari는 7일 미사용 시 지울 수 있음). */
+  function refreshSavedLabel() {
+    const el = $("#status-saved");
+    if (!el) return;
+    const text = SF.session.savedLabel();
+    el.hidden = !text;
+    el.textContent = text ? (SF.i18n?.translate(text) ?? text) : "";
+  }
   function updateStatus() {
     const score = C.state.score;
     const el = $("#status-sel");
@@ -595,6 +609,7 @@
     text = SF.i18n?.translate(text) ?? text;
     el.textContent = text;
     $("#aria-live").textContent = text;
+    refreshSavedLabel();
 
     $("#status-hint").textContent = ui.speedy
       ? (ui.speedyHeld.size
@@ -608,33 +623,54 @@
 
   /* ---------------- 토스트/힌트 ---------------- */
   let toastTimer = null;
-  function toast(msg) {
-    const el = $("#toast");
-    el.textContent = SF.i18n?.translate(msg) ?? msg;
+  const toastHide = () => { clearTimeout(toastTimer); $("#toast").classList.remove("show"); };
+  const toastArm = ms => { clearTimeout(toastTimer); toastTimer = setTimeout(toastHide, ms); };
+  /** toast(msg) — 2.2초. toast(msg, { action: { label, run }, duration }) — 버튼이 있으면 6초(마우스·키보드가 올라가 있는 동안은 멈춤). */
+  function toast(msg, options) {
+    const el = $("#toast"), action = options?.action;
+    const text = SF.i18n?.translate(msg) ?? msg;
+    el.classList.toggle("has-action", Boolean(action));
+    if (action) {
+      const label = document.createElement("span"); label.textContent = text;
+      const button = document.createElement("button");
+      button.type = "button"; button.className = "toast-action"; button.textContent = SF.i18n?.translate(action.label) ?? action.label;
+      button.addEventListener("click", () => { toastHide(); Promise.resolve().then(() => action.run?.()).catch(() => {}); });
+      el.replaceChildren(label, button);
+    } else el.textContent = text;
+    if (!el.dataset.pause) {
+      el.dataset.pause = "1";
+      for (const [type, hold] of [["pointerenter", true], ["focusin", true], ["pointerleave", false], ["focusout", false]]) {
+        el.addEventListener(type, () => { if (!el.classList.contains("has-action") || !el.classList.contains("show")) return; if (hold) clearTimeout(toastTimer); else toastArm(1500); });
+      }
+    }
     el.classList.add("show");
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.classList.remove("show"), 2200);
+    toastArm(options?.duration ?? (action ? 6000 : 2200));
   }
   function flashHint(msg) { if (msg) toast(msg); }
 
   /* ---------------- Supabase 인증 ---------------- */
 
-  /* ---------------- 파일 열기 공통 처리 (메뉴·드래그&드롭) ---------------- */
-  function handleLoadedScore(loaded, name, err, report) {
-    if (!loaded) {
-      toast(`열 수 없어요: ${name}${err && err.message ? " — " + err.message : ""}`);
-      return;
-    }
-    C.setScore(loaded);
+  /* ---------------- 악보 교체 (열기·드롭·앱 파일 실행·새 악보·데모·클라우드) ---------------- */
+  /** 악보를 실제로 갈아 끼운다. 직접 부르지 말고 SF.session.replaceScore를 거친다(저장 확인·순서 보장). 부팅 때 데모·복원도 여기를 거친다.
+   * opts: readOnly, name, report(가져오기 보고서), toast(문구 / false=표시 안 함), boot(부팅 중 — 부팅 흐름이 자기 안내를 직접 보여 주므로 "불러왔어요" 생략) */
+  function installScore(score, opts = {}) {
+    setReadOnly(!!opts.readOnly);
+    C.setScore(score);
     ui.selection = null; ui.selAnchor = null; ui.cursorId = null; ui.lastPitch = null;
     ui.speedy = false; ui.speedyStep = null; clearSpeedyHeld();
     stopPlayback();
     update();
-    if (report && report.length) {
-      showImportReport(name, loaded, report);
-    } else {
-      toast(`"${loaded.meta.title || name}" 불러왔어요`);
+    if (opts.report && opts.report.length) showImportReport(opts.name, score, opts.report);
+    else if (opts.toast !== false && !opts.boot) toast(opts.toast || `"${score.meta.title || opts.name}" 불러왔어요`);
+  }
+  /** 파일·클라우드에서 읽은 결과를 받는다. 실패는 알리고, 성공은 교체 통로로 보낸다(교체 여부를 Promise로 돌려줌). */
+  function handleLoadedScore(loaded, name, err, report, opts = {}) {
+    if (!loaded) {
+      toast(`열 수 없어요: ${name}${err && err.message ? " — " + err.message : ""}`);
+      return false;
     }
+    const origin = /\.json$/i.test(name || "") ? "file" : "import";
+    return SF.session.replaceScore(loaded, { name, report, readOnly: false, origin, ...opts });
   }
 
   function showImportReport(name, score, report) {
@@ -663,7 +699,7 @@
         toast("악보 파일(.json/.musicxml/.mxl/.mid)을 끌어다 놓아주세요");
         return;
       }
-      IO.loadScoreFile(file, (...args) => { if (args[0]) setReadOnly(false); handleLoadedScore(...args); });
+      IO.loadScoreFile(file, handleLoadedScore);
     });
   }
 
@@ -682,15 +718,11 @@
       const act = item.dataset.act;
       const score = C.state.score;
       if (act === "new") {
-        if (!await SF.ui.confirmDialog({ title: "새 악보", message: "새 악보를 만들까요? 현재 작업을 보관하려면 파일로 저장해 주세요.", confirmText: "새 악보 만들기", danger: true })) return;
-        setReadOnly(false);
-        C.setScore(C.createScore({}));
-        ui.selection = null; ui.cursorId = null; ui.lastPitch = null;
-        ui.speedy = false; ui.speedyStep = null; clearSpeedyHeld();
-        stopPlayback(); update();
-        openSettings();
+        if (await SF.session.replaceScore(C.createScore({}), { reason: "새 악보 만들기", toast: false, origin: "new" })) openSettings();
       } else if (act === "open") {
-        IO.openScoreDialog((...args) => { if (args[0]) setReadOnly(false); handleLoadedScore(...args); });
+        IO.openScoreDialog(handleLoadedScore);
+      } else if (act === "recent") {
+        SF.recent?.open();
       } else if (act === "save") {
         saveScore();
       } else if (act === "musicxml") {
@@ -711,14 +743,7 @@
         toast("유저 매뉴얼을 새 탭으로 열었어요");
       } else if (act.startsWith("demo-")) {
         const key = act.slice(5);
-        if (IO.DEMOS[key]) {
-          setReadOnly(false);
-          C.setScore(IO.DEMOS[key]());
-          ui.selection = null; ui.cursorId = null;
-          ui.speedy = false; ui.speedyStep = null; clearSpeedyHeld();
-          stopPlayback(); update();
-          toast("데모 악보를 불러왔어요 — 스페이스로 재생해 보세요");
-        }
+        if (IO.DEMOS[key]) await SF.session.replaceScore(IO.DEMOS[key](), { reason: "데모 열기", toast: "데모 악보를 불러왔어요 — 스페이스로 재생해 보세요", origin: "demo" });
       }
     });
   }
@@ -734,20 +759,13 @@
       localStorage.setItem("scoreforge.welcomed", "1");
     });
     $$("#dlg-welcome [data-start]").forEach(btn => {
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", async () => {
         const k = btn.dataset.start;
         if (k === "blank") {
-          C.setScore(C.createScore({}));
-          $("#dlg-welcome").close();
-          openSettings();
+          if (await SF.session.replaceScore(C.createScore({}), { reason: "새 악보 만들기", toast: false, origin: "new" })) { $("#dlg-welcome").close(); openSettings(); }
         } else if (IO.DEMOS[k]) {
-          C.setScore(IO.DEMOS[k]());
-          $("#dlg-welcome").close();
-          update();
-          toast("스페이스 키로 재생해 보세요!");
+          if (await SF.session.replaceScore(IO.DEMOS[k](), { reason: "데모 열기", toast: "스페이스 키로 재생해 보세요!", origin: "demo" })) $("#dlg-welcome").close();
         }
-        ui.selection = null; ui.cursorId = null;
-        update();
       });
     });
   }
@@ -947,7 +965,90 @@
   }
 
   /* ---------------- 시작 ---------------- */
-  function start() {
+  const BOOT_PROBLEM = "저장된 악보를 여는 중 문제가 생겨 안전하게 시작했어요. 최근 작업에서 원본을 내려받을 수 있어요.";
+  const tx = text => SF.i18n?.translate?.(text) ?? text;   // i18n 초기화(SF.i18n.init) 전에도 대화상자 글이 언어에 맞게 나오게
+
+  /** 데모(blank면 빈 악보)로 시작한다. 문서 ID와 편집 잠금만 붙인다 — 첫 편집 전에는 기록을 만들지 않는다. */
+  async function installFallback(blank) {
+    if (blank) {
+      const fresh = C.createScore({});
+      await SF.session.adopt(fresh, { origin: "new" });
+      installScore(fresh, { boot: true });
+      return;
+    }
+    const demo = IO.DEMOS.butterfly();
+    await SF.session.adopt(demo, { origin: "demo" });   // 문서 ID와 편집 잠금만 붙인다 — 첫 편집 전에는 기록을 만들지 않는다
+    installScore(demo, { boot: true });
+  }
+  /** 지난 부팅이 끝나지 못한 문서가 시작 문서일 때 묻는다(P2-E). 돌려주는 값:
+   * { score }(그래도 열기 — 열 수 없으면 null) · { blank: true }(새 악보로 시작) · {}(닫음 — 이번에는 데모로 시작하고 표시는 그대로 둬서 다음에 또 묻는다) */
+  async function safeMode() {
+    const title = SF.session.bootInfo().pending?.title || "제목 없음";
+    for (;;) {
+      const choice = await SF.ui.choiceDialog({
+        title: tx("지난번에 여는 중 문제가 있었어요"),
+        message: tx(`지난번에 ‘${title}’을(를) 여는 중 문제가 있었어요. 어떻게 할까요?`),
+        choices: [
+          { id: "open", label: tx("그래도 열기") },
+          { id: "download", label: tx("파일로 내려받기"), primary: true },
+          { id: "fresh", label: tx("새 악보로 시작") },
+        ],
+      });
+      if (choice === "download") { toast(await SF.session.bootDownloadPending() ? "악보 파일을 내려받았어요" : "이 기록을 찾지 못했어요 — 이미 지워졌을 수 있어요"); continue; }
+      if (choice === "open") return { score: await SF.session.bootOpenPending() };
+      if (choice === "fresh") { await SF.session.bootSkipPending(); return { blank: true }; }
+      return {};
+    }
+  }
+  /** 부팅 때 열 악보를 정해 설치한다(화면을 다 만든 뒤). 복원한 악보를 설치했으면 true — 첫 렌더가 끝날 때까지 settleBoot가 지킨다. */
+  async function bootScore(restoring) {
+    let saved = await restoring, blank = false;
+    if (!saved && SF.session.bootInfo().pending) {
+      const answer = await safeMode();
+      saved = answer.score || null; blank = Boolean(answer.blank);
+    }
+    const problem = SF.session.bootInfo().quarantined.length > 0;   // 이번 부팅에서 새로 격리한 기록이 있다
+    if (!saved) {
+      await installFallback(blank);
+      if (problem) toast(BOOT_PROBLEM);
+      return false;
+    }
+    await SF.session.bootBegin();   // 렌더 중 멈춰도 다음 부팅이 알 수 있게 "여는 중"을 먼저 적어 둔다
+    installScore(saved, { boot: true });
+    if (SF.session.lockState().locked) setReadOnly(true);   // 다른 탭이 편집 중이던 악보는 읽기 전용으로 되살린다(2-D)
+    toast(problem ? BOOT_PROBLEM : "이전 작업을 자동으로 불러왔어요");
+    return true;
+  }
+  /** 첫 렌더가 끝나기를 기다린다: 프레임 2번. 숨은 탭(복원으로 열린 배경 탭)은 프레임이 멈추므로 기다리지 않고, 보이는 탭도 1.5초가 상한. */
+  const framesSettled = () => new Promise(resolve => {
+    if (document.hidden || typeof requestAnimationFrame !== "function") { resolve(); return; }
+    const timer = setTimeout(resolve, 1500);
+    requestAnimationFrame(() => requestAnimationFrame(() => { clearTimeout(timer); resolve(); }));
+  });
+  /** 첫 렌더에서 예외가 났다: 그 기록을 격리하고 데모로 안전하게 시작한다. */
+  async function recoverBoot(error) {
+    console.warn("ScoreForge: 저장된 악보를 여는 중 문제가 생겼어요", error);
+    await SF.session.bootFailed(error);
+    await installFallback(false);
+    update({ immediate: true });
+    toast(BOOT_PROBLEM);
+  }
+  /** 첫 렌더를 지킨다(P2-E): 동기 렌더(예외는 여기서 잡힌다) → 프레임 2번(렌더 중 멈추면 여기까지 오지 못해 "여는 중" 표시가 남는다) → 표시 해제. */
+  async function settleBoot(restored) {
+    try {
+      update({ immediate: true });
+      if (restored) await framesSettled();
+    } catch (error) {
+      if (!restored) throw error;
+      await recoverBoot(error);
+      return;
+    }
+    if (restored) await SF.session.bootDone();
+  }
+
+  async function start() {
+    // 저장소 열기·옛 자동 저장 이전·복원할 악보 고르기를 화면을 만드는 동안 먼저 시작한다.
+    const restoring = SF.session.restoreOnBoot().catch(() => null);
     applyTheme(loadTheme(), { silent: true });
     SF.palette.init();
     SF.ui.init();
@@ -969,15 +1070,9 @@
     bindNavigationPanels();
     initMidi();
 
-    const saved = IO.loadAutosave();
-    if (saved) {
-      C.setScore(saved);
-      toast("이전 작업을 자동으로 불러왔어요");
-    } else {
-      C.setScore(IO.DEMOS.butterfly());
-    }
+    const restored = await bootScore(restoring);   // 부팅 때 열 악보를 정해 설치(복원·데모·안전 모드 대화상자·격리 안내)
     C.onChange((score, event) => {
-      if (["saved", "autosaved"].includes(event?.type)) { refreshToolbar(); return; }
+      if (["saved", "autosaved"].includes(event?.type)) { refreshToolbar(); refreshSavedLabel(); return; }
       changeRevision = C.state.revision; update();
       if (["mutate", "undo", "redo"].includes(event?.type)) scheduleAutosave();
       if (event?.type === "setScore") { clearTimeout(saveTimer); SF.cloud?.onScoreLoaded(score); }
@@ -991,13 +1086,13 @@
     window.addEventListener("beforeunload", e => { if (C.state.dirty && !C.isAutosaved()) { e.preventDefault(); e.returnValue = ""; } });
     if (matchMedia("(max-width: 900px)").matches) $("#properties-panel").classList.add("collapsed");
     SF.cloud?.onScoreLoaded(C.state.score);
-    update({ immediate: true });
+    await settleBoot(restored);   // 첫 렌더 — 복원한 악보가 그리다 예외를 내면 격리하고 데모로(P2-E)
     maybeShowWelcome();
 
     E.loadFont(() => update({ force: true })); // Bravura 로드되면 다시 그림
   }
 
-  const api = { C, E, P, IO, Fraction, ui, $, $$, getLayoutCache: () => layoutCache, loadTheme, saveTheme, themeLabel, applyTheme, relayout, repaint, refreshChrome, update, scheduleAutosave, saveScore, setReadOnly, refreshCursor, applyZoom, svgPoint, select, selectedEvent, selectedIds, rangeNoteEnds, targetEvent, buildTimeline, startPlayback, playFromSelection, autoScroll, togglePlay, stopPlayback, buildToolbar, refreshToolbar, updateStatus, durName2, toast, flashHint, handleLoadedScore, showImportReport, bindDragDrop, bindMenu, maybeShowWelcome, bindWelcome, moveSelection, afterHistory, bindThemePicker, bindButtons, start };
+  const api = { C, E, P, IO, Fraction, ui, $, $$, getLayoutCache: () => layoutCache, loadTheme, saveTheme, themeLabel, applyTheme, relayout, repaint, refreshChrome, update, scheduleAutosave, saveScore, setReadOnly, refreshCursor, applyZoom, svgPoint, select, selectedEvent, selectedIds, rangeNoteEnds, targetEvent, buildTimeline, startPlayback, playFromSelection, autoScroll, togglePlay, stopPlayback, buildToolbar, refreshToolbar, updateStatus, durName2, toast, flashHint, handleLoadedScore, installScore, showImportReport, bindDragDrop, bindMenu, maybeShowWelcome, bindWelcome, moveSelection, afterHistory, bindThemePicker, bindButtons, start };
   for (const module of [SF.input, SF.editing, SF.panels, SF.keymap]) Object.assign(api, module.create(api));
   const { activeRef, activeCtx, firstEventIdForVoice, setCurrentVoice, setActiveStaff, effectiveAlter, pitchFromStep, nearestOctave, findEventAtTick, advancePos, measureCountForEnd, ensureMeasureCount, clonePlain, cloneDurForPaste, selectionItems, copySelection, decoratePastedEvent, pasteClipboard, doInput, mirrorLinkedTab, inputDrum, inputMidiPitches, initMidi, refreshMidiDevices, connectMidiInput, onMidiMessage, pitchForStepLabel, previewSpeedyStep, doSpeedyInput, toggleSpeedyDot, addSpeedyChordTone, speedyDeleteAt, clearSpeedyHeld, setSpeedyHeld, cursorPos, initSpeedyMidi, toggleSpeedy, setInputMode, inputLetter, onCanvasMove, onCanvasClick, clampStep, onPointerDown, onPointerMove, onPointerUp, editLyric, editChordSymbol, buildPiano, setDuration, canDot, toggleDot, applyAccidental, transposeSelection, deleteSelection, repitchSelection, toggleTie, applyArticulation, applyDynamic, toggleSlur, toggleHairpin, applyTuplet, applyGraceBefore, toggleNotation, markerTarget, selectedMeasureRange, applyStartRepeat, applyEndRepeat, applyRepeatCount, applyVolta, applyChordSymbol, applyTempoMark, nextRehearsalMark, applyRehearsalMark, applyStaffText, htmlEsc, checked, selectedPropIds, firstSelectedRef, renderPropertiesPanel, mutateSelectedEvents, applyPropertyInput, applyMeasureBreak, bindProperties, refreshOpenOverlays, scrollToMeasure, renderNavigator, measureDensity, renderTimelinePanel, openNavigator, openTimelinePanel, gotoQuery, bindNavigationPanels, r1, mixerRecord, renderMixerRows, updateMixerValue, bindMixer, openSettings, bindSettings, bindKeys, bindShortcutOverlay, bindCommandPalette, openCommandPalette, closeShortcutOverlay, isShortcutOverlayOpen } = api;
   for (const method of ["undo", "redo"]) {
@@ -1009,7 +1104,7 @@
     if (C.state.readOnly) { toast("읽기 전용 악보예요. 사본을 만들어 편집하세요."); return; }
     return coreMutate(label, fn, opts);
   };
-  SF.app = { ui, update, relayout, repaint, refreshChrome, toast, handleLoadedScore, setReadOnly,
+  SF.app = { ui, update, relayout, repaint, refreshChrome, toast, handleLoadedScore, installScore, setReadOnly,
     actions: api, registerCommand: command => SF.keymap.registerCommand(command), auth: SF.auth?.state };
   document.addEventListener("DOMContentLoaded", start);
 })(window.SF);

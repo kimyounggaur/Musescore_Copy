@@ -112,7 +112,7 @@ test('real browser UI editing, persistence, pagination, exports and responsive c
     await t.test('actual mutations autosave exact revision and history labels coalesce', async () => {
       await reset();await page.evaluate(()=>{SF.core.mutate('검증',s=>{s.meta.title='변경';});SF.core.mutate('빠르기',s=>s.tempo=100,{coalesce:'tempo'});SF.core.mutate('빠르기',s=>s.tempo=105,{coalesce:'tempo'});});
       await page.waitForFunction(()=>SF.core.isAutosaved());
-      assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('scoreforge.autosave.v1')).revision===SF.core.state.revision),true);
+      assert.equal(await page.evaluate(async()=>(await SF.store.loadDoc(SF.session.activeId())).revision===SF.core.state.revision),true);
       assert.match(await page.locator('#btn-undo').getAttribute('title'),/빠르기/);
       await page.locator('#btn-undo').click();assert.equal(await page.evaluate(()=>SF.core.state.score.tempo),100);
       await page.evaluate(()=>SF.app.setReadOnly(true));const revision=await page.evaluate(()=>SF.core.state.revision);await page.keyboard.press('Control+z');await page.evaluate(()=>SF.app.actions.pasteClipboard());assert.equal(await page.evaluate(()=>SF.core.state.revision),revision);await page.evaluate(()=>SF.app.setReadOnly(false));

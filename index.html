@@ -45,6 +45,7 @@
     <div id="file-menu" class="menu">
       <div class="mi" data-act="new">🆕 새 악보 만들기</div>
       <div class="mi" data-act="open">📂 열기 <small>.json·.musicxml·.mxl·.mid</small></div>
+      <div class="mi" data-act="recent">🕘 최근 작업 <small>자동 보관된 악보</small></div>
       <div class="mi" data-act="save">💾 저장 (.json) <small>Ctrl+S</small></div>
       <hr>
       <div class="mi" data-act="musicxml">🎼 MusicXML 내보내기 <small>MuseScore용</small></div>
@@ -142,6 +143,15 @@
   <button class="drum-btn" data-drum="high-tom" title="High tom">High Tom</button>
 </div>
 
+<!-- ═══════════ 다른 탭이 편집 중인 악보 안내(js/lock-ui.js) ═══════════ -->
+<div id="lock-banner" class="lock-banner" role="status" aria-live="polite" hidden>
+  <span id="lock-text" class="lock-text"></span>
+  <span class="lock-actions">
+    <button type="button" id="lock-resume" class="tbtn" hidden>편집 시작</button>
+    <button type="button" id="lock-copy" class="tbtn">사본으로 편집</button>
+  </span>
+</div>
+
 <!-- ═══════════ 작업 영역 ═══════════ -->
 <div id="workspace">
   <main id="canvas">
@@ -175,6 +185,7 @@
 <footer class="statusbar">
   <span id="status-sel"></span>
   <span id="status-hint"></span>
+  <span id="status-saved" hidden title="자동 저장은 이 브라우저에만 남아요. 중요한 악보는 파일로 저장해 두세요."></span>
   <div class="zoom-ctrl">
     <button id="btn-zoom-out" class="tbtn" title="축소">−</button>
     <span id="zoom-label">100%</span>
@@ -416,6 +427,25 @@ where email = 'admin@example.com';</pre>
   </div>
 </dialog>
 
+<!-- ═══════════ 최근 작업 다이얼로그(js/recent.js) — 목록은 모두 DOM API로 그린다 ═══════════ -->
+<dialog id="dlg-recent">
+  <div class="dlg-head">
+    <h2>🕘 최근 작업</h2>
+    <form method="dialog"><button class="dlg-close" title="닫기">✕</button></form>
+  </div>
+  <div class="dlg-body">
+    <p id="rc-warn" class="rc-warn" role="alert" hidden>자동 저장 공간이 부족해요. 쓰지 않는 악보를 지우거나 파일로 내려받아 두세요.</p>
+    <p class="rc-note">자동 저장은 이 브라우저에만 남아요. 중요한 악보는 파일로 저장해 두세요.</p>
+    <ul id="rc-list" class="rc-list" hidden></ul>
+    <p id="rc-empty" class="rc-empty" hidden>보관된 악보가 아직 없어요. 악보를 고치면 자동으로 여기에 쌓여요.</p>
+    <p id="rc-unavailable" class="rc-empty" hidden>이 브라우저에서는 악보별 자동 보관을 쓸 수 없어요. 파일로 저장해 두세요.</p>
+    <p id="rc-usage" class="rc-usage" hidden></p>
+    <div class="dlg-actions">
+      <form method="dialog"><button class="tbtn primary">닫기</button></form>
+    </div>
+  </div>
+</dialog>
+
 <!-- ═══════════ 가져오기 결과 다이얼로그 ═══════════ -->
 <dialog id="dlg-import">
   <div class="dlg-head">
@@ -442,15 +472,30 @@ where email = 'admin@example.com';</pre>
   </div>
 </dialog>
 
+<!-- ═══════════ 선택 대화상자(저장 확인 등) — 내용은 js/ui-dialog.js가 채움 ═══════════ -->
+<dialog id="dlg-choice" class="app-prompt">
+  <form method="dialog" class="dlg-body">
+    <h2></h2>
+    <p></p>
+    <div class="dlg-actions"></div>
+  </form>
+</dialog>
+
 <script src="js/config.js"></script>
 <script src="js/version.js"></script>
 <script src="js/safe-html.js"></script>
 <script src="vendor/supabase.js"></script>
 <script src="js/core.js"></script>
+<script src="js/schema.js"></script>
 <script src="js/engrave.js"></script>
 <script src="js/playback.js"></script>
 <script src="js/io.js"></script>
 <script src="js/ui-dialog.js"></script>
+<script src="js/store.js"></script>
+<script src="js/lock.js"></script>
+<script src="js/session.js"></script>
+<script src="js/lock-ui.js"></script>
+<script src="js/recent.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/cloud.js"></script>
 <script src="js/pwa.js"></script>
