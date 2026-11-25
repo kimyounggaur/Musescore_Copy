@@ -8,7 +8,7 @@
   const C = SF.core;
   const { Fraction } = SF;
   const F = (n, d = 1) => new Fraction(n, d);
-  const timeAt = (score, m) => C.timeSigAt ? C.timeSigAt(score, m) : score.measures.slice(0, m + 1).reduce((ts, mm) => mm.timeSig || ts, score.timeSig);
+  const timeAt = (score, m) => C.timeSigAt(score, m);
   const lengthAt = (score, m) => {
     if (C.measureLenAt) return C.measureLenAt(score, m);
     const value = score.measures[m]?.actualLen;

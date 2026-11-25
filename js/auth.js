@@ -382,20 +382,20 @@
       let problem = "";
       for (let attempt = 0; attempt < 5; attempt++) {
         const password = await SF.ui.promptDialog({
-          title: "새 비밀번호 설정",
-          message: problem || "새 비밀번호를 입력하세요. 6자 이상이어야 해요.",
-          label: "새 비밀번호",
+          title: SF.t("auth.newPasswordTitle"),
+          message: problem || SF.t("auth.newPasswordHelp"),
+          label: SF.t("auth.newPasswordLabel"),
           type: "password",
           autocomplete: "new-password",
-          confirmText: "비밀번호 바꾸기",
-          validate: value => (String(value).length < 6 ? "비밀번호는 6자 이상이어야 합니다." : ""),
+          confirmText: SF.t("auth.changePassword"),
+          validate: value => (String(value).length < 6 ? SF.t("auth.shortPassword") : ""),
         });
-        if (password === null) { toast("비밀번호는 바꾸지 않았어요"); return; }
+        if (password === null) { toast(SF.t("auth.passwordKept")); return; }
         const { error } = await client.auth.updateUser({ password });
-        if (!error) { toast("비밀번호를 바꿨어요"); return; }
+        if (!error) { toast(SF.t("auth.passwordChanged")); return; }
         problem = authErrorMessage(error);
       }
-      toast("비밀번호를 바꾸지 못했어요. 재설정 메일을 다시 요청해 주세요.");
+      toast(SF.t("auth.passwordFailed"));
     } finally {
       recoveryRunning = false;
     }
@@ -500,7 +500,7 @@
           authState.profile = await loadAuthProfile(data.user);
           updateAuthChrome();
           $("#dlg-auth").close();
-          toast("회원가입 완료. 로그인했어요");
+          toast(SF.t("auth.signupDone"));
         } else {
           setAuthMessage("회원가입 요청이 완료됐어요. 이메일 인증이 켜져 있다면 받은 편지함에서 확인 링크를 눌러주세요.", "ok");
         }
@@ -515,7 +515,7 @@
 
       updateAuthChrome();
       $("#dlg-auth").close();
-      toast("회원 로그인 완료");
+      toast(SF.t("auth.memberDone"));
     } catch (err) {
       setAuthMessage(authErrorMessage(err), "error");
     } finally {
@@ -532,7 +532,7 @@
       authState.session = null;
       authState.profile = null;
       updateAuthChrome();
-      toast("로그아웃했어요");
+      toast(SF.t("auth.logoutDone"));
     } catch (err) {
       toast(authErrorMessage(err));
     }
@@ -567,14 +567,14 @@
     let problem = "";
     for (let attempt = 0; attempt < 3; attempt++) {
       const password = await SF.ui.promptDialog({
-        title: "회원 탈퇴",
-        message: problem || "계정과 클라우드에 저장한 악보가 모두 지워지고 되돌릴 수 없어요. 계속하려면 비밀번호를 입력하세요.",
-        label: "비밀번호",
+        title: SF.t("auth.deleteAccount"),
+        message: problem || SF.t("auth.deleteHelp"),
+        label: SF.t("auth.password"),
         type: "password",
         autocomplete: "current-password",
         danger: true,
-        confirmText: "다음",
-        validate: value => (value ? "" : "비밀번호를 입력하세요."),
+        confirmText: SF.t("keymap.next"),
+        validate: value => (value ? "" : SF.t("auth.enterPassword")),
       });
       if (password === null) return { reason: "cancelled" };
       const { data, error } = await client.auth.signInWithPassword({ email: user.email, password });
@@ -591,7 +591,7 @@
     const user = authState.session && authState.session.user;
     const client = getSupabaseClient({ requireConfig: false });
     if (!client || !user || !user.id || !user.email) {
-      toast("로그인한 뒤에 탈퇴할 수 있어요.");
+      toast(SF.t("auth.deleteNeedLogin"));
       return { ok: false, reason: "signed-out" };
     }
     if (!SF.ui || typeof SF.ui.promptDialog !== "function") return { ok: false, reason: "unavailable" };
@@ -600,24 +600,24 @@
       let verified;
       try {
         const checked = await reauthenticate(client, user);
-        if (checked.reason === "cancelled") { toast("탈퇴를 취소했어요."); return { ok: false, reason: "cancelled" }; }
-        if (checked.reason === "password") { longToast("비밀번호가 맞지 않아 탈퇴를 진행하지 못했어요."); return { ok: false, reason: "password" }; }
+        if (checked.reason === "cancelled") { toast(SF.t("auth.deleteCancelled")); return { ok: false, reason: "cancelled" }; }
+        if (checked.reason === "password") { longToast(SF.t("auth.deleteBadPassword")); return { ok: false, reason: "password" }; }
         if (checked.reason) { longToast(checked.message); return { ok: false, reason: "error" }; }
         verified = checked.session;
         if (!verified || !verified.access_token || !verified.user || verified.user.id !== user.id) {
-          longToast("로그인한 계정이 바뀌었어요. 탈퇴를 진행하지 않았어요. 다시 시도해 주세요.");
+          longToast(SF.t("auth.deleteChanged"));
           return { ok: false, reason: "account-changed" };
         }
         const word = await SF.ui.promptDialog({
-          title: "정말 탈퇴할까요?",
-          message: '되돌릴 수 없어요. 계속하려면 아래 칸에 "탈퇴"라고 입력하세요.',
-          label: "확인 문구",
+          title: SF.t("auth.deleteConfirmTitle"),
+          message: SF.t("auth.deleteConfirmHelp"),
+          label: SF.t("auth.deleteConfirmLabel"),
           autocomplete: "off",
           danger: true,
-          confirmText: "회원 탈퇴",
-          validate: value => (DELETE_WORDS.includes(String(value).trim().toLowerCase()) ? "" : '"탈퇴"를 그대로 입력하세요.'),
+          confirmText: SF.t("auth.deleteAccount"),
+          validate: value => (DELETE_WORDS.includes(String(value).trim().toLowerCase()) ? "" : SF.t("auth.deleteConfirmMismatch")),
         });
-        if (word === null) { toast("탈퇴를 취소했어요."); return { ok: false, reason: "cancelled" }; }
+        if (word === null) { toast(SF.t("auth.deleteCancelled")); return { ok: false, reason: "cancelled" }; }
       } catch (err) {
         longToast(deleteErrorMessage(err));
         return { ok: false, reason: "error" };
@@ -639,7 +639,7 @@
       authState.session = null;
       authState.profile = null;
       updateAuthChrome();
-      longToast("탈퇴가 끝났어요. 이 기기의 로컬 악보는 그대로 남아 있어요.");
+      longToast(SF.t("auth.deleteDone"));
       return { ok: true };
     } finally {
       deleteRunning = false;

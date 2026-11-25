@@ -33,6 +33,7 @@
     delete | 삭제 | Delete
     input | 입력 | Input
     content | 내용 | Content
+    choose | 선택 | Choose
     none | 없음 | None
     auto | 자동 | Auto
     optional | (선택) | (Optional)
@@ -511,6 +512,7 @@
     selectBreak | 브레이크를 붙일 마디를 먼저 선택하세요 | Select a measure for the break first
     notFound | 이동할 위치를 찾지 못했어요 | Could not find the requested position
     dropFile | 악보 파일(.json/.musicxml/.xml/.mxl)을 끌어다 놓아주세요 | Drop a score file (.json/.musicxml/.xml/.mxl)
+    dropScoreFile | 악보 파일(.json/.musicxml/.mxl/.mid)을 끌어다 놓아주세요 | Drop a score file (.json/.musicxml/.mxl/.mid)
     lyricKeys | Space=다음 · Esc=닫기 | Space=next · Esc=close
     lyricMelisma | Space=다음 · -=하이픈 · _=멜리스마 | Space=next · -=hyphen · _=melisma
     chordKeys | Space=다음 · Shift+Space=이전 · Esc=닫기 | Space=next · Shift+Space=previous · Esc=close

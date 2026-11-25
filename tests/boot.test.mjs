@@ -19,7 +19,7 @@ function boot(options = {}) {
   context.document = { getElementById: () => null, querySelectorAll: () => [], querySelector: () => null };
   context.localStorage = webStorage();
   context.sessionStorage = options.sessionStorage || webStorage();
-  const files = ['safe-html', 'core', ...(options.noSchema ? [] : ['schema']), 'engrave', 'playback', 'io', 'store'];
+  const files = ['safe-html', 'core', 'i18n', ...(options.noSchema ? [] : ['schema']), 'engrave', 'playback', 'io', 'store'];
   for (const name of files) vm.runInContext(readFileSync(`js/${name}.js`, 'utf8'), context, { filename: `${name}.js` });
   const SF = context.SF, C = SF.core;
   const backend = options.backend || SF.storeTesting.memoryBackend();
@@ -323,6 +323,10 @@ test('구조 고정: 부팅 안전 모드 호출은 session.js·app.js에 한 �
     assert.ok(app.includes(`SF.session.${call}(`), `app.js가 ${call}을 부른다`);
   assert.equal((app.match(/\bC\.setScore\(/g) || []).length, 1, 'installScore 한 곳');
   assert.match(app, /async function settleBoot\(/); assert.match(app, /update\(\{ immediate: true \}\);\s*if \(restored\) await framesSettled\(\)/);
-  for (const text of ['문제가 생겼어요. 최근 작업에서 확인해 주세요.']) assert.ok(readFileSync('js/errors.js', 'utf8').includes(text));
+  // P9-6: 문구는 SF.t(키)로 부르고 문장은 i18n.js 사전이 가진다
+  for (const [key, text] of [['export.errorRecovery', '문제가 생겼어요. 최근 작업에서 확인해 주세요.']]) {
+    assert.ok(readFileSync('js/errors.js', 'utf8').includes(`SF.t("${key}")`));
+    assert.ok(readFileSync('js/i18n.js', 'utf8').includes(`${key.split('.')[1]} | ${text} |`));
+  }
   assert.doesNotMatch(readFileSync('js/errors.js', 'utf8'), /마지막 자동 저장본/);
 });

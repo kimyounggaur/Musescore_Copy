@@ -151,28 +151,40 @@ Bravura 폰트와 Supabase/smplr 라이브러리는 로컬에 포함됩니다. �
 ```
 index.html        앱 셸(툴바·다이얼로그·피아노)
 css/style.css     디자인 토큰(다크 작업실 + 흰 종이), 반응형, 인쇄
+js/config.js      배포용 공개 Supabase 설정 (비밀 키 금지)
+js/version.js     앱 버전 한 곳(sw.js·릴리스 시험과 함께 올린다)
+js/safe-html.js   innerHTML에 들어가는 동적 값을 거르는 한 통로
+js/view-level.js  기본/고급 보기 전환(자주 쓰는 조작만 보이기), 숨김 분류표 `TIERS`
 js/core.js        ★ 도메인: Fraction 시간, tpc식 음높이 철자, 악보 트리,
                     fillGap 편집 연산, rebar, 조옮김, 스냅샷 undo/redo
+js/schema.js      불러오는 악보 JSON의 모양·값 검사와 자동 고침
 js/engrave.js     ★ 조판: SMuFL(Bravura) 글리프 + 폴백 패스, 레이아웃(간격·줄바꿈·justify),
                     빔/타이/임시표/덧줄 렌더, 히트 테스트, 고스트/커서 오버레이
 js/playback.js    ★ 재생: 악보→이벤트 컴파일(타이 병합), smplr 샘플러+신스 폴백, 룩어헤드 스케줄러,
                     메트로놈, MIDI(SMF) 내보내기
 js/io.js          저장/열기(JSON), MusicXML 4.0 내보내기, 자동 저장, 데모 악보 DSL
-js/app.js         UI 배선: 단축키, 마우스/드래그, 피아노, 재생 커서, 다이얼로그, 토스트
+js/ui-dialog.js   비동기 앱 다이얼로그와 포커스 복원
+js/menus.js       파일·계정·더보기 팝업 메뉴의 열기·닫기·위치·키보드
+js/store.js       악보별 자동 저장소(IndexedDB, 없으면 localStorage 한 칸)
+js/lock.js        같은 악보를 두 탭에서 동시에 고치지 못하게 하는 잠금
+js/session.js     악보 교체 통로, 악보별 보관, 부팅 복원(안전 모드)
+js/lock-ui.js     다른 탭이 편집 중인 악보 안내 띠
+js/recent.js      파일 ▸ 최근 작업 창(다시 열기·내려받기·지우기)
+js/auth.js        Supabase 인증·관리자 UI
+js/cloud.js       소유자 악보, 충돌 감지, 공유, 오프라인 대기
+js/pwa.js         설치·업데이트·앱 셸 및 제한된 샘플 캐시 (서비스 워커는 sw.js)
+js/i18n.js        KO/EN 문자열·`SF.t(key)`·사용자 콘텐츠 보존
+js/palette.js     도구 팔레트 정의(앱 명령·번역과 맞물리는 고정 ID)
+js/keymap.js      단축키 원본, 명령 팔레트·도움말
 js/input.js       음표/건반/스피디 입력
 js/editing.js     선택 범위, 음표 편집과 기호 적용
 js/panels.js      속성·설정·믹서·탐색 패널
-js/keymap.js      단축키 원본, 명령 팔레트·도움말
-js/ui-dialog.js   비동기 앱 다이얼로그와 포커스 복원
 js/ui-v3.js       마디·기보·모바일·재생 컨트롤
-js/view-level.js  기본/고급 보기 전환(자주 쓰는 조작만 보이기), 숨김 분류표 `TIERS`
-js/export-ui.js   SVG/PNG/인쇄와 MIDI 가져오기 옵션
 js/zip.js         의존성 없는 무압축 ZIP 작성기(여러 쪽 SVG·PNG 묶음)
-js/auth.js        Supabase 인증·관리자 UI
-js/cloud.js       소유자 악보, 충돌 감지, 공유, 오프라인 대기
-js/i18n.js        KO/EN 문자열·사용자 콘텐츠 보존
-js/pwa.js, sw.js  설치·업데이트·앱 셸 및 제한된 샘플 캐시
-js/config.js      배포용 공개 Supabase 설정 (비밀 키 금지)
+js/export-ui.js   SVG/PNG/인쇄와 MIDI 가져오기 옵션
+js/errors.js      처리되지 않은 오류를 알리고 최근 목록을 보관
+js/app.js         UI 배선: 단축키, 마우스/드래그, 피아노, 재생 커서, 다이얼로그, 토스트
+sw.js             서비스 워커(앱 셸 사전 캐시 목록은 precache-manifest.json)
 vendor/           고정 버전 외부 라이브러리·라이선스·해시
 ```
 

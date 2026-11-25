@@ -115,7 +115,7 @@
   const TYPE_NAMES = { 1: "whole", 2: "half", 4: "quarter", 8: "eighth", 16: "16th", 32: "32nd", 64: "64th", 128: "128th", 256: "256th" };
   const typeName = dur => dur.n === 2 && dur.d === 1 ? "breve" : TYPE_NAMES[dur.d] || "quarter";
   const F = (n, d = 1) => new Fraction(n, d);
-  const timeAt = (score, m) => C.timeSigAt ? C.timeSigAt(score, m) : score.measures.slice(0, m + 1).reduce((ts, mm) => mm.timeSig || ts, score.timeSig);
+  const timeAt = (score, m) => C.timeSigAt(score, m);
   const keyAt = (score, m) => C.keySigAt ? C.keySigAt(score, m) : score.measures.slice(0, m + 1).reduce((key, mm) => mm.keySig ?? key, score.keySig);
   const lenAt = (score, m) => C.measureLenAt ? C.measureLenAt(score, m) : F(timeAt(score, m).num, timeAt(score, m).den);
   const textOf = (el, selector) => (selector ? el?.querySelector(selector) : el)?.textContent.trim() || "";
