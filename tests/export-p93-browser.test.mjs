@@ -120,11 +120,15 @@ test('P9-3 MusicXML 가져오기: 여러 프로그램이 쓰는 모양(creator p
     ['lyricist가 poet보다 우선(순서와 무관)', work() + idn('<creator type="poet">P</creator><creator type="lyricist">L</creator>'), { title: 'T', composer: '', lyricist: 'L' }],
     ['lyricist가 여럿이면 비어 있지 않은 첫 번째', work() + idn('<creator type="lyricist"> </creator><creator type="lyricist">L2</creator><creator type="lyricist">L3</creator>'), { title: 'T', composer: '', lyricist: 'L2' }],
     ['lyricist 앞뒤 공백·줄바꿈', work() + idn('<creator type="lyricist">\n   L   \n</creator>'), { title: 'T', composer: '', lyricist: 'L' }],
+    ['creator type의 대소문자·앞뒤 공백', work() + idn('<creator type=" Lyricist ">L5</creator>'), { title: 'T', composer: '', lyricist: 'L5' }],
+    ['creator type이 poet이어도 대소문자·공백을 가리지 않는다', work() + idn('<creator type=" POET ">P5</creator>'), { title: 'T', composer: '', lyricist: 'P5' }],
+    ['composer·arranger는 작사가가 아니다', work() + idn('<creator type="composer">C</creator><creator type="arranger">A</creator><creator>N</creator>'), { title: 'T', composer: 'C' }],
     ['rights가 여럿이면 " / "로 잇고 빈 것은 건너뛴다', work() + idn('<rights>A</rights><rights> </rights><rights>B &amp; C</rights>'), { title: 'T', composer: '', copyright: 'A / B & C' }],
     ['rights 글자 풀이(개체 참조·이모지)', work() + idn('<rights>© &lt;2026&gt; &amp; &quot;co&quot; 🎼</rights>'), { title: 'T', composer: '', copyright: '© <2026> & "co" 🎼' }],
     ['credit-type 대소문자·공백, page 속성 없음', work() + '<credit><credit-type> SubTitle </credit-type><credit-words> S1 </credit-words></credit>', { title: 'T', composer: '', subtitle: 'S1' }],
     ['credit-type이 여럿인 credit(page number + subtitle)', work() + credit('page number', 'S2').replace('</credit-type>', '</credit-type><credit-type>subtitle</credit-type>'), { title: 'T', composer: '', subtitle: 'S2' }],
     ['credit-words가 여럿이면 공백으로 잇는다', work() + credit('subtitle', ['A', 'B']), { title: 'T', composer: '', subtitle: 'A B' }],
+    ['credit-words 사이의 빈 것은 건너뛴다', work() + credit('subtitle', ['A', '', ' ', 'B']), { title: 'T', composer: '', subtitle: 'A B' }],
     ['subtitle credit이 여럿이면 글이 있는 첫 번째', work() + credit('subtitle', '') + credit('subtitle', 'S3') + credit('subtitle', 'S4'), { title: 'T', composer: '', subtitle: 'S3' }],
     ['subtitle이 아닌 credit은 무시한다(title·composer·lyricist·rights·page number·종류 없음)', work('Real') + credit('title', 'Other') + credit('composer', 'X') + credit('lyricist', 'Y') + credit('rights', 'Z') + credit('page number', '2')
       + '<credit page="1"><credit-words>No type</credit-words></credit>', { title: 'Real', composer: '' }],
@@ -147,6 +151,33 @@ test('P9-3 MusicXML 가져오기: 여러 프로그램이 쓰는 모양(creator p
   assert.equal(long[2].subtitle, 'a'.repeat(200));
   assert.equal([...long[3].lyricist].length, 150, '한도 안이면 그대로(UTF-16 길이가 200을 넘어도)');
   for (const meta of long) for (const value of Object.values(meta)) assert.doesNotMatch(value, LONE, '서로게이트가 쪼개지지 않았다');
+  assert.deepEqual(app.errors, []);
+});
+
+test('P9-3 MusicXML 가져오기: schema.js 없이 로드돼도(옛 시험 환경 tests/browser.html) 읽히고, 이때는 글자 수를 자르지 않는다', { skip, timeout: 60000 }, async () => {
+  const head = `<work><work-title>T</work-title></work><identification><creator type="lyricist">L</creator><rights>${'r'.repeat(250)}</rights></identification>`
+    + `<credit page="1"><credit-type>subtitle</credit-type><credit-words>${'s'.repeat(250)}</credit-words></credit>`;
+  const xml = xmlWith(head);
+  const out = await app.page.evaluate(xml => {
+    const original = SF.schema, results = {};
+    try {
+      for (const [label, value] of [['없음', undefined], ['LIMITS 없음', {}], ['title 한도 없음', { LIMITS: {} }], ['title 한도가 숫자가 아님', { LIMITS: { title: null } }], ['있음', original]]) {
+        SF.schema = value;
+        try { results[label] = { ...SF.io.parseMusicXML(xml).score.meta }; } catch (error) { results[label] = { error: String(error && error.message) }; }
+      }
+    } finally { SF.schema = original; }
+    return results;
+  }, xml);
+  for (const label of ['없음', 'LIMITS 없음', 'title 한도 없음', 'title 한도가 숫자가 아님']) {
+    assert.equal(out[label].error, undefined, `${label}: 오류 없이 읽힌다`);
+    assert.equal(out[label].title, 'T');
+    assert.equal(out[label].lyricist, 'L');
+    assert.equal(out[label].subtitle, 's'.repeat(250), `${label}: 한도를 모르면 자르지 않는다`);
+    assert.equal(out[label].copyright, 'r'.repeat(250), `${label}: 한도를 모르면 자르지 않는다`);
+  }
+  assert.equal(out['있음'].subtitle, 's'.repeat(200), 'schema.js가 있으면 200글자로 자른다');
+  assert.equal(out['있음'].copyright, 'r'.repeat(200));
+  assert.equal(await app.page.evaluate(() => typeof SF.schema?.LIMITS?.title), 'number', '시험 뒤 SF.schema가 원래대로 돌아와 있다');
   assert.deepEqual(app.errors, []);
 });
 

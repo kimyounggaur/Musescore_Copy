@@ -142,7 +142,11 @@ test('P9-3 ZIP: DOS 시각(2초 단위·지역 시각)과 1980~2107 범위 맞�
   const high = stamp(new Date(2108, 0, 1, 0, 0, 0));
   assert.deepEqual(high.parts, { year: 2107, month: 12, day: 31, hour: 23, minute: 59, second: 58 }, '2107 이후는 2107-12-31 23:59:58');
   assert.deepEqual(stamp(new Date(2107, 11, 31, 23, 59, 58)).parts, { year: 2107, month: 12, day: 31, hour: 23, minute: 59, second: 58 }, '2107-12-31은 그대로');
-  for (const bad of [new Date(NaN), '2020-01-01', 1700000000000, {}]) assert.throws(() => Z.create([], { date: bad }), TypeError, String(bad));
+  for (const bad of [new Date(NaN), '2020-01-01', 1700000000000, {}, null]) assert.throws(() => Z.create([], { date: bad }), { name: 'TypeError', message: /시각이 올바르지/ }, String(bad));
+  // 경계 바로 안쪽(1980·2107년 중간 날짜는 그대로 — 범위 맞춤이 지나치게 넓지 않다)
+  assert.deepEqual(stamp(new Date(1980, 5, 15, 12, 30, 20)).parts, { year: 1980, month: 6, day: 15, hour: 12, minute: 30, second: 20 });
+  assert.deepEqual(stamp(new Date(2107, 5, 15, 12, 30, 20)).parts, { year: 2107, month: 6, day: 15, hour: 12, minute: 30, second: 20 });
+  assert.deepEqual(stamp(new Date(1980, 0, 1, 0, 0, 2)).parts, { year: 1980, month: 1, day: 1, hour: 0, minute: 0, second: 2 }, '1980-01-01 00:00:02는 그대로');
   const before = Date.now() - 4000, [e] = parseZip(Z.create([{ name: 'a', data: 'x' }])).entries, after = Date.now() + 4000;
   const parts = dosToParts(e.time, e.date), when = new Date(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second).getTime();
   assert.ok(when >= before && when <= after, `기본값은 지금: ${new Date(when).toISOString()}`);
@@ -150,7 +154,7 @@ test('P9-3 ZIP: DOS 시각(2초 단위·지역 시각)과 1980~2107 범위 맞�
 
 // ---- 4. 검사 ----
 test('P9-3 ZIP: 올바르지 않은 이름은 거절한다(경로 탈출·절대 경로·제어 문자·중복 …)', () => {
-  const reject = (name, label = JSON.stringify(name)) => assert.throws(() => Z.create([{ name, data: 'x' }]), TypeError, `거절: ${label}`);
+  const reject = (name, label = JSON.stringify(name), message = /이름이 올바르지 않아요/) => assert.throws(() => Z.create([{ name, data: 'x' }]), { name: 'TypeError', message }, `거절: ${label}`);
   reject('', '빈 이름');
   reject('/abs.svg', '절대 경로');
   reject('../escape.svg', '위 폴더');
@@ -170,11 +174,11 @@ test('P9-3 ZIP: 올바르지 않은 이름은 거절한다(경로 탈출·절대
   reject('a\tb.svg', '탭');
   reject('a\u001fb.svg', '제어 문자 0x1f');
   reject('a\u007fb.svg', 'DEL');
-  reject('a'.repeat(65532) + '.svg', 'UTF-8 65,536바이트');
-  reject('한'.repeat(21846), '한글 21,846자 = 65,538바이트(글자 수는 한도 안)');
+  reject('a'.repeat(65532) + '.svg', 'UTF-8 65,536바이트', /이름이 너무 길어요/);
+  reject('한'.repeat(21846), '한글 21,846자 = 65,538바이트(글자 수는 한도 안)', /이름이 너무 길어요/);
   for (const bad of [null, undefined, 5, {}, ['a']]) reject(bad, `문자열 아님 ${String(bad)}`);
-  assert.throws(() => Z.create([{ name: 'a.svg', data: 'x' }, { name: 'a.svg', data: 'y' }]), TypeError, '중복');
-  assert.throws(() => Z.create([{ name: 'A.svg', data: 'x' }, { name: 'a.SVG', data: 'y' }]), TypeError, '대소문자만 다른 중복(대소문자를 가리지 않는 파일 시스템에서 덮어씀)');
+  assert.throws(() => Z.create([{ name: 'a.svg', data: 'x' }, { name: 'a.svg', data: 'y' }]), { name: 'TypeError', message: /이름이 겹쳐요/ }, '중복');
+  assert.throws(() => Z.create([{ name: 'A.svg', data: 'x' }, { name: 'a.SVG', data: 'y' }]), { name: 'TypeError', message: /이름이 겹쳐요/ }, '대소문자만 다른 중복(대소문자를 가리지 않는 파일 시스템에서 덮어씀)');
   assert.throws(() => Z.create([{ name: 'ok.svg', data: 'x' }, { name: '../bad.svg', data: 'y' }]), TypeError, '뒤의 항목이 나빠도 거절');
 });
 
@@ -192,16 +196,13 @@ test('P9-3 ZIP: 바로 옆 모양의 이름은 받는다(검사가 지나치게 
 test('P9-3 ZIP: 자료나 목록이 올바르지 않으면 거절한다', () => {
   const spoof = { [Symbol.toStringTag]: 'ArrayBuffer', byteLength: 3 };
   for (const data of [undefined, null, 5, true, {}, [1, 2], new Blob(['x']), { length: 1 }, spoof, { [Symbol.toStringTag]: 'Uint8Array', length: 3 }, new SharedArrayBuffer(4)]) {
-    assert.throws(() => Z.create([{ name: 'a', data }]), TypeError, `자료 ${Object.prototype.toString.call(data)}`);
+    assert.throws(() => Z.create([{ name: 'a', data }]), { name: 'TypeError', message: /자료 형식/ }, `자료 ${Object.prototype.toString.call(data)}`);
   }
-  assert.throws(() => Z.create(null), TypeError);
-  assert.throws(() => Z.create({}), TypeError);
-  assert.throws(() => Z.create('a'), TypeError);
-  assert.throws(() => Z.create([null]), TypeError);
-  assert.throws(() => Z.create([undefined]), TypeError);
-  assert.throws(() => Z.create([{ name: 'a' }]), TypeError, '자료 없음');
-  assert.throws(() => Z.crc32(null), TypeError);
-  assert.throws(() => Z.crc32(5), TypeError);
+  for (const list of [null, {}, 'a', 5, undefined]) assert.throws(() => Z.create(list), { name: 'TypeError', message: /파일 목록/ }, String(list));
+  for (const entry of [null, undefined, 5, 'a']) assert.throws(() => Z.create([entry]), { name: 'TypeError', message: /파일 정보/ }, String(entry));
+  assert.throws(() => Z.create([{ name: 'a' }]), { name: 'TypeError', message: /자료 형식/ }, '자료 없음');
+  assert.throws(() => Z.crc32(null), { name: 'TypeError', message: /자료 형식/ });
+  assert.throws(() => Z.crc32(5), { name: 'TypeError', message: /자료 형식/ });
 });
 
 test('P9-3 ZIP: 한도 — 항목 수 65,534개(65,535는 ZIP64 표시값이라 쓰지 않는다)와 크기는 한도를 넘으면 RangeError', () => {

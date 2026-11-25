@@ -44,6 +44,8 @@ test('P9-3 planFiles: 이름의 제어 문자는 밑줄로 바꿔 ZIP 이름 검
   assert.deepEqual(plan.entries, ['a_b_c_d_e-1.svg', 'a_b_c_d_e-2.svg']);
   assert.equal(plan.filename, 'a_b_c_d_e-svg.zip');
   assert.equal(SF.exportUI.planFiles('png', 'x\ry', 1).filename, 'x_y.png', '한 쪽 파일 이름도 같은 규칙');
+  // 제어 문자 범위의 양 끝(0x00·0x01·0x1e·0x1f·0x7f)은 모두 밑줄, 바로 바깥(0x20 공백·0x7e ~)은 그대로
+  assert.equal(SF.exportUI.planFiles('svg', '\u0001p\u001eq\u001fr \u007es', 1).filename, '_p_q_r ~s.svg');
   // 만든 이름은 실제로 ZIP에 들어간다
   assert.doesNotThrow(() => SF.zip.create(plan.entries.map(name => ({ name, data: 'x' }))));
   // safeName을 거친 이름은 어떤 모양이든(점·긴 이름·한글) ZIP 이름으로 쓸 수 있다
@@ -135,6 +137,9 @@ test('P9-3 MusicXML: 부제·작사가·저작권의 특수 문자는 이스케�
   const bad = scoreWith({ title: 'a\u0001b', composer: 'c\u0002d' });
   const out = IO.exportMusicXML(bad);
   assert.ok(out.includes('<work-title>ab</work-title>') && out.includes('<creator type="composer">cd</creator>'));
+  // 금지 범위의 양 끝과 경계: 0x00·0x08은 빠지고 0x09(탭)·0x0a·0x0d는 남고 0x0b·0x0c·0x0e·0x1f·U+FFFE·U+FFFF는 빠진다. 0x20·0x7f·U+FFFD는 남는다
+  const edge = IO.exportMusicXML(scoreWith({ title: 'a\u0000b\u0008c\td\ne\rf\u000bg\u000ch\u000ei\u001fj k\u007fl\ufffdm\ufffen\uffffo', composer: '' }));
+  assert.ok(edge.includes('<work-title>abc\td\ne\rfghij k\u007fl\ufffdmno</work-title>'), edge.slice(edge.indexOf('<work-title>'), edge.indexOf('</work-title>')).replace(/[\u0000-\u001f]/g, c => `\\x${c.charCodeAt(0).toString(16)}`));
 });
 
 function tool(name, args) { const r = spawnSync(name, args, { encoding: 'utf8' }); return r.error ? null : r; }

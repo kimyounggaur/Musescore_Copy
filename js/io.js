@@ -610,10 +610,10 @@ ${head.credits} <part-list>\n`;
 
   /** 곡 정보 중 부제·작사가·저작권을 읽는다(제목·작곡가는 아래 createScore 호출이 읽는다). 없는 값은 키를 만들지 않는다.
    *  부제는 credit-type subtitle인 credit의 글(credit-words가 여럿이면 공백으로 이음), 작사가는 creator lyricist(없으면 poet), 저작권은 rights(여럿이면 " / "로 이음).
-   *  글자 수는 schema.js의 곡 정보 한도(코드 포인트)로 자른다 — MusicXML 가져오기는 schema 검사를 거치지 않기 때문이다. */
+   *  글자 수는 schema.js의 곡 정보 한도(코드 포인트)로 자른다 — MusicXML 가져오기는 schema 검사를 거치지 않기 때문이다(schema.js가 없으면 자르지 않는다). */
   function metaFromXML(root) {
-    const max = SF.schema.LIMITS.title;
-    const clip = value => { const chars = Array.from(value); return chars.length <= max ? value : chars.slice(0, max).join(""); };
+    const max = SF.schema?.LIMITS?.title;   // schema.js 없이 로드되는 시험이 있어(다른 모듈과 같은 약속) 없으면 자르지 않는다
+    const clip = value => { if (!Number.isFinite(max)) return value; const chars = Array.from(value); return chars.length <= max ? value : chars.slice(0, max).join(""); };
     const creators = type => [...root.querySelectorAll("identification creator")].filter(el => (el.getAttribute("type") || "").trim().toLowerCase() === type).map(el => textOf(el)).filter(Boolean);
     const subtitles = [...root.querySelectorAll("credit")].filter(el => children(el, "credit-type").some(kind => textOf(kind).toLowerCase() === "subtitle"))
       .map(el => children(el, "credit-words").map(words => textOf(words)).filter(Boolean).join(" ")).filter(Boolean);
