@@ -49,38 +49,39 @@
     const mm = C.ensureMeasureMeta(score.measures[range?.to ?? found.m] || {});
     const dynOptions = ["", "pp", "p", "mp", "mf", "f", "ff"].map(d => `<option value="${d}" ${ev.dynamic === d ? "selected" : ""}>${d || "없음"}</option>`).join("");
     const stemOptions = ["auto", "up", "down"].map(v => `<option value="${v}" ${(ev.stemDirection || "auto") === v ? "selected" : ""}>${v === "auto" ? "자동" : v === "up" ? "위" : "아래"}</option>`).join("");
-    const headOptions = ["normal", "x", "diamond"].map(v => `<option value="${v}" ${(ev.notehead || "normal") === v ? "selected" : ""}>${v === "normal" ? "일반" : v === "x" ? "X" : "다이아"}</option>`).join("");
+    const headOptions = ["normal", "x", "diamond"].map(v => `<option value="${v}" ${(ev.notehead || "normal") === v ? "selected" : ""}>${v === "normal" ? "일반" : v === "x" ? "X자" : "다이아"}</option>`).join("");
     const breakOptions = ["", "system", "page", "section"].map(v => {
       const label = v === "" ? "없음" : v === "system" ? "시스템" : v === "page" ? "페이지" : "섹션";
       return `<option value="${v}" ${(mm.breakType || "") === v ? "selected" : ""}>${label}</option>`;
     }).join("");
     html += `<section class="prop-sec"><h3>${ids.length > 1 ? `${ids.length}개 선택` : ev.type === "note" ? "음표" : "쉼표"}</h3><div class="prop-grid">
-      <label>위치</label><span>${htmlEsc(found.name)} · V${found.voice || 1} · 마디 ${found.m + 1}</span>
+      <label>위치</label><span>${htmlEsc(found.name)} · 성부 ${found.voice || 1} · 마디 ${found.m + 1}</span>
       <label>보임</label><input type="checkbox" data-prop="visible" ${checked(!ev.hidden)}>
       <label>색상</label><input type="color" data-prop="color" value="${htmlEsc(ev.color || "#14171c")}">
-      <label>X</label><input type="number" data-prop="offsetX" step="1" value="${+ev.offsetX || 0}">
-      <label>Y</label><input type="number" data-prop="offsetY" step="1" value="${+ev.offsetY || 0}">
-      <label>마디 브레이크</label><select data-measure-break>${breakOptions}</select>
+      <label for="prop-offsetX">가로 이동</label><input id="prop-offsetX" type="number" data-prop="offsetX" step="1" value="${+ev.offsetX || 0}">
+      <label for="prop-offsetY">세로 이동</label><input id="prop-offsetY" type="number" data-prop="offsetY" step="1" value="${+ev.offsetY || 0}">
+      <label for="prop-break">마디 브레이크</label><select id="prop-break" data-measure-break>${breakOptions}</select>
     </div><div class="prop-actions">
       <button class="chip" data-prop-action="reset-offset">오프셋 초기화</button>
       <button class="chip" data-prop-action="clear-color">색상 초기화</button>
     </div></section>`;
     if (ev.type === "note") {
       const arts = ["staccato", "tenuto", "accent", "marcato", "fermata"];
-      html += `<section class="prop-sec"><h3>음표 모양</h3><div class="prop-grid">
+      const artLabel = { staccato: "스타카토", tenuto: "테누토", accent: "악센트", marcato: "마르카토", fermata: "페르마타" };
+      html += `<section class="prop-sec" data-prop-section="shape"><h3>음표 모양</h3><div class="prop-grid">
         <label>스템</label><select data-prop="stemDirection">${stemOptions}</select>
         <label>머리</label><select data-prop="notehead">${headOptions}</select>
         <label>작게</label><input type="checkbox" data-prop="small" ${checked(ev.small)}>
-        <label>Velocity</label><input type="number" data-prop="velocityOffset" min="-64" max="64" step="1" value="${+ev.velocityOffset || 0}">
+        <label>세기</label><input type="number" data-prop="velocityOffset" min="-64" max="64" step="1" value="${+ev.velocityOffset || 0}">
       </div><div class="prop-actions">` +
-        arts.map(a => `<button class="chip" data-artic-prop="${a}">${a}</button>`).join("") +
+        arts.map(a => `<button class="chip" data-artic-prop="${a}">${artLabel[a]}</button>`).join("") +
         `</div></section>`;
     }
     html += `<section class="prop-sec"><h3>기호/텍스트</h3><div class="prop-grid">
       <label>셈여림</label><select data-prop="dynamic">${dynOptions}</select>
       <label>템포</label><input type="number" data-prop="tempo" min="30" max="280" value="${SF.html.num(ev.tempo, { min: 30, max: 280 })}" placeholder="없음">
-      <label>리허설</label><input type="text" data-prop="rehearsal" value="${htmlEsc(ev.rehearsal || "")}" maxlength="12">
-      <label>스태프 텍스트</label><input type="text" data-prop="staffText" value="${htmlEsc(ev.staffText || "")}" maxlength="48">
+      <label for="prop-rehearsal">리허설</label><input id="prop-rehearsal" type="text" data-prop="rehearsal" value="${htmlEsc(ev.rehearsal || "")}" maxlength="12">
+      <label for="prop-staffText">스태프 텍스트</label><input id="prop-staffText" type="text" data-prop="staffText" value="${htmlEsc(ev.staffText || "")}" maxlength="48">
       <label>코드</label><input type="text" data-prop="chordSymbol" value="${htmlEsc(ev.chordSymbol ? (ev.chordSymbol.normalized || ev.chordSymbol.raw || "") : "")}" maxlength="24">
     </div></section>`;
     host.innerHTML = html;
@@ -339,8 +340,8 @@
         <b>${htmlEsc(part.name || "파트 " + (idx + 1))}</b>
         <label><input type="checkbox" data-mix="mute" ${mx.mute ? "checked" : ""}> M</label>
         <label><input type="checkbox" data-mix="solo" ${mx.solo ? "checked" : ""}> S</label>
-        <label>Vol <input type="range" min="0" max="150" value="${Math.round(mx.volume * 100)}" data-mix="volume"></label>
-        <label>Pan <input type="range" min="-100" max="100" value="${Math.round(mx.pan * 100)}" data-mix="pan"></label>
+        <label>음량 <input type="range" min="0" max="150" value="${Math.round(mx.volume * 100)}" data-mix="volume"></label>
+        <label>좌우 <input type="range" min="-100" max="100" value="${Math.round(mx.pan * 100)}" data-mix="pan"></label>
       </div>`;
     }).join("");
   }

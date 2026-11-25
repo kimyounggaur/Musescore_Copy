@@ -21,12 +21,12 @@
        넓은 화면에서는 display:contents라 안의 컨트롤이 상단바의 직계 자식처럼 놓인다(배치 변화 없음). -->
   <div class="more-group">
   <label class="theme-control" title="UI 테마 선택">
-    <span>UI</span>
+    <span>테마</span>
     <select id="theme-select" class="tsel compact" aria-label="UI 테마 선택">
-      <option value="dark">Dark</option>
-      <option value="light">Light</option>
-      <option value="pretty">Pretty</option>
-      <option value="cute">Cute</option>
+      <option value="dark">어두운</option>
+      <option value="light">밝은</option>
+      <option value="pretty">예쁜</option>
+      <option value="cute">귀여운</option>
     </select>
   </label>
   <select id="language-select" class="tsel compact" aria-label="언어 / Language"><option value="ko">KO</option><option value="en">EN</option></select>
@@ -116,7 +116,7 @@
   <div class="more-group">
   <div class="tempo-box" title="빠르기 (BPM)">
     <svg viewBox="0 0 14 20" fill="currentColor"><ellipse cx="5" cy="15.5" rx="3.6" ry="2.8" transform="rotate(-20 5 15.5)"/><rect x="7.6" y="2" width="1.4" height="13.5" rx="0.7"/></svg>=
-    <input id="tempo-input" type="number" min="30" max="280" step="1" value="100">
+    <input id="tempo-input" type="number" min="30" max="280" step="1" value="100" aria-label="빠르기 (BPM)">
   </div>
   <select id="swing-select" class="tsel" title="스윙 재생">
     <option value="off">스윙 끔</option>
@@ -129,8 +129,8 @@
   <select id="staff-select" class="tsel" title="입력할 보표"></select>
   <select id="view-select" class="tsel" title="총보/파트 보기"></select>
   <button id="btn-hide-empty" class="tbtn" title="총보에서 빈 보표 숨김">빈보표</button>
-  <button id="btn-navigator" class="tbtn" title="내비게이터 (F12)">Nav</button>
-  <button id="btn-timeline" class="tbtn" title="타임라인 (F11)">Time</button>
+  <button id="btn-navigator" class="tbtn" title="내비게이터 (Alt+Shift+N)">내비</button>
+  <button id="btn-timeline" class="tbtn" title="타임라인 (Alt+Shift+T)">타임</button>
   </div><!-- /more-group -->
   <button id="btn-props" class="tbtn on" title="속성 패널 보이기/숨기기">속성</button>
   <div class="more-group">
@@ -139,6 +139,7 @@
 
   <div class="tspacer"></div>
 
+  <button id="btn-view-level" class="tbtn" title="기본 보기 — 자주 쓰는 조작만 보여 줘요(꺼짐)" aria-pressed="false">기본 보기</button>
   <button id="btn-piano" class="tbtn" title="화면 피아노 건반 보이기/숨기기">🎹 <span class="lbl">건반</span></button>
   <button id="btn-midi" class="tbtn" title="Web MIDI 입력 켜기/끄기">MIDI</button>
   <select id="midi-select" class="tsel compact" title="MIDI 입력 장치"></select>
@@ -154,15 +155,15 @@
 
 <!-- ═══════════ 드럼 입력 패드 ═══════════ -->
 <div id="drum-pad" class="drum-pad" aria-label="드럼 입력 패드">
-  <button class="drum-btn" data-drum="kick" title="Kick (K)">Kick</button>
-  <button class="drum-btn" data-drum="snare" title="Snare (S)">Snare</button>
-  <button class="drum-btn" data-drum="closed-hihat" title="Closed hihat (H)">Closed HH</button>
-  <button class="drum-btn" data-drum="open-hihat" title="Open hihat (O)">Open HH</button>
-  <button class="drum-btn" data-drum="crash" title="Crash (C)">Crash</button>
-  <button class="drum-btn" data-drum="ride" title="Ride">Ride</button>
-  <button class="drum-btn" data-drum="low-tom" title="Low tom">Low Tom</button>
-  <button class="drum-btn" data-drum="mid-tom" title="Mid tom">Mid Tom</button>
-  <button class="drum-btn" data-drum="high-tom" title="High tom">High Tom</button>
+  <button class="drum-btn" data-drum="kick" title="킥 (K)">킥</button>
+  <button class="drum-btn" data-drum="snare" title="스네어 (S)">스네어</button>
+  <button class="drum-btn" data-drum="closed-hihat" title="닫힌 하이햇 (H)">닫힌 하이햇</button>
+  <button class="drum-btn" data-drum="open-hihat" title="열린 하이햇 (O)">열린 하이햇</button>
+  <button class="drum-btn" data-drum="crash" title="크래시 (C)">크래시</button>
+  <button class="drum-btn" data-drum="ride" title="라이드">라이드</button>
+  <button class="drum-btn" data-drum="low-tom" title="낮은 탐">낮은 탐</button>
+  <button class="drum-btn" data-drum="mid-tom" title="중간 탐">중간 탐</button>
+  <button class="drum-btn" data-drum="high-tom" title="높은 탐">높은 탐</button>
 </div>
 
 <!-- ═══════════ 다른 탭이 편집 중인 악보 안내(js/lock-ui.js) ═══════════ -->
@@ -545,6 +546,7 @@ where email = 'admin@example.com';</pre>
 <script src="js/config.js"></script>
 <script src="js/version.js"></script>
 <script src="js/safe-html.js"></script>
+<script src="js/view-level.js"></script>
 <script src="vendor/supabase.js"></script>
 <script src="js/core.js"></script>
 <script src="js/schema.js"></script>

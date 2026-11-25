@@ -56,10 +56,10 @@
   }
 
   function themeLabel(theme) {
-    if (theme === "light") return "Light UI";
-    if (theme === "pretty") return "Pretty UI";
-    if (theme === "cute") return "Cute UI";
-    return "Dark UI";
+    if (theme === "light") return "밝은 UI";
+    if (theme === "pretty") return "예쁜 UI";
+    if (theme === "cute") return "귀여운 UI";
+    return "어두운 UI";
   }
 
   function applyTheme(theme, opts = {}) {
@@ -1098,6 +1098,7 @@
     SF.ui.init();
     buildToolbar();
     SF.palette.quickAccess();
+    SF.viewLevel?.init();
     buildPiano();
     bindThemePicker();
     bindButtons();
