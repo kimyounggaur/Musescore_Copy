@@ -259,18 +259,23 @@
     }
   }
 
-  function eventWidth(ev, score) {
+  /**
+   * 이벤트 하나가 차지하는 폭.
+   * span = 마디 안에서 다음 시각까지의 거리(길이 값). 다른 단·성부에 짧은 음이 있으면 이 음의 간격도 그만큼만 잡는다.
+   * 점은 길이 값(점음표의 실제 길이)에 이미 반영되어 있으므로 폭을 따로 더하지 않는다(점음표가 더 긴 음표보다 넓어지던 원인).
+   */
+  function eventWidth(ev, score, span = Infinity) {
     const st = score ? styleOf(score) : STYLE;
     const v = C.durValue(ev.dur).value;
-    let w = ev.full ? 58 : Math.max(26, spaceFor(v, st));
+    let w = ev.full && !isFinite(span) ? 58 : Math.max(26, spaceFor(Math.min(v, span), st));
     if (ev.type === "note") {
       w += Math.max(0, st.noteheadScale - 1) * 12;
       if (ev.graceBefore && ev.graceBefore.length) w += ev.graceBefore.length * 14;
       w += accidentalColumns.get(ev)?.width || 0;
       if (hasSecond(ev)) w += 7 * st.noteheadScale;
-      if (ev.dur.dots) w += 7 * ev.dur.dots;
-      if (ev.dur.d === 1) w += ev.dur.n >= 2 ? 14 : 6;
-    } else if (ev.dur.dots) w += 7 * ev.dur.dots;
+      if (ev.dur.d === 1 && v <= span) w += ev.dur.n >= 2 ? 14 : 6; // 온음표 머리가 넓어서 자기 길이만큼 갈 때만 더한다
+    }
+    if (ev.dur.dots > 2) w = Math.max(w, 22 + 6 * (ev.dur.dots - 1)); // 점이 셋 이상이면 점 자리를 따로 보장
     for (const lyric of C.lyricsOf(ev)) w = Math.max(w, Array.from(lyric.text).length * st.lyricFontSize * .8 + 16);
     if (ev.chordSymbol) w = Math.max(w, Array.from(C.displayChordSymbol(ev.chordSymbol)).length * st.chordFontSize * .6 + 14);
     return w;
@@ -291,36 +296,38 @@
   function measureCount(score, refs) {
     return Math.max(1, ...refs.map(r => r.measures.length));
   }
-  function measureNaturalWidth(refs, mIdx, score, activeVoice) {
-    const seg = new Map();
+  /**
+   * 마디의 모든 보표·성부 이벤트를 시각별로 모아 시각마다의 폭(시각 순서)을 낸다.
+   * 한 시각의 폭 = 그 시각에 시작하는 이벤트들의 폭 중 최댓값이며, 각 이벤트의 길이는 "다음 시각까지의 거리"를 넘겨 쓰지 않는다.
+   * (다른 단에 온음표가 있어도 오른손 4분음표 사이가 넓어지지 않게 한다.) 마지막 시각은 자기 길이 그대로.
+   */
+  function measureSegments(refs, mIdx, score, activeVoice) {
+    const lists = [];
+    const ticks = new Map();
     for (const ref of refs) {
       const mm = ref.measures[mIdx];
       if (!mm) continue;
       const entries = C.measureEntries(mm, { score, activeVoice });
-      if (entries.length === 1 && entries[0].ev.full) {
-        seg.set("0/1", Math.max(seg.get("0/1") || 0, eventWidth(entries[0].ev, score)));
-        continue;
-      }
+      lists.push(entries);
+      for (const { tick } of entries) ticks.set(tick.toString(), tick);
+    }
+    const order = [...ticks.entries()].sort((a, b) => a[1].cmp(b[1]));
+    const spanOf = new Map();
+    order.forEach(([key, tick], i) => spanOf.set(key, i + 1 < order.length ? order[i + 1][1].sub(tick).value : Infinity));
+    const seg = new Map();
+    for (const entries of lists) {
       for (const { ev, tick } of entries) {
         const key = tick.toString();
-        seg.set(key, Math.max(seg.get(key) || 0, eventWidth(ev, score) + (ev.voice > 1 ? 8 : 0)));
+        seg.set(key, Math.max(seg.get(key) || 0, eventWidth(ev, score, spanOf.get(key)) + (ev.voice > 1 ? 8 : 0)));
       }
     }
-    return Math.max(styleOf(score).measureMinWidth, 16 + [...seg.values()].reduce((a, w) => a + w, 0));
+    return order.map(([key]) => ({ key, width: seg.get(key) }));
+  }
+  function measureNaturalWidth(refs, mIdx, score, activeVoice) {
+    return Math.max(styleOf(score).measureMinWidth, 16 + measureSegments(refs, mIdx, score, activeVoice).reduce((a, s) => a + s.width, 0));
   }
   function segmentMapFor(refs, mIdx, scale, score, activeVoice) {
-    const seg = new Map();
-    for (const ref of refs) {
-      const mm = ref.measures[mIdx];
-      if (!mm) continue;
-      for (const { ev, tick } of C.measureEntries(mm, { score, activeVoice })) {
-        const key = tick.toString();
-        seg.set(key, Math.max(seg.get(key) || 0, eventWidth(ev, score) + (ev.voice > 1 ? 8 : 0)));
-      }
-    }
-    return [...seg.entries()]
-      .map(([key, w]) => ({ key, width: w * scale }))
-      .sort((a, b) => Fraction.from(a.key.split("/").map(Number)).cmp(Fraction.from(b.key.split("/").map(Number))));
+    return measureSegments(refs, mIdx, score, activeVoice).map(({ key, width }) => ({ key, width: width * scale }));
   }
 
   function cancellationSteps(before, after) {
