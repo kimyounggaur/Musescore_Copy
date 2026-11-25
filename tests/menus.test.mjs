@@ -206,8 +206,9 @@ test('P6-4 연결: 믹서·타임라인·내비게이터는 열기 전에 deskto
   assert.match(panels, /\$\("#btn-mixer"\)\.addEventListener\("click", \(\) => \{\s*if \(desktopOnly\("믹서는 데스크톱에서 사용할 수 있어요"\)\) return;\s*renderMixerRows\(\);/);
   // F11·F12·명령 팔레트는 이 두 함수를 그대로 부른다(키맵이 따로 창을 열지 않는다)
   const keymap = read('js/keymap.js');
-  assert.match(keymap, /\["navigator", "내비게이터", \["F12"\], "openNavigator"\]/);
-  assert.match(keymap, /\["timeline", "타임라인", \["F11"\], "openTimelinePanel"\]/);
+  // P9-1: 브라우저가 F11(전체 화면)·F12(개발자 도구)를 먼저 가로채므로 Alt+Shift+N·T를 첫 키로 하고 F키는 보조로 남긴다(같은 함수를 부른다)
+  assert.match(keymap, /\["navigator", "내비게이터", \["Alt\+Shift\+N", "F12"\], "openNavigator"\]/);
+  assert.match(keymap, /\["timeline", "타임라인", \["Alt\+Shift\+T", "F11"\], "openTimelinePanel"\]/);
   assert.equal(/dlg-(navigator|timeline|mixer)/.test(keymap), false, '키맵은 패널 창을 직접 열지 않는다');
 });
 
