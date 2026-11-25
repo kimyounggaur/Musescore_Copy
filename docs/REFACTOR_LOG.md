@@ -594,6 +594,41 @@ start()
 
 **자체 승인**: 위 계획대로 진행한다. ②의 "원인 보고 후 수정(⚠️)" 멈춤은 위 측정 결과를 이 기록에 남기는 것으로 대신 승인한다. 코드·파일만 만들고 배포·공개는 하지 않는다.
 
+### P9-6 구조·문서 정리 (2026-11-25 승인)
+**목표**: 백로그 #20 — ① 화면 문구를 토스트·대화상자부터 `SF.t(key)` 직접 호출로 바꾼다(사후 번역은 남은 곳을 위해 유지). ② 옛 호환 코드 중 **지워도 되는 것만** 지운다. ③ `MUSESCORE_NEXT_UPGRADE_PROMPTS.md`를 docs/archive/로 옮기고 README 구조 절에 새 모듈을 넣는다. ④ (선택) 남은 innerHTML 사용처를 목록으로 보고한다.
+
+**1단계 — 지울 호환 코드와 근거(프롬프트북이 요구한 보고)**
+| 코드 | 판정 | 근거(어느 버전부터 필요 없어졌나 · 배포된 지 얼마나 됐나) |
+|---|---|---|
+| io.js 118 · engrave.js 34 · playback.js 11의 `C.timeSigAt ? … :` 대체 경로 | **지운다** | `v3.0.1-baseline`(= 운영 배포본 master 016ad44)의 core.js에 `timeSigAt`이 이미 있다 → 배포된 어느 버전에서도 대체 경로가 실행된 적이 없다. 앱 셸은 sw.js 사전 캐시가 한 묶음(해시)으로 바꾸므로 옛 core와 새 모듈이 섞이지도 않는다. |
+| `toJSON` `{ format: 1 }` · 파일 메뉴 "구버전 호환으로 저장"(save-legacy) · io.js `saveJSON({legacy})` | **지우지 않는다(🧑)** | 만든 곳은 P7-B1(3.5.0)인데 3.5.0은 로컬 릴리스일 뿐 **아직 배포되지 않았다**(운영은 3.0.1). 설계 조건 "3.5.0 배포 뒤 한 릴리스 이상 지났을 때"가 맞지 않는다. 지금 지우면 3.5.0을 받은 사람이 3.0.1 앱용 파일을 만들 길이 없어진다. |
+| localStorage v1 자동 저장 원본(`scoreforge.autosave.v1`)을 지우는 동작 | **만들지 않는다(🧑)** | 지금 코드는 원본을 **읽기만** 하고 지우지 않는다(session.js 19). 3.1.0이 배포되지 않았고 "이전 완료 표시가 있는 경우만"이라는 조건도 사용자 기기 데이터에 달려 있어 에이전트가 확인할 수 없다. 사용자의 옛 저장을 지우는 일이라 사람이 정한다. |
+| 옛 파일·v1 형식 **읽기** 호환(fromJSON·loadAutosave·migrate) | **지우지 않는다** | 요구사항. 시험(P7-B1·P8-2·P2)이 그대로 지킨다. |
+
+**2단계 — 만들 것**
+| 파일 | 내용 |
+|---|---|
+| js/*.js (app·auth·cloud·editing·export-ui·input·panels·recent·session·ui-v3·errors) | 토스트(`toast`·`A.toast`·`longToast`·`flashHint`) 인자와 대화상자(`confirmDialog`·`promptDialog`·`choiceDialog`, cloud.js의 `confirm`·`prompt`)의 한글 리터럴 184곳 중 **문구가 키로 이미 있는 것**(약 165곳)은 `SF.t("키")`로, 값이 끼는 것은 기존 패턴 키(toast.loaded·tuplet·repeat·ending·tempo·rehearsal·copied·pasted·transposeUp/Down 등)와 `SF.t("키", { 값 })`로 바꾼다. 한국어 화면의 글자는 그대로여야 한다(바꾸기 전에 `STRINGS.ko[키] === 원래 글자`를 확인). 키가 없는 문구(끌어다 놓기 안내 등)는 ko·en 쌍을 새로 더한다. |
+| js/io.js·engrave.js·playback.js | `C.timeSigAt ? … :` 대체 경로 삭제 |
+| docs/archive/MUSESCORE_NEXT_UPGRADE_PROMPTS.md | `git mv`(내용 변경 없음) |
+| README.md | 코드 구조 절에 safe-html·session·store·recent·schema·lock·lock-ui·errors·menus·palette·version 등 빠진 모듈을 더한다(js/ 아래 모든 파일이 한 번씩 나온다) |
+| docs/TRUSTED_TYPES.md · tests/tools/list-html-sinks.mjs | (선택) `innerHTML`·`outerHTML`·`insertAdjacentHTML`·`document.write` 사용처를 파일별로 세어 목록으로 보고한다. 헤더·CSP는 **바꾸지 않는다**(운영 헤더라 🧑). |
+| tests/i18n-direct.test.mjs · tests/i18n-direct-browser.test.mjs · tests/structure-docs.test.mjs (신규) | 아래 시험 |
+
+**남기는 것(설계 그대로 · 이유)**: ① i18n.js의 사후 번역(MutationObserver·`translate`)과 `toast()` 안의 `translate(msg)`는 **그대로 둔다** — 정적 HTML·옛 모듈·값이 끼는 문구가 아직 의존한다. ② 대화상자·토스트 밖의 한글(버튼 라벨·패널 제목·설명)은 이번에 바꾸지 않는다(설계 문구가 "토스트·대화상자부터"). ③ 저장될 데이터인 문구(예: 클라우드 사본 이름 기본값 "… 사본")는 번역하지 않는다.
+
+**테스트**(먼저 쓴다 — 바꾸기 전에 실패를 확인)
+- 소스 규칙(Node): 토스트·대화상자 호출 인자에 한글 리터럴이 하나도 없다(허용 목록은 사유와 함께 시험 안에 둔다) / `SF.t("…")`의 키가 모두 STRINGS에 있고 한·영이 짝이다 / 같은 키를 쓰는 호출에서 변수 이름이 문구의 `{자리}`와 맞는다.
+- 언어 동작(브라우저): 영어로 바꾸고 **사후 번역을 꺼도**(`translate`를 항등으로, 관찰자 끊기) 대표 토스트(복사·붙여넣기·이음줄·템포·리허설·반음 올리기 등)와 대화상자(템포·반복 횟수·리허설·스태프 텍스트 입력창, 클라우드 확인창)가 영어로 나온다 / 한국어에서는 바뀌기 전과 같은 글자다.
+- 호환 코드: 소스에 `C.timeSigAt ?`가 없고, 마디별 박자가 바뀌는 악보의 재생·조판·MIDI 내보내기 결과가 그대로다(기존 시험 + 새 단언) / 옛 파일 읽기 시험은 그대로 통과.
+- 문서: 루트에 MUSESCORE_NEXT_UPGRADE_PROMPTS.md가 없고 docs/archive에 있다 / 저장소 안 다른 파일이 옛 경로를 가리키지 않는다 / README 코드 구조 절이 js/ 아래 모든 파일을 한 번씩 언급한다 / TRUSTED_TYPES.md의 파일별 개수가 목록 도구의 결과와 같다.
+- 변이 검사: 규칙 검사의 허용 목록·호출 이름 목록·키 검증·한·영 짝, 대체 경로 삭제 되돌리기, 문서 시험의 경로·개수 비교를 일부러 망가뜨려 시험이 잡는지 확인한다.
+
+**위험과 대비**: ①Node 시험 중 `SF.t` 없이 모듈을 불러와 토스트를 부르는 것이 있을 수 있다 → 시험 도구에 i18n.js를 함께 불러오게 고친다(기대 변경이 아니라 환경 보강으로 로그에 적는다). ②같은 한국어 문구가 두 키에 있어 영어가 달라질 수 있다 → 키는 지금 사후 번역이 고르는 것(`exact.ko`)과 같은 규칙으로 골라 영어가 그대로이게 한다. ③`SF.t`가 i18n.js보다 먼저 불리는 경우 → 호출은 모두 클릭·이벤트 처리 중이라 부팅 순서와 무관하지만, 부팅 중 토스트(boot)는 브라우저 부팅 시험으로 확인한다. ④앱 셸 파일이 바뀐다 → `node tests/prepare-release.mjs`.
+**사람이 해야 할 일(보고용)**: 3.5.0 이후 릴리스가 배포되면 "구버전 호환 저장"(`format: 1`·save-legacy)과 v1 자동 저장 원본 삭제를 결정한다 / 영어 화면에서 토스트·확인창 문구가 자연스러운지 몇 가지 눈으로 확인한다.
+
+**자체 승인**: 위 계획대로 진행한다. ⚠️ "계획 승인 후 구현" 멈춤은 이 기록으로 대신 승인한다. 지울 것은 timeSigAt 대체 경로 하나뿐이고 나머지 호환 코드는 배포 조건이 맞지 않아 남긴다. 코드·파일만 만들고 배포·공개는 하지 않는다.
+
 ## Phase 검토 기록 (R-1 — 코드는 고치지 않고 점검만)
 
 ### Phase 2 작업 보존 검토 (2026-11-23, phase/p2-work-safety)
