@@ -82,6 +82,8 @@
     copy | 사본 만들기 | Make a copy
   `);
   group("toolbar", `
+    more | 더보기 | More
+    accountMenu | 계정 메뉴 | Account menu
     settings | 악보 설정 | Score settings
     settingsTitle | 조표·박자·빠르기 등 악보 설정 | Score settings: key, time signature, tempo, and more
     undo | 실행 취소 | Undo
@@ -436,6 +438,9 @@
     breakAdded | 브레이크를 표시했어요 | Break added
     breakRemoved | 브레이크를 지웠어요 | Break removed
     readOnly | 읽기 전용 악보예요. 사본을 만들어 편집하세요. | This score is read-only. Make a copy to edit it.
+    desktopMixer | 믹서는 데스크톱에서 사용할 수 있어요 | The mixer is available on desktop
+    desktopTimeline | 타임라인은 데스크톱에서 사용할 수 있어요 | The timeline is available on desktop
+    desktopNavigator | 내비게이터는 데스크톱에서 사용할 수 있어요 | The navigator is available on desktop
     error | 문제가 생겼어요 — 자동 저장은 안전합니다 | Something went wrong — your auto-save is safe
     theme | {theme}로 전환했어요 | Switched to {theme}
     loaded | "{title}" 불러왔어요 | Loaded "{title}"
