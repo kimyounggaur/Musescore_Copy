@@ -56,10 +56,10 @@
   }
 
   function themeLabel(theme) {
-    if (theme === "light") return "Light UI";
-    if (theme === "pretty") return "Pretty UI";
-    if (theme === "cute") return "Cute UI";
-    return "Dark UI";
+    if (theme === "light") return SF.t("viewLevel.themeLightUi");
+    if (theme === "pretty") return SF.t("viewLevel.themePrettyUi");
+    if (theme === "cute") return SF.t("viewLevel.themeCuteUi");
+    return SF.t("viewLevel.themeDarkUi");
   }
 
   function applyTheme(theme, opts = {}) {
@@ -70,7 +70,7 @@
     document.documentElement.style.colorScheme = next === "dark" ? "dark" : "light";
     const picker = $("#theme-select");
     if (picker) picker.value = next;
-    if (!opts.silent) toast(`${themeLabel(next)}로 전환했어요`);
+    if (!opts.silent) toast(SF.t("toast.theme", { theme: themeLabel(next) }));
   }
 
   /* ---------------- 렌더 ---------------- */
@@ -78,13 +78,56 @@
   let changeRevision = 0, renderedRevision = -1, renderedScore = null, renderKey = "", frame = null;
   let saveTimer = null, savedRevision = 0;
   let propertiesScore = null, propertiesKey = "", propertiesRevision = -1;
+  /* P9-8: 지난번에 DOM에 그린 조각(parts)과 그때의 <svg>. 이번 조각과 글자로 비교해 달라진 시스템(줄)·꼬리(타이·스패너)만 바꾼다.
+   * 어느 하나라도 이상하면(구조가 다름·노드가 사라짐·예외) false를 돌려주고, 부른 쪽이 예전처럼 통째로 갈아끼운다. */
+  let hostParts = null, hostSvg = null;
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  function svgNodes(markup) {
+    const holder = document.createElementNS(SVG_NS, "g");
+    holder.innerHTML = markup; // 조판기가 esc()로 거른 SVG 조각만 들어온다(악보 글자는 모두 이스케이프됨)
+    return Array.from(holder.childNodes);
+  }
+  const isOverlay = node => node.nodeType === 1 && (/(^|\s)overlay-/.test(node.getAttribute("class") || "") || node.getAttribute("id") === "play-cursor" || /(^|\s)play-cursor(\s|$)/.test(node.getAttribute("class") || ""));
+  function patchHost(host, parts) {
+    const prev = hostParts;
+    if (!parts || !prev || !hostSvg || host.children.length !== 1 || host.firstElementChild !== hostSvg) return false;
+    const was = prev.segments, now = parts.segments;
+    if (parts.rest !== prev.rest || was.length !== now.length || now.some((seg, i) => seg.type !== was[i].type)) return false;
+    const main = hostSvg.querySelector(":scope > #score-main");
+    if (!main) return false;
+    const systemEl = index => main.querySelector(`:scope > g.system[data-system="${index}"]`);
+    if (main.querySelectorAll(":scope > g.system").length !== now.filter(seg => seg.type === "system").length) return false;
+    try {
+      now.forEach((seg, i) => {
+        if (seg.svg === was[i].svg) return;
+        if (seg.type === "system") {
+          const old = systemEl(seg.index);
+          if (!old) throw new Error("missing system");
+          old.replaceWith(...svgNodes(seg.svg));
+          return;
+        }
+        // 꼬리: 같은 페이지의 마지막 시스템 바로 뒤부터 다음 시스템·덮개 앞까지의 노드
+        const anchor = i > 0 && now[i - 1].type === "system" ? systemEl(now[i - 1].index) : null;
+        if (!anchor) throw new Error("missing anchor");
+        let node = anchor.nextSibling;
+        while (node && !(node.nodeType === 1 && node.matches("g.system")) && !isOverlay(node)) { const next = node.nextSibling; node.remove(); node = next; }
+        anchor.after(...svgNodes(seg.svg));
+      });
+      for (const [name, value] of Object.entries(parts.rootAttrs)) if (hostSvg.getAttribute(name) !== value) hostSvg.setAttribute(name, value);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
   function relayout() {
     const score = C.state.score;
     const res = E.render(score, { cache: true, selection: selectedIds(), selectedNoteIdx: ui.selectedNoteIdx,
       viewMode: ui.viewMode, pageMode: ui.pageMode, multiRest: ui.viewMode.type === "part" && ui.multiRest && !ui.inputMode && !ui.speedy,
       hideEmptyStaves: ui.hideEmptyStaves, activeVoice: ui.currentVoice });
     layoutCache = res.layout;
-    $("#svg-host").innerHTML = res.svg;
+    const host = $("#svg-host");
+    if (!patchHost(host, res.parts)) host.innerHTML = res.svg;
+    hostParts = res.parts; hostSvg = res.parts ? host.firstElementChild : null;
     // 음표머리 클릭 영역은 조판기(engrave.js)가 그림과 함께 그린다 — 여기서 따로 붙이지 않는다.
     renderedScore = score; renderedRevision = changeRevision;
     const svg = $("#score-svg");
@@ -144,8 +187,8 @@
         const quota = status.error.name === "QuotaExceededError";
         // 공간 부족은 처음 한 번 최근 작업 창을 사용량과 함께 열고, 그 뒤로는 토스트의 [최근 작업] 버튼으로 안내한다.
         if (!(quota && SF.recent?.onQuota())) {
-          toast(quota ? "자동 저장 공간이 부족해요. 파일 메뉴에서 악보를 저장해 주세요." : "자동 저장에 실패했어요. 파일 메뉴에서 악보를 저장해 주세요.",
-            quota ? { action: { label: "최근 작업", run: () => SF.recent?.open({ quota: true }) } } : undefined);
+          toast(quota ? SF.t("toast.storageFull") : SF.t("session.autosaveFailed"),
+            quota ? { action: { label: SF.t("recent.action"), run: () => SF.recent?.open({ quota: true }) } } : undefined);
         }
       } else { savedRevision = status.revision; $("#status-hint").textContent = "이 기기에 자동 저장했어요"; }
     } });
@@ -154,7 +197,7 @@
   function saveScore(opts = {}) {
     IO.saveJSON(C.state.score, opts);
     savedRevision = C.state.revision;
-    toast(opts.legacy ? "구버전 호환 형식으로 악보 파일을 내려받았어요" : "악보 파일을 내려받았어요");
+    toast(opts.legacy ? SF.t("toast.savedLegacy") : SF.t("toast.saved"));
   }
   function setReadOnly(value) {
     C.state.readOnly = !!value; ui.readOnly = !!value;
@@ -306,7 +349,8 @@
 
   function startPlayback(fromSec) {
     timeline = buildTimeline();
-    P.play(fromSec, { viewMode: ui.viewMode, rate: ui.playbackRate, loop: ui.loop, countIn: ui.countIn && P.player.metronome });
+    // samples: "ask" — 음원이 아직 준비 중이면 2.2초를 기다리다 신스로 넘어가는 대신 사용자에게 고르게 한다(P9-4)
+    P.play(fromSec, { viewMode: ui.viewMode, rate: ui.playbackRate, loop: ui.loop, countIn: ui.countIn && P.player.metronome, samples: "ask" });
   }
 
   function playFromSelection() {
@@ -471,6 +515,36 @@
         el.title = st.detail || "실제 악기 샘플 음원";
       });
     }
+    bindSamplePrompt();
+  }
+
+  /* 재생을 눌렀는데 음원이 준비 중일 때의 선택 안내 띠(P9-4). 고르지 않아도 준비되면 재생이 시작되고, 재생 버튼으로 취소한다. */
+  function bindSamplePrompt() {
+    const bar = $("#sample-wait"), msg = $("#sample-wait-msg");
+    if (!bar || !msg || !P.setSamplePromptHandler) return;
+    bar.addEventListener("click", (e) => {
+      const button = e.target.closest("[data-choice]");
+      if (button) P.resolveSamplePrompt(button.dataset.choice);
+    });
+    P.setSamplePromptHandler((st) => {
+      bar.hidden = !st.open;
+      if (!st.open) return;
+      msg.textContent = SF.t(st.mode === "wait" ? "sampleWait.waiting" : "sampleWait.asking", { ready: st.ready, total: st.total });
+      const waitButton = bar.querySelector('[data-choice="wait"]');
+      // 누른 "준비되면 자동 재생"이 사라질 때 키보드 포커스가 문서 맨 위로 날아가지 않게 남는 버튼으로 옮긴다
+      if (st.mode === "wait" && document.activeElement === waitButton) bar.querySelector('[data-choice="synth"]').focus();
+      waitButton.hidden = st.mode === "wait";
+    });
+  }
+
+  /* 첫 조작 신호: 미리 받기는 사용자가 앱을 한 번이라도 조작한 뒤에만 시작한다(음원 서버에 접속 정보가 남으므로, 보기만 하고 닫는 방문자는 제외) */
+  function bindFirstGesture() {
+    const names = ["pointerdown", "keydown", "touchstart"];
+    const once = () => {
+      for (const name of names) document.removeEventListener(name, once, true);
+      P.noteUserGesture();
+    };
+    for (const name of names) document.addEventListener(name, once, true);
   }
 
   function refreshToolbar() {
@@ -650,14 +724,15 @@
     ui.speedy = false; ui.speedyStep = null; clearSpeedyHeld();
     stopPlayback();
     P.releaseUnused(C.state.score); // 새 악보에 없는 악기·믹서 버스를 메모리에서 내림(재생은 바로 위에서 멈춤)
+    P.requestPreload(); // 새 악보의 악기를 쉬는 시간에 미리 받음(첫 조작 전·설정 꺼짐·오프라인이면 안 함)
     update();
     if (opts.report && opts.report.length) showImportReport(opts.name, score, opts.report, opts.reportKind);
-    else if (opts.toast !== false && !opts.boot) toast(opts.toast || `"${score.meta.title || opts.name}" 불러왔어요`);
+    else if (opts.toast !== false && !opts.boot) toast(opts.toast || SF.t("toast.loaded", { title: score.meta.title || opts.name }));
   }
   /** 파일·클라우드에서 읽은 결과를 받는다. 실패는 알리고, 성공은 교체 통로로 보낸다(교체 여부를 Promise로 돌려줌). */
   function handleLoadedScore(loaded, name, err, report, opts = {}) {
     if (!loaded) {
-      toast(`열 수 없어요: ${name}${err && err.message ? " — " + err.message : ""}`);
+      toast(err && err.message ? SF.t("toast.openErrorDetail", { name, error: tx(err.message) }) : SF.t("toast.openError", { name }));
       return false;
     }
     const origin = /\.json$/i.test(name || "") ? "file" : "import";
@@ -692,7 +767,7 @@
       const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
       if (!file) return;
       if (!/\.(json|musicxml|xml|mxl|mid|midi)$/i.test(file.name)) {
-        toast("악보 파일(.json/.musicxml/.mxl/.mid)을 끌어다 놓아주세요");
+        toast(SF.t("hint.dropScoreFile"));
         return;
       }
       IO.loadScoreFile(file, handleLoadedScore);
@@ -728,20 +803,20 @@
         saveScore({ legacy: true });
       } else if (act === "musicxml") {
         IO.download(IO.safeName(score.meta.title) + ".musicxml", IO.exportMusicXML(score), "application/vnd.recordare.musicxml+xml");
-        toast("MusicXML로 내보냈어요 — MuseScore에서 열 수 있어요");
+        toast(SF.t("toast.musicxml"));
       } else if (act === "midi") {
         IO.download(IO.safeName(score.meta.title) + ".mid", P.exportMidi(score), "audio/midi");
-        toast("MIDI 파일을 내려받았어요");
+        toast(SF.t("toast.midi"));
       } else if (act === "print") {
         SF.exportUI.print();
       } else if (act === "svg" || act === "png") {
         SF.exportUI.download(act);
       } else if (act === "manual-quick") {
         window.open("manual/scoreforge_quick_start_user_manual.html", "_blank", "noopener");
-        toast("퀵스타트 설명서를 새 탭으로 열었어요");
+        toast(SF.t("toast.quickManual"));
       } else if (act === "manual-user") {
         window.open("manual/scoreforge_user_manual.html", "_blank", "noopener");
-        toast("유저 매뉴얼을 새 탭으로 열었어요");
+        toast(SF.t("toast.userManual"));
       } else if (act.startsWith("demo-")) {
         const key = act.slice(5);
         if (IO.DEMOS[key]) await SF.session.replaceScore(IO.DEMOS[key](), { reason: "데모 열기", toast: "데모 악보를 불러왔어요 — 스페이스로 재생해 보세요", origin: "demo" });
@@ -821,7 +896,7 @@
     $("#btn-metronome").addEventListener("click", () => {
       P.player.metronome = !P.player.metronome;
       refreshToolbar();
-      toast(P.player.metronome ? "메트로놈 켜짐" : "메트로놈 꺼짐");
+      toast(P.player.metronome ? SF.t("toast.metronomeOn") : SF.t("toast.metronomeOff"));
     });
     $("#btn-dot").addEventListener("click", toggleDot);
     $("#btn-rest").addEventListener("click", () => {
@@ -844,7 +919,7 @@
     $("#btn-lyric").addEventListener("click", () => {
       const found = selectedEvent() || targetEvent();
       if (found && found.ev.type === "note") { ui.selection = found.ev.id; update(); editLyric(found.ev.id); }
-      else flashHint("가사를 붙일 음표를 먼저 선택하세요");
+      else flashHint(SF.t("hint.selectLyrics"));
     });
     $("#btn-chord-symbol").addEventListener("click", applyChordSymbol);
     $("#btn-tempo-mark").addEventListener("click", applyTempoMark);
@@ -869,10 +944,11 @@
     $("#btn-midi").addEventListener("click", () => {
       ui.midiEnabled = !ui.midiEnabled;
       refreshToolbar();
-      toast(ui.midiEnabled ? "MIDI 입력 켜짐" : "MIDI 입력 꺼짐");
+      toast(ui.midiEnabled ? SF.t("toast.midiOn") : SF.t("toast.midiOff"));
     });
     $("#midi-select").addEventListener("change", () => connectMidiInput($("#midi-select").value));
     $("#btn-help").addEventListener("click", () => $("#dlg-help").showModal());
+    $("#about-version").textContent = SF.VERSION || "";   // 도움말 창의 "정보" 구역(P9-5)
     $("#btn-zoom-in").addEventListener("click", () => { ui.zoom = Math.min(2.4, ui.zoom + 0.15); applyZoom(); });
     $("#btn-zoom-out").addEventListener("click", () => { ui.zoom = Math.max(0.5, ui.zoom - 0.15); applyZoom(); });
 
@@ -966,7 +1042,6 @@
   }
 
   /* ---------------- 시작 ---------------- */
-  const BOOT_PROBLEM = "저장된 악보를 여는 중 문제가 생겨 안전하게 시작했어요. 최근 작업에서 원본을 내려받을 수 있어요.";
   const tx = text => SF.i18n?.translate?.(text) ?? text;   // i18n 초기화(SF.i18n.init) 전에도 대화상자 글이 언어에 맞게 나오게
 
   /** 데모(blank면 빈 악보)로 시작한다. 문서 ID와 편집 잠금만 붙인다 — 첫 편집 전에는 기록을 만들지 않는다. */
@@ -987,15 +1062,15 @@
     const title = SF.session.bootInfo().pending?.title || "제목 없음";
     for (;;) {
       const choice = await SF.ui.choiceDialog({
-        title: tx("지난번에 여는 중 문제가 있었어요"),
-        message: tx(`지난번에 ‘${title}’을(를) 여는 중 문제가 있었어요. 어떻게 할까요?`),
+        title: SF.t("boot.safeTitle"),
+        message: SF.t("boot.safeMessage", { title }),
         choices: [
-          { id: "open", label: tx("그래도 열기") },
-          { id: "download", label: tx("파일로 내려받기"), primary: true },
-          { id: "fresh", label: tx("새 악보로 시작") },
+          { id: "open", label: SF.t("boot.openAnyway") },
+          { id: "download", label: SF.t("recent.download"), primary: true },
+          { id: "fresh", label: SF.t("boot.startNew") },
         ],
       });
-      if (choice === "download") { toast(await SF.session.bootDownloadPending() ? "악보 파일을 내려받았어요" : "이 기록을 찾지 못했어요 — 이미 지워졌을 수 있어요"); continue; }
+      if (choice === "download") { toast(await SF.session.bootDownloadPending() ? SF.t("toast.saved") : SF.t("recent.missing")); continue; }
       if (choice === "open") return { score: await SF.session.bootOpenPending() };
       if (choice === "fresh") { await SF.session.bootSkipPending(); return { blank: true }; }
       return {};
@@ -1011,7 +1086,7 @@
     const problem = SF.session.bootInfo().quarantined.length > 0;   // 이번 부팅에서 새로 격리한 기록이 있다
     if (!saved) {
       await installFallback(blank);
-      if (problem) toast(BOOT_PROBLEM);
+      if (problem) toast(SF.t("boot.problem"));
       return false;
     }
     await SF.session.bootBegin();   // 렌더 중 멈춰도 다음 부팅이 알 수 있게 "여는 중"을 먼저 적어 둔다
@@ -1027,7 +1102,7 @@
     }
     installScore(saved, announce ? { boot: true, report: fixes, reportKind: "fixes" } : { boot: true });
     if (SF.session.lockState().locked) setReadOnly(true);   // 다른 탭이 편집 중이던 악보는 읽기 전용으로 되살린다(2-D)
-    toast(problem ? BOOT_PROBLEM : "이전 작업을 자동으로 불러왔어요");
+    toast(problem ? SF.t("boot.problem") : SF.t("toast.restored"));
     return true;
   }
   /** 첫 렌더가 끝나기를 기다린다: 프레임 2번. 숨은 탭(복원으로 열린 배경 탭)은 프레임이 멈추므로 기다리지 않고, 보이는 탭도 1.5초가 상한. */
@@ -1042,7 +1117,7 @@
     await SF.session.bootFailed(error);
     await installFallback(false);
     update({ immediate: true });
-    toast(BOOT_PROBLEM);
+    toast(SF.t("boot.problem"));
   }
   /** 첫 렌더를 지킨다(P2-E): 동기 렌더(예외는 여기서 잡힌다) → 프레임 2번(렌더 중 멈추면 여기까지 오지 못해 "여는 중" 표시가 남는다) → 표시 해제. */
   async function settleBoot(restored) {
@@ -1065,9 +1140,11 @@
     SF.ui.init();
     buildToolbar();
     SF.palette.quickAccess();
+    SF.viewLevel?.init();
     buildPiano();
     bindThemePicker();
     bindButtons();
+    bindFirstGesture();
     SF.auth?.bindAuth();
     bindShortcutOverlay();
     bindMenu();
@@ -1112,7 +1189,7 @@
   }
   const coreMutate = C.mutate;
   C.mutate = (label, fn, opts) => {
-    if (C.state.readOnly) { toast("읽기 전용 악보예요. 사본을 만들어 편집하세요."); return; }
+    if (C.state.readOnly) { toast(SF.t("toast.readOnly")); return; }
     return coreMutate(label, fn, opts);
   };
   SF.app = { ui, update, relayout, repaint, refreshChrome, toast, handleLoadedScore, installScore, setReadOnly,

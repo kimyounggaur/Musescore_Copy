@@ -1,11 +1,11 @@
 {
   "name": "scoreforge",
-  "version": "3.6.0",
+  "version": "3.7.0",
   "private": true,
   "scripts": {
     "check": "node tests/check.mjs",
     "test": "node tests/run-node.mjs",
     "serve": "node tests/serve.mjs",
-    "release": "node tests/gen-readme-keys.mjs && node tests/prepare-release.mjs && npm run check && npm test"
+    "release": "node tests/gen-readme-keys.mjs && node tests/gen-licenses.mjs && node tests/prepare-release.mjs && npm run check && npm test"
   }
 }

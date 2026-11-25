@@ -8,7 +8,7 @@ function harness(answers = []) {
   const context = vm.createContext({ console, setTimeout, clearTimeout });
   context.window = context;
   context.document = { getElementById: () => null, querySelectorAll: () => [] };
-  for (const name of ['safe-html', 'core']) vm.runInContext(readFileSync(`js/${name}.js`, 'utf8'), context, { filename: `${name}.js` });
+  for (const name of ['safe-html', 'core', 'i18n']) vm.runInContext(readFileSync(`js/${name}.js`, 'utf8'), context, { filename: `${name}.js` });
   const SF = context.SF, C = SF.core;
   const dialogs = [], installs = [], saves = [];
   let open = 0, maxOpen = 0;
@@ -173,7 +173,7 @@ function boot(options = {}) {
   context.document = { getElementById: () => null, querySelectorAll: () => [], querySelector: () => null };
   context.localStorage = options.localStorage || webStorage();
   context.sessionStorage = options.sessionStorage || webStorage();
-  for (const name of ['safe-html', 'core', ...(options.schema ? ['schema'] : []), 'engrave', 'playback', 'io', 'store'])
+  for (const name of ['safe-html', 'core', 'i18n', ...(options.schema ? ['schema'] : []), 'engrave', 'playback', 'io', 'store'])
     vm.runInContext(readFileSync(`js/${name}.js`, 'utf8'), context, { filename: `${name}.js` });
   const SF = context.SF, C = SF.core;
   const backend = options.backend || SF.storeTesting.memoryBackend(options.backendOptions);

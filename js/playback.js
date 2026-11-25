@@ -8,7 +8,7 @@
   const C = SF.core;
   const { Fraction } = SF;
   const F = (n, d = 1) => new Fraction(n, d);
-  const timeAt = (score, m) => C.timeSigAt ? C.timeSigAt(score, m) : score.measures.slice(0, m + 1).reduce((ts, mm) => mm.timeSig || ts, score.timeSig);
+  const timeAt = (score, m) => C.timeSigAt(score, m);
   const lengthAt = (score, m) => {
     if (C.measureLenAt) return C.measureLenAt(score, m);
     const value = score.measures[m]?.actualLen;
@@ -128,6 +128,8 @@
   let smplrOverride = null; // 테스트가 넣은 smplr 대역(__setSmplrModuleForTest). 앱 코드는 쓰지 않는다
   let sampleStatus = { state: "idle", text: "샘플 대기", detail: "재생하면 smplr 실제 악기 샘플을 불러옵니다." };
   let onSampleStatus = null;
+  let samplePrompt = null;   // 떠 있는 "음원 준비 중" 선택 안내(P9-4). 없으면 null
+  let onSamplePrompt = null;
 
   // 피아노는 두 가지다(결정 D2-A): 기본은 가벼운 Soundfont 피아노, 설정에서 고르면 큰 Splendid 피아노(약 19MB)를 쓴다.
   // 악기 이름은 악보 데이터에 계속 "piano"로 저장되고, 어느 음원을 쓸지는 sampleKey가 이 기기의 설정으로 정한다.
@@ -146,6 +148,7 @@
   function setSampleStatus(state, text, detail) {
     sampleStatus = { state, text, detail: detail || text };
     if (onSampleStatus) onSampleStatus(sampleStatus);
+    if (samplePrompt) emitSamplePrompt(); // 준비된 악기 수가 바뀌었을 수 있다
   }
 
   function getSampleStatus() {
@@ -314,6 +317,181 @@
 
   function warmSamplesForScore(score) {
     return Promise.all(score.parts.map(part => ensureSampleInstrument(part.instrument, part.id)));
+  }
+
+  /* ---------------- 미리 받기 (P9-4) ----------------
+   * 악보를 연 뒤 쉬는 시간에 그 악보의 악기만 미리 받아 둔다. 음원은 외부 서버에서 오므로(접속 정보가 그 서버에 남는다)
+   * 사용자가 앱을 한 번이라도 조작하기 전에는, 설정을 껐거나 오프라인·데이터 절약·느린 망이면 하지 않는다.
+   * 로딩 자체는 재생 때와 같은 ensureSampleInstrument(공유 로더·동시 요청 제한)를 쓴다. */
+  const PRELOAD_KEY = "scoreforge.audio.preload"; // "on"(기본) | "off". 이 기기에만 저장하고 악보에는 넣지 않는다
+  let preloadSetting = readPreloadSetting();
+  let gestureSeen = false; // 사용자가 앱을 조작한 적이 있다
+  let preloadReq = null;   // 예약됐거나 진행 중인 미리 받기 요청(하나만)
+
+  function readPreloadSetting() {
+    try { return localStorage.getItem(PRELOAD_KEY) === "off" ? "off" : "on"; } catch (err) { return "on"; }
+  }
+
+  function getPreloadSetting() {
+    return preloadSetting;
+  }
+
+  /* 켜면 이미 조작한 뒤라서 지금 악보를 바로 예약하고, 끄면 예약·진행 중인 요청의 남은 악기를 그만둔다(이미 시작한 내려받기는 막지 않는다). */
+  function setPreloadSetting(value) {
+    const next = value === "off" ? "off" : "on";
+    const changed = next !== preloadSetting;
+    preloadSetting = next;
+    try { localStorage.setItem(PRELOAD_KEY, next); } catch (err) { /* 저장 못 해도 이번 접속 동안은 적용 */ }
+    if (changed) {
+      if (next === "off") cancelPreload();
+      else if (gestureSeen) requestPreload();
+    }
+    return next;
+  }
+
+  /* 미리 받지 않는 이유(없으면 null): "setting" 설정 꺼짐 | "gesture" 첫 조작 전 | "offline" | "save-data" 데이터 절약 | "slow" 2G */
+  function preloadBlockReason() {
+    if (preloadSetting === "off") return "setting";
+    if (!gestureSeen) return "gesture";
+    const nav = typeof navigator === "object" && navigator ? navigator : null;
+    if (nav && nav.onLine === false) return "offline";
+    const conn = nav && (nav.connection || nav.mozConnection || nav.webkitConnection);
+    if (conn && conn.saveData === true) return "save-data";
+    if (conn && /(^|-)2g$/.test(String(conn.effectiveType || ""))) return "slow";
+    return null;
+  }
+
+  /* 첫 조작을 알린다. 그 전에 요청해 둔 미리 받기가 있으면 이어서 예약한다. */
+  function noteUserGesture() {
+    if (gestureSeen) return;
+    gestureSeen = true;
+    if (preloadReq && preloadReq.waiting) { preloadReq.waiting = false; schedulePreload(preloadReq); }
+  }
+
+  function whenIdle(fn, delayMs) {
+    if (typeof requestIdleCallback === "function") {
+      const id = requestIdleCallback(() => fn(), { timeout: 4000 });
+      return () => { try { cancelIdleCallback(id); } catch (err) { /* 이미 실행됨 */ } };
+    }
+    const id = setTimeout(fn, delayMs);
+    return () => clearTimeout(id);
+  }
+
+  function endPreload(req, status, reason) {
+    if (preloadReq === req) preloadReq = null;
+    if (req.done) return;
+    req.done = true;
+    req.resolve({ status, reason: reason || null, started: req.started });
+  }
+
+  function cancelPreload() {
+    const req = preloadReq;
+    if (!req) return;
+    req.cancelIdle?.(); req.cancelIdle = null;
+    endPreload(req, "cancelled");
+  }
+
+  function schedulePreload(req) {
+    const reason = preloadBlockReason();
+    if (reason === "gesture") { req.waiting = true; return; } // noteUserGesture가 이어서 예약한다
+    if (reason) { endPreload(req, "blocked", reason); return; }
+    req.cancelIdle = whenIdle(() => { req.cancelIdle = null; runPreload(req); }, req.delayMs);
+  }
+
+  async function runPreload(req) {
+    if (preloadReq !== req) return;
+    const reason = preloadBlockReason(); // 쉬는 시간이 오는 사이 사정이 바뀌었을 수 있다
+    if (reason) { endPreload(req, "blocked", reason); return; }
+    try {
+      for (const part of C.state.score?.parts || []) {
+        if (preloadReq !== req || player.playing || player.loading) { endPreload(req, "cancelled"); return; }
+        if (part.instrument === "drums") continue;
+        req.started++;
+        await ensureSampleInstrument(part.instrument, part.id); // 실패해도 거부하지 않고 기록만 남긴다 — 하나씩 차례로 받는다
+      }
+      endPreload(req, "done");
+    } catch (err) {
+      endPreload(req, "blocked", "error"); // 예: Web Audio를 쓸 수 없는 환경
+    }
+  }
+
+  /* 지금 악보의 악기를 쉬는 시간에 미리 받도록 요청한다. 새 요청은 이전 요청의 남은 악기를 그만두게 한다.
+   * 돌려주는 Promise는 { status: "done"|"cancelled"|"blocked", reason, started }로 끝난다. delayMs는 requestIdleCallback이 없을 때만 쓴다. */
+  function requestPreload(opts = {}) {
+    cancelPreload();
+    const req = { done: false, started: 0, waiting: false, cancelIdle: null, resolve: null, delayMs: +opts.delayMs >= 0 ? +opts.delayMs : 300 };
+    const promise = new Promise(resolve => { req.resolve = resolve; });
+    preloadReq = req;
+    schedulePreload(req);
+    return promise;
+  }
+
+  /* ---------------- 재생할 때 음원이 준비 중이면 묻는다 (P9-4) ----------------
+   * play(from, { samples: "ask" })일 때만 쓴다. 필요한 악기가 모두 준비돼 있으면(미리 받기가 끝났으면) 묻지 않고 곧바로 시작한다.
+   * 준비 중이면 재생을 시작하지 않고 안내(setSamplePromptHandler)를 띄운다: "synth"를 고르면 지금 신스로, "wait"를 고르면 안내가
+   * 기다리는 중으로 바뀐다. 어느 쪽도 고르지 않아도 모두 준비되면(또는 실패가 확정되면) 시작한다. 멈추거나 새로 재생하면 안내가 닫힌다. */
+  function expectedSampleKeys(score) {
+    return score.parts.filter(part => part.instrument !== "drums").map(part => part.id + ":" + sampleKey(part.instrument));
+  }
+
+  function sampleProgress(keys) {
+    let ready = 0, failed = 0;
+    for (const key of keys) {
+      const rec = sampleInstruments.get(key);
+      if (!rec) continue;
+      if (rec.failed) failed++; else if (rec.ready) ready++;
+    }
+    return { total: keys.length, ready, failed, pending: keys.length - ready - failed };
+  }
+
+  function samplePromptState() {
+    if (!samplePrompt) return { open: false, mode: null, total: 0, ready: 0, failed: 0, pending: 0 };
+    return { open: true, mode: samplePrompt.mode, ...sampleProgress(samplePrompt.keys) };
+  }
+
+  function emitSamplePrompt() {
+    if (onSamplePrompt) onSamplePrompt(samplePromptState());
+  }
+
+  function setSamplePromptHandler(fn) {
+    onSamplePrompt = typeof fn === "function" ? fn : null;
+    emitSamplePrompt();
+  }
+
+  function resolveSamplePrompt(choice) {
+    if (!samplePrompt || (choice !== "synth" && choice !== "wait")) return false;
+    samplePrompt.choose(choice);
+    return true;
+  }
+
+  function closeSamplePrompt() {
+    if (samplePrompt) samplePrompt.cancel();
+  }
+
+  /* 돌려주는 값: "ready"(모두 준비됐거나 실패가 확정됨) | "synth"(신스로 시작을 골랐다) | "cancel"(멈춤·새 재생으로 닫힘) */
+  function askForSamples(score) {
+    const keys = expectedSampleKeys(score);
+    const before = sampleProgress(keys);
+    const warm = warmSamplesForScore(score); // 모자란 악기는 지금 받기 시작한다. 지난번에 실패한 악기도 뒤에서 다시 받아 본다
+    if (before.pending === 0) return Promise.resolve("ready"); // 모두 준비됐거나 지난번에 실패한 것뿐 — 묻지 않는다
+    return new Promise(resolve => {
+      const prompt = { mode: "ask", keys, done: false, choose: null, cancel: null };
+      const finish = how => {
+        if (prompt.done) return;
+        prompt.done = true;
+        if (samplePrompt === prompt) { samplePrompt = null; emitSamplePrompt(); }
+        resolve(how);
+      };
+      prompt.choose = choice => {
+        if (prompt.done) return;
+        if (choice === "synth") finish("synth");
+        else if (prompt.mode !== "wait") { prompt.mode = "wait"; emitSamplePrompt(); }
+      };
+      prompt.cancel = () => finish("cancel");
+      samplePrompt = prompt;
+      emitSamplePrompt();
+      warm.then(() => finish("ready"));
+    });
   }
 
   /* ---------------- 수명 관리 ---------------- */
@@ -935,7 +1113,9 @@
     if (opts.countIn !== undefined) player.countIn = !!opts.countIn;
     player.loading = true; player.onState?.(true);
     updateMixer(score);
-    await Promise.race([warmSamplesForScore(score), delay(Math.max(0, opts.sampleTimeoutMs ?? 2200))]).catch(() => {});
+    cancelPreload(); // 재생 준비가 이 악보의 악기 로딩을 맡는다
+    if (opts.samples === "ask") await askForSamples(score); // 준비 중이면 사용자에게 묻는다(P9-4). 어느 쪽이든 아래 스냅숏이 이번 재생의 음원을 정한다
+    else await Promise.race([warmSamplesForScore(score), delay(Math.max(0, opts.sampleTimeoutMs ?? 2200))]).catch(() => {});
     if (token !== player.startToken) return;
     // Snapshot once: a late sample load is available only to the next session.
     player.sessionSamples = new Set([...sampleInstruments].filter(([, rec]) => rec.ready && !rec.failed).map(([key]) => key));
@@ -967,6 +1147,7 @@
 
   function stop(notify = true) {
     player.startToken++;
+    closeSamplePrompt();
     if (player.timer) { clearInterval(player.timer); player.timer = null; }
     if (player.raf) { cancelAnimationFrame(player.raf); player.raf = null; }
     const wasPlaying = player.playing || player.loading;
@@ -1045,6 +1226,8 @@
     play, stop, previewNote, pausePos, player, compile, exportMidi,
     setRate, setLoop, seek, updateMixer, partBuses, buildTempoMap,
     getSampleStatus, setSampleStatusHandler, ensureSampleInstrument, buildPlaybackPlan,
+    getPreloadSetting, setPreloadSetting, preloadBlockReason, noteUserGesture, requestPreload,
+    setSamplePromptHandler, resolveSamplePrompt,
     limitedStorage, // 테스트용: 동시 요청 제한 유틸
     releaseUnused, debugStats, getPianoQuality, setPianoQuality,
     __setSmplrModuleForTest, // 테스트 전용

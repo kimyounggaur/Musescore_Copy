@@ -33,6 +33,7 @@
     delete | 삭제 | Delete
     input | 입력 | Input
     content | 내용 | Content
+    choose | 선택 | Choose
     none | 없음 | None
     auto | 자동 | Auto
     optional | (선택) | (Optional)
@@ -67,6 +68,7 @@
     midiIcon | 🎵 MIDI 내보내기 (.mid) | 🎵 Export MIDI (.mid)
     print | 인쇄 / PDF 저장 | Print / Save PDF
     printIcon | 🖨️ 인쇄 / PDF 저장 | 🖨️ Print / Save PDF
+    exportTitle | 내보내기 | Export
     manuals | 설명서 | Manuals
     quick | 🚀 퀵스타트 한글 설명서 | 🚀 Quick start guide (Korean)
     quickTime | 10분 입문 | 10-minute introduction
@@ -213,6 +215,10 @@
     pianoQuality | 피아노 음질 | Piano sound quality
     pianoQualityHigh | 고음질(약 19MB) | High quality (about 19 MB)
     pianoQualityHint | 이 기기에만 저장돼요. 악보에는 들어가지 않고, 다음 재생부터 적용돼요. | Saved on this device only, not in the score. Applies from the next playback.
+    samplePreload | 음원 미리 받기 | Preload instrument sounds
+    samplePreloadOn | 켜기(쉴 때 미리 받아 두기) | On (download ahead while idle)
+    samplePreloadOff | 끄기(재생할 때만 받기) | Off (download only when playing)
+    samplePreloadHint | 이 기기에만 저장돼요. 데이터 절약 모드나 오프라인에서는 켜 두어도 미리 받지 않아요. | Saved on this device only. Nothing is downloaded ahead in data saver mode or offline, even when this is on.
     measures | 마디 | Measures
     addFour | ＋ 마디 4개 추가 | ＋ Add four measures
     deleteLast | － 마지막 마디 삭제 | － Delete last measure
@@ -231,6 +237,7 @@
     empty | 음표나 쉼표를 선택하면 이곳에서 보임, 색상, 오프셋, 기호, 브레이크를 바로 조정할 수 있어요. | Select a note or rest to adjust visibility, color, offsets, symbols, and breaks here.
     note | 음표 | Note
     position | 위치 | Position
+    where | {name} · 성부 {voice} · 마디 {measure} | {name} · Voice {voice} · Measure {measure}
     visible | 보임 | Visible
     color | 색상 | Color
     break | 마디 브레이크 | Measure break
@@ -330,6 +337,17 @@
     rhythm | 리듬 연습 | Rhythm practice
     rhythmHint | 8분음표·점음표·빔 예제 | Eighth notes, dotted notes, and beams
   `);
+  group("sampleWait", `
+    asking | 음원 준비 중이에요 ({ready}/{total}) | Instrument sounds are getting ready ({ready}/{total})
+    waiting | 음원을 받는 중이에요 ({ready}/{total}). 준비되면 자동으로 재생해요 | Getting the instrument sounds ({ready}/{total}). Playback starts automatically when ready
+    synth | 지금은 신스로 재생 | Play with the built-in synth now
+    wait | 준비되면 자동 재생 | Play automatically when ready
+  `);
+  group("about", `
+    title | 정보 | About
+    versionLabel | ScoreForge · 버전 | ScoreForge · Version
+    licenses | 라이선스 고지 | Licenses and credits
+  `);
   group("help", `
     title | 도움말 · 단축키 | Help · Keyboard shortcuts
     imageAlt | 도움말 단축키 다이얼로그 이미지 | Help and keyboard shortcuts dialog image
@@ -414,6 +432,8 @@
     savedLegacy | 구버전 호환 형식으로 악보 파일을 내려받았어요 | Score file downloaded in the older-version format
     pianoHigh | 고음질 피아노(약 19MB)를 쓰도록 바꿨어요. 다음 재생부터 적용돼요 | Switched to the high-quality piano (about 19 MB). It applies from the next playback
     pianoBasic | 기본 피아노로 바꿨어요. 다음 재생부터 적용돼요 | Switched to the standard piano. It applies from the next playback
+    preloadOn | 쉴 때 음원을 미리 받아 둘게요 | Instrument sounds will be downloaded ahead while the app is idle
+    preloadOff | 음원은 재생할 때만 받을게요 | Instrument sounds will be downloaded only when you play
     autosaved | 이 기기에 자동 저장했어요 | Saved automatically on this device
     storageFull | 자동 저장 공간이 부족해요. 파일 메뉴에서 악보를 저장해 주세요. | Auto-save storage is full. Save your score from the File menu.
     musicxml | MusicXML로 내보냈어요 — MuseScore에서 열 수 있어요 | Exported MusicXML — open it in MuseScore
@@ -492,6 +512,7 @@
     selectBreak | 브레이크를 붙일 마디를 먼저 선택하세요 | Select a measure for the break first
     notFound | 이동할 위치를 찾지 못했어요 | Could not find the requested position
     dropFile | 악보 파일(.json/.musicxml/.xml/.mxl)을 끌어다 놓아주세요 | Drop a score file (.json/.musicxml/.xml/.mxl)
+    dropScoreFile | 악보 파일(.json/.musicxml/.mxl/.mid)을 끌어다 놓아주세요 | Drop a score file (.json/.musicxml/.mxl/.mid)
     lyricKeys | Space=다음 · Esc=닫기 | Space=next · Esc=close
     lyricMelisma | Space=다음 · -=하이픈 · _=멜리스마 | Space=next · -=hyphen · _=melisma
     chordKeys | Space=다음 · Shift+Space=이전 · Esc=닫기 | Space=next · Shift+Space=previous · Esc=close
@@ -841,6 +862,45 @@
     addMeasure | ＋마디 | ＋Measure
     removeMeasure | −마디 | −Measure
   `);
+  group("viewLevel", `
+    basicView | 기본 보기 | Basic view
+    basicViewOn | 기본 보기 — 자주 쓰는 조작만 보여 줘요(켜짐) | Basic view — shows only the common controls (on)
+    basicViewOff | 기본 보기 — 자주 쓰는 조작만 보여 줘요(꺼짐) | Basic view — shows only the common controls (off)
+    basicViewCommand | 기본 보기 켜기/끄기 | Turn basic view on/off
+    pageBreak | 쪽나눔 | Page break
+    sectionBreak | 구역나눔 | Section break
+    navShort | 내비 | Nav
+    timeShort | 타임 | Time
+    themeShort | 테마 | Theme
+    themeDark | 어두운 | Dark
+    themeLight | 밝은 | Light
+    themePretty | 예쁜 | Pretty
+    themeCute | 귀여운 | Cute
+    themeDarkUi | 어두운 UI | Dark UI
+    themeLightUi | 밝은 UI | Light UI
+    themePrettyUi | 예쁜 UI | Pretty UI
+    themeCuteUi | 귀여운 UI | Cute UI
+    offsetX | 가로 이동 | X offset
+    offsetY | 세로 이동 | Y offset
+    velocity | 세기 | Velocity
+    mixVolume | 음량 | Volume
+    mixPan | 좌우 | Pan
+    noteheadX | X자 | X
+    kick | 킥 | Kick
+    snare | 스네어 | Snare
+    closedHihat | 닫힌 하이햇 | Closed HH
+    openHihat | 열린 하이햇 | Open HH
+    crash | 크래시 | Crash
+    ride | 라이드 | Ride
+    lowTom | 낮은 탐 | Low Tom
+    midTom | 중간 탐 | Mid Tom
+    highTom | 높은 탐 | High Tom
+    kickTitle | 킥 (K) | Kick (K)
+    snareTitle | 스네어 (S) | Snare (S)
+    closedHihatTitle | 닫힌 하이햇 (H) | Closed hihat (H)
+    openHihatTitle | 열린 하이햇 (O) | Open hihat (O)
+    crashTitle | 크래시 (C) | Crash (C)
+  `);
   group("validation", `
     goToLabel | 마디 번호 또는 r:A | Measure number or r:A
     goTo | 마디 번호 또는 r:A 형식으로 입력하세요. | Enter a measure number or use the format r:A.
@@ -942,8 +1002,11 @@
     pngError | PNG 변환에 실패했어요. | PNG conversion failed.
     pngDone | 300dpi PNG를 내보냈어요. | Exported a 300 dpi PNG.
     svgDone | 글꼴을 포함한 SVG를 내보냈어요. | Exported an SVG with the font included.
+    pngZipDone | 300dpi PNG를 ZIP 파일 하나로 묶어 내보냈어요. | Exported the 300 dpi PNGs as one ZIP file.
+    svgZipDone | 글꼴을 포함한 SVG를 ZIP 파일 하나로 묶어 내보냈어요. | Exported the SVGs with the font included as one ZIP file.
+    zipTooBig | 내보낼 파일이 너무 커서 ZIP으로 묶을 수 없어요. | The files are too large to bundle into a ZIP.
     print | 인쇄 · PDF | Print · PDF
-    printHelp | 인쇄 설정에서 배율 100%, 여백 없음, 머리글·바닥글 끄기를 선택하세요. PDF로 저장하면 벡터 품질로 보관할 수 있어요. | In print settings, choose 100% scale, no margins, and no headers or footers. Save as PDF to keep vector quality.
+    printHelp | 인쇄 창에서 '대상'을 'PDF로 저장'으로 고르면 PDF 파일로 보관할 수 있어요(악보가 벡터 품질로 저장돼요). 배율은 100%, 여백은 없음, 머리글·바닥글은 끄기로 설정하세요. | In the print window, set the destination to "Save as PDF" to keep a vector-quality PDF. Use 100% scale, no margins, and turn off headers and footers.
     printOpen | 인쇄 열기 | Open print dialog
     midiImport | MIDI 가져오기 | Import MIDI
     grid | 리듬 격자 | Rhythm grid
@@ -1162,7 +1225,8 @@
   pattern("toast.ending", /^(\d+)번 엔딩을 표시했어요$/, ["count"]);
   pattern("toast.tempo", /^템포 ♩=(\d+)$/, ["tempo"]);
   pattern("toast.rehearsal", /^리허설 ([\s\S]+)$/, ["text"]);
-  pattern("toast.theme", /^(Dark|Light|Pretty|Cute)(?: UI)?로 전환했어요$/, ["theme"]);
+  pattern("toast.theme", /^(어두운 UI|밝은 UI|예쁜 UI|귀여운 UI)로 전환했어요$/, ["theme"], ["theme"]);
+  pattern("properties.where", /^([\s\S]+) · 성부 (\d+) · 마디 (\d+)$/, ["name", "voice", "measure"]);
   pattern("toast.openError", /^열 수 없어요: ([\s\S]*)$/, ["name"]);
   pattern("session.beforeReplace", /^([\s\S]+) 전에 현재 악보를 어떻게 할까요\?$/, ["reason"], ["reason"]);
   pattern("boot.safeMessage", /^지난번에 ‘([\s\S]*)’을\(를\) 여는 중 문제가 있었어요\. 어떻게 할까요\?$/, ["title"]);

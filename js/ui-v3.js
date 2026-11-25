@@ -25,7 +25,7 @@
   }
   function commit(label, fn, coalesce) {
     try { A.C.mutate(label,fn,coalesce?{coalesce}:{}); A.update(); }
-    catch(error) { A.toast(error instanceof RangeError ? "이 위치에서는 적용할 수 없어요. 마디 길이와 반복·조표 경계를 확인하세요." : error.message); }
+    catch(error) { A.toast(error instanceof RangeError ? SF.t("uiV3.cannotApply") : error.message); }
   }
   function measureTarget() { return A.selectedEvent() || A.targetEvent() || A.cursorPos().found; }
   function resetSelection(m) {
@@ -37,10 +37,10 @@
     const {C}=A, range=A.selectedMeasureRange() || {from:f.m,to:f.m};
     if(action==="split" || action==="pickup") {
       const tick=C.eventStartTick(f.measures[f.m],f.e,f);
-      const raw=await SF.ui.promptDialog({title:action==="split"?"마디 나누기":"못갖춘마디 길이",label:"온음표 기준 분수 (예: 1/4)",value:action==="split"?(tick.n?tick.toString():"1/2"):"1/4",validate:v=>{
-        const match=v.trim().match(/^(\d+)\/(\d+)$/);if(!match||!+match[2]||!+match[1])return "양수 분수로 입력하세요.";
+      const raw=await SF.ui.promptDialog({title:action==="split"?SF.t("uiV3.splitMeasure"):SF.t("uiV3.pickupLength"),label:SF.t("uiV3.fraction"),value:action==="split"?(tick.n?tick.toString():"1/2"):"1/4",validate:v=>{
+        const match=v.trim().match(/^(\d+)\/(\d+)$/);if(!match||!+match[2]||!+match[1])return SF.t("uiV3.positiveFraction");
         const t=new SF.Fraction(+match[1],+match[2]),max=action==="split"?C.measureLenAt(C.state.score,f.m):new SF.Fraction(C.timeSigAt(C.state.score,0).num,C.timeSigAt(C.state.score,0).den);
-        return (action==="split"?t.lt(max):t.lte(max))?"":"마디 길이보다 짧게 입력하세요.";
+        return (action==="split"?t.lt(max):t.lte(max))?"":SF.t("uiV3.shorterThanMeasure");
       }});
       if(raw===null)return;const [n,d]=raw.trim().split("/").map(Number);
       commit(action==="split"?"마디 나누기":"못갖춘마디",s=>action==="split"?C.splitMeasureAt(s,f.m,new SF.Fraction(n,d)):C.setPickup(s,new SF.Fraction(n,d)));
@@ -56,11 +56,11 @@
   }
   function ornament(type) {
     const ids=A.selectedIds() || new Set(A.targetEvent()?[A.targetEvent().ev.id]:[]);
-    if(!ids.size){A.toast("장식을 붙일 음표를 선택하세요.");return;}
+    if(!ids.size){A.toast(SF.t("uiV3.selectOrnament"));return;}
     commit("꾸밈 기호",s=>{for(const id of ids){const f=A.C.findEvent(s,id);if(f?.ev.type==="note")A.C.setOrnament(s,id,f.ev.ornament===type?null:type);}});
   }
   function ottava(shift) {
-    const ends=A.rangeNoteEnds();if(!ends){A.toast("옥타브 선을 붙일 음표 범위를 선택하세요.");return;}
+    const ends=A.rangeNoteEnds();if(!ends){A.toast(SF.t("uiV3.selectOttava"));return;}
     commit(shift>0?"8va 옥타브 선":"8vb 옥타브 선",s=>{
       const old=s.spanners.find(x=>x.type==="ottava"&&x.startId===ends.firstId&&x.endId===ends.lastId&&x.shift===shift);
       if(old)s.spanners=s.spanners.filter(x=>x!==old);else A.C.addOttava(s,ends.firstId,ends.lastId,shift);
@@ -77,7 +77,7 @@
     const clef=field(grid,"음자리표",options(element("select",{id:"measure-clef"}),{"":"이전 보표에서 이어받기",...clefs},f.measures[f.m].clef??""));
     clef.addEventListener("change",()=>commit("마디 음자리표",score=>C.setMeasureClef(score,f.m,clef.value||null,f)));
     const ts=C.timeSigAt(s,f.m), time=field(grid,"박자",element("input",{id:"measure-time",type:"text",value:`${ts.num}/${ts.den}`,placeholder:"3/4"}));
-    time.addEventListener("change",()=>{const [num,den]=time.value.split("/").map(Number);if(!Number.isInteger(num)||num<1||num>32||![1,2,4,8,16,32,64].includes(den)){A.toast("박자는 1~32 / 1·2·4·8·16·32·64로 입력하세요.");time.value=`${ts.num}/${ts.den}`;return;}commit("마디 박자",score=>C.setMeasureTimeSig(score,f.m,{num,den}));resetSelection(f.m);});
+    time.addEventListener("change",()=>{const [num,den]=time.value.split("/").map(Number);if(!Number.isInteger(num)||num<1||num>32||![1,2,4,8,16,32,64].includes(den)){A.toast(SF.t("uiV3.timeValidation"));time.value=`${ts.num}/${ts.den}`;return;}commit("마디 박자",score=>C.setMeasureTimeSig(score,f.m,{num,den}));resetSelection(f.m);});
     const jump=field(grid,"다시 가기",options(element("select",{id:"measure-jump"}),{"":"없음",...jumpNames},mm.jump?.type||""));
     jump.addEventListener("change",()=>commit("다시 가기",score=>C.setMeasureJump(score,f.m,jump.value?{type:jump.value,playRepeats:!!mm.jump?.playRepeats}:null)));
     const repeats=field(grid,"돌아간 뒤 반복",element("input",{id:"jump-repeats",type:"checkbox"}));repeats.checked=!!mm.jump?.playRepeats;repeats.disabled=!mm.jump;
@@ -100,7 +100,7 @@
   }
   function toggleLoop() {
     if(A.ui.loop){A.ui.loop=null;A.ui.loopIds=null;A.P.setLoop(null);A.update();return;}
-    const ids=A.selectedIds();if(!ids?.size){A.toast("반복 재생할 범위를 먼저 선택하세요.");return;}
+    const ids=A.selectedIds();if(!ids?.size){A.toast(SF.t("uiV3.selectLoop"));return;}
     const comp=A.P.compile(A.C.state.score,{viewMode:A.ui.viewMode});
     const events=(comp.timelineEvents||[]).filter(e=>ids.has(e.id));
     if(!events.length)return;
@@ -196,7 +196,8 @@
     const duration=A.$("#play-duration");if(duration){const total=(A.P.player.compiled?.totalSec||0)/A.ui.playbackRate;duration.textContent=total?`${Math.floor(total/60)}:${String(Math.round(total%60)).padStart(2,"0")}`:"";}
     for(const grid of A.$$(".prop-grid"))for(const label of grid.querySelectorAll("label:not([for])")){const control=label.nextElementSibling;if(control?.matches("input,select,textarea")){control.id||=`prop-${control.dataset.prop||Math.random().toString(36).slice(2)}`;label.htmlFor=control.id;}}
     document.querySelectorAll("button,select,input").forEach(el=>{
-      if(!el.getAttribute("aria-label")&&!el.labels?.length&&!el.getAttribute("aria-labelledby")&&(el.tagName!=="BUTTON"||!el.textContent.trim())){const label=el.title||el.placeholder||el.id;if(label)el.setAttribute("aria-label",label);}
+      // el.labels는 문서 전체를 훑는 비싼 조회(악보 SVG 노드가 많을수록, DOM이 바뀔 때마다 다시 계산) — 값싼 검사를 앞에 두고 맨 끝에서만 부른다(조건 자체는 그대로).
+      if(!el.getAttribute("aria-label")&&!el.getAttribute("aria-labelledby")&&(el.tagName!=="BUTTON"||!el.textContent.trim())&&!el.labels?.length){const label=el.title||el.placeholder||el.id;if(label)el.setAttribute("aria-label",label);}
       if(el.matches("button.tbtn,button.dur"))el.setAttribute("aria-pressed",String(el.classList.contains("on")));
     });
   }

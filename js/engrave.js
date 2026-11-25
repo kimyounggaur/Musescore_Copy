@@ -31,7 +31,7 @@
     return fallback;
   }
   const keyAt = (score, m) => C.keySigAt ? C.keySigAt(score, m) : inherited(score.measures, m, "keySig", score.keySig);
-  const timeAt = (score, m) => C.timeSigAt ? C.timeSigAt(score, m) : inherited(score.measures, m, "timeSig", score.timeSig);
+  const timeAt = (score, m) => C.timeSigAt(score, m);
   const clefAt = (ref, m) => C.clefAt ? C.clefAt(ref, m) : inherited(ref.measures || ref.staff?.measures, m, "clef", ref.staff?.clef || ref.clef || "treble");
   const lengthAt = (score, m) => C.measureLenAt ? C.measureLenAt(score, m) : score.measures[m]?.pickup ? Fraction.from(score.measures[m].pickup) : F(timeAt(score, m).num, timeAt(score, m).den);
   function clefInfo(name) {
@@ -211,16 +211,26 @@
 
   const accidentalColumns = new WeakMap();
   let nextById = new Map();
+  // 임시표 글자 하나가 음 위치를 중심으로 위·아래로 차지하는 높이(보표 스텝: 1스텝 = 반 칸 = 5px). Bravura 글자 윤곽 기준.
+  const ACC_EXTENT = { sharp: [2.8, 2.8], natural: [2.8, 2.8], flat: [3.5, 1.4], doubleSharp: [1, 1], doubleFlat: [3.5, 1.4] };
+  /**
+   * 화음의 임시표를 열에 나눠 담는다(열 0이 음표머리에 가장 가깝다).
+   * 표준 쌓기: 가장 높은 음 → 가장 낮은 음 → 둘째로 높은 음 → 둘째로 낮은 음 … 순서로, 글자 높이가 겹치지 않는 가장 가까운 열에 둔다.
+   */
   function staggerAccidentals(ev) {
     const columns = [];
     const offsets = new Map();
-    for (const n of ev.notes.slice().sort((a, b) => C.absStep(b) - C.absStep(a))) {
-      if (!n.__acc) continue;
-      const as = C.absStep(n);
-      let col = columns.findIndex(list => list.every(p => Math.abs(p - as) >= 6));
+    const items = ev.notes.filter(n => n.__acc).map(n => {
+      const [up, down] = ACC_EXTENT[n.__acc] || ACC_EXTENT.sharp, step = C.absStep(n);
+      return { n, step, top: step + up, bottom: step - down };
+    }).sort((a, b) => b.step - a.step);
+    const order = [];
+    for (let hi = 0, lo = items.length - 1; hi <= lo; hi++, lo--) { order.push(items[hi]); if (lo !== hi) order.push(items[lo]); }
+    for (const it of order) {
+      let col = columns.findIndex(list => list.every(o => o.bottom >= it.top || it.bottom >= o.top));
       if (col < 0) { col = columns.length; columns.push([]); }
-      columns[col].push(as);
-      offsets.set(n, col);
+      columns[col].push(it);
+      offsets.set(it.n, col);
     }
     const data = { offsets, count: columns.length, width: columns.length * 11 };
     accidentalColumns.set(ev, data);
@@ -259,18 +269,23 @@
     }
   }
 
-  function eventWidth(ev, score) {
+  /**
+   * 이벤트 하나가 차지하는 폭.
+   * span = 마디 안에서 다음 시각까지의 거리(길이 값). 다른 단·성부에 짧은 음이 있으면 이 음의 간격도 그만큼만 잡는다.
+   * 점은 길이 값(점음표의 실제 길이)에 이미 반영되어 있으므로 폭을 따로 더하지 않는다(점음표가 더 긴 음표보다 넓어지던 원인).
+   */
+  function eventWidth(ev, score, span = Infinity) {
     const st = score ? styleOf(score) : STYLE;
     const v = C.durValue(ev.dur).value;
-    let w = ev.full ? 58 : Math.max(26, spaceFor(v, st));
+    let w = ev.full && !isFinite(span) ? 58 : Math.max(26, spaceFor(Math.min(v, span), st));
     if (ev.type === "note") {
       w += Math.max(0, st.noteheadScale - 1) * 12;
       if (ev.graceBefore && ev.graceBefore.length) w += ev.graceBefore.length * 14;
       w += accidentalColumns.get(ev)?.width || 0;
       if (hasSecond(ev)) w += 7 * st.noteheadScale;
-      if (ev.dur.dots) w += 7 * ev.dur.dots;
-      if (ev.dur.d === 1) w += ev.dur.n >= 2 ? 14 : 6;
-    } else if (ev.dur.dots) w += 7 * ev.dur.dots;
+      if (ev.dur.d === 1 && v <= span) w += ev.dur.n >= 2 ? 14 : 6; // 온음표 머리가 넓어서 자기 길이만큼 갈 때만 더한다
+    }
+    if (ev.dur.dots > 2) w = Math.max(w, 22 + 6 * (ev.dur.dots - 1)); // 점이 셋 이상이면 점 자리를 따로 보장
     for (const lyric of C.lyricsOf(ev)) w = Math.max(w, Array.from(lyric.text).length * st.lyricFontSize * .8 + 16);
     if (ev.chordSymbol) w = Math.max(w, Array.from(C.displayChordSymbol(ev.chordSymbol)).length * st.chordFontSize * .6 + 14);
     return w;
@@ -288,39 +303,60 @@
     const cancel = m ? cancellationSteps(keyAt(score, m - 1), keyAt(score, m)).length : 0;
     return 14 + 28 + ((k + cancel) ? (k + cancel) * 9.5 + 7 : 0) + (showTime ? Math.max(30, String(ts.num).length * 16 + 8) : 0) + 10;
   }
+  /* 파트 이름 칸: x0(보표 시작)에서 왼쪽으로 잰 거리. 묶음 괄호는 x0−29(조절점 기준)까지 나온다. */
+  const NAME_RIGHT = 12, BRACE_LEFT = 29, BRACE_GAP = 4, NAME_PAD = 4;
+  /** 이름 글자 오른쪽 끝의 x0에서의 거리. 괄호가 있는 파트는 괄호 왼쪽에 여백을 두고 쓴다. */
+  const nameRightOf = hasBrace => hasBrace ? BRACE_LEFT + BRACE_GAP : NAME_RIGHT;
+  /** 13px 글꼴 기준 글자 폭 추정(한글·한자 13, 대문자·숫자 9, 공백·마침표 4, 나머지 7). */
+  function nameTextWidth(label) {
+    return Array.from(String(label)).reduce((w, ch) => w + (ch.codePointAt(0) >= 0x2E80 ? 13 : /[A-Z0-9]/.test(ch) ? 9 : /[\s.]/.test(ch) ? 4 : 7), 0);
+  }
+  /** 이름 칸 폭: 기본(첫 줄 96·이어지는 줄 54) 이상이고, 이름이 길거나 괄호가 있으면 이름과 괄호가 다 들어가게 늘어난다. */
+  function nameColumnWidth(refs, first) {
+    if (refs.length <= 1) return 0;
+    let need = 0;
+    for (const ref of refs) {
+      if (ref.staffIdx !== 0) continue; // 이름은 파트의 첫 보표에만 그린다
+      const hasBrace = refs.filter(other => other.partIdx === ref.partIdx).length >= 2;
+      need = Math.max(need, nameRightOf(hasBrace) + nameTextWidth(first ? ref.name : ref.shortName) + NAME_PAD);
+    }
+    return Math.max(first ? 96 : 54, Math.ceil(need));
+  }
   function measureCount(score, refs) {
     return Math.max(1, ...refs.map(r => r.measures.length));
   }
-  function measureNaturalWidth(refs, mIdx, score, activeVoice) {
-    const seg = new Map();
+  /**
+   * 마디의 모든 보표·성부 이벤트를 시각별로 모아 시각마다의 폭(시각 순서)을 낸다.
+   * 한 시각의 폭 = 그 시각에 시작하는 이벤트들의 폭 중 최댓값이며, 각 이벤트의 길이는 "다음 시각까지의 거리"를 넘겨 쓰지 않는다.
+   * (다른 단에 온음표가 있어도 오른손 4분음표 사이가 넓어지지 않게 한다.) 마지막 시각은 자기 길이 그대로.
+   */
+  function measureSegments(refs, mIdx, score, activeVoice) {
+    const lists = [];
+    const ticks = new Map();
     for (const ref of refs) {
       const mm = ref.measures[mIdx];
       if (!mm) continue;
       const entries = C.measureEntries(mm, { score, activeVoice });
-      if (entries.length === 1 && entries[0].ev.full) {
-        seg.set("0/1", Math.max(seg.get("0/1") || 0, eventWidth(entries[0].ev, score)));
-        continue;
-      }
+      lists.push(entries);
+      for (const { tick } of entries) ticks.set(tick.toString(), tick);
+    }
+    const order = [...ticks.entries()].sort((a, b) => a[1].cmp(b[1]));
+    const spanOf = new Map();
+    order.forEach(([key, tick], i) => spanOf.set(key, i + 1 < order.length ? order[i + 1][1].sub(tick).value : Infinity));
+    const seg = new Map();
+    for (const entries of lists) {
       for (const { ev, tick } of entries) {
         const key = tick.toString();
-        seg.set(key, Math.max(seg.get(key) || 0, eventWidth(ev, score) + (ev.voice > 1 ? 8 : 0)));
+        seg.set(key, Math.max(seg.get(key) || 0, eventWidth(ev, score, spanOf.get(key)) + (ev.voice > 1 ? 8 : 0)));
       }
     }
-    return Math.max(styleOf(score).measureMinWidth, 16 + [...seg.values()].reduce((a, w) => a + w, 0));
+    return order.map(([key]) => ({ key, width: seg.get(key) }));
+  }
+  function measureNaturalWidth(refs, mIdx, score, activeVoice) {
+    return Math.max(styleOf(score).measureMinWidth, 16 + measureSegments(refs, mIdx, score, activeVoice).reduce((a, s) => a + s.width, 0));
   }
   function segmentMapFor(refs, mIdx, scale, score, activeVoice) {
-    const seg = new Map();
-    for (const ref of refs) {
-      const mm = ref.measures[mIdx];
-      if (!mm) continue;
-      for (const { ev, tick } of C.measureEntries(mm, { score, activeVoice })) {
-        const key = tick.toString();
-        seg.set(key, Math.max(seg.get(key) || 0, eventWidth(ev, score) + (ev.voice > 1 ? 8 : 0)));
-      }
-    }
-    return [...seg.entries()]
-      .map(([key, w]) => ({ key, width: w * scale }))
-      .sort((a, b) => Fraction.from(a.key.split("/").map(Number)).cmp(Fraction.from(b.key.split("/").map(Number))));
+    return measureSegments(refs, mIdx, score, activeVoice).map(({ key, width }) => ({ key, width: width * scale }));
   }
 
   function cancellationSteps(before, after) {
@@ -444,7 +480,7 @@
     let i = 0;
     while (i < groups.length) {
       const first = systems.length === 0;
-      const nameW = refs.length > 1 ? (first ? 96 : 54) : 0;
+      const nameW = nameColumnWidth(refs, first);
       const hw = headerWidth(score, first, groups[i].idx);
       const usable = metrics.width - metrics.marginLeft - metrics.marginRight - nameW;
       const perSystem = score.layout?.measuresPerSystem | 0;
@@ -603,6 +639,60 @@
   // 클릭 영역(.note-hit)을 그릴지. render()가 opts.export를 보고 호출마다 정하고 되돌린다 — 내보낸 SVG·PNG·인쇄물에는 넣지 않는다.
   let emitHits = true;
   const renderCache = new WeakMap();
+  // P9-8 증분 조판. 시험 전용 계수기(이름이 __): 시스템을 새로 그린 횟수·이전 조각을 재사용한 횟수.
+  const stats = { systemsBuilt: 0, systemsReused: 0 };
+  const replaceSets = (_key, value) => value instanceof Set ? [...value] : value;
+  /* 시스템 키: 이 줄의 좌표를 정하는 값 전부. 마디 내용 자체는 담지 않는다 — 내용은 dirty 기록(core.dirtySince)이 대신 보증한다.
+   * (마디 x0·x1·scale·prefixW에 음자리표·조·박자 표지 폭과 배율이 이미 녹아 있다)
+   * 마디 목록 항목은 줄 첫 마디 번호(SL.mIdx)와 마디 폭으로도 정해져 일부 겹치지만, 줄 나눔 규칙이 바뀌어도 안전하도록 남긴다
+   * (변이 검사: 지워도 시험 결과가 같다 — 겹침임을 추가 시드 60개로 확인) */
+  function systemKey(S, L) {
+    return JSON.stringify([S.index, S.page, S.x0, S.x1, S.yTop, S.headerW, S.nameW, S.height, S.pageY, S.contentTop, S.lyricOff, S.breakAfter || null,
+      S.first ? 1 : 0, L.hasLyrics ? 1 : 0, L.multiRest ? 1 : 0, L.pageMode,
+      S.staffLayouts.map(SL => [SL.yTop, SL.clef, SL.mIdx, SL.laneY]),
+      S.measures.map(M => [M.idx, M.span, M.collapsed ? 1 : 0, M.x0, M.x1, M.prefixW, M.scale, M.length])]);
+  }
+  /* 그리면서 레이아웃 이벤트에 남기는 값(le.stemDir: 타이·슬러가 반대쪽을 고를 때, le.noteheads: 클릭·커서·고스트·스패너)은
+   * 그림 문자열을 재사용하면 새로 만든 le에는 채워지지 않는다 → 시스템마다 같이 보관했다가 재사용할 때 같은 id의 새 le에 되돌려 넣는다. */
+  function systemEffects(S) {
+    const out = [];
+    for (const M of S.measures) for (const le of M.events) out.push([le.id, le.stemDir, le.noteheads]);
+    return out;
+  }
+  function replayEffects(L, effects) {
+    for (const [id, stemDir, heads] of effects) {
+      const le = L.eventsById.get(id);
+      if (!le) continue;
+      if (stemDir !== undefined) le.stemDir = stemDir;
+      le.noteheads = heads.slice();
+    }
+  }
+  /* 이 시스템 안의 음·쉼표 중 선택된 것만 모은 글자열. 선택이 바뀌어도 이 글자열이 같으면 그 줄은 그대로다. */
+  function selectionKeys(sel, L) {
+    const bySystem = new Map();
+    if (!sel || !sel.size) return bySystem;
+    for (const id of sel) {
+      const le = L.eventsById.get(String(id).split("#")[0]);
+      if (!le) continue;
+      const list = bySystem.get(le.sys.index);
+      if (list) list.push(id); else bySystem.set(le.sys.index, [id]);
+    }
+    for (const [index, list] of bySystem) bySystem.set(index, list.sort().join(","));
+    return bySystem;
+  }
+  /* 시스템이 건드려졌는지: 그 줄의 마디(멀티레스트면 묶인 마디 전체)가 바뀐 마디 집합에 있는지.
+   * 묶음 안쪽까지 보는 것도 겹치는 보험이다 — 묶음 안쪽에 음이 들어가면 묶음(span) 자체가 달라져 좌표 키가 먼저 걸린다. */
+  function systemTouched(S, dirty) {
+    for (const M of S.measures) for (let k = M.idx; k < M.idx + (M.span || 1); k++) if (dirty.has(k)) return true;
+    return false;
+  }
+  /* 바뀐 마디의 앞뒤 한 마디까지 넓힌다: 붙임줄 정리(normalizeTies)가 이웃 마디 끝 음의 tie를 고치고,
+   * 붙임줄로 이어 오는 음은 임시표를 다시 안 붙이므로 이웃 마디의 모양이 달라질 수 있다. */
+  function widenDirty(measures) {
+    const out = new Set();
+    for (const m of measures) { out.add(m - 1); out.add(m); out.add(m + 1); }
+    return out;
+  }
 
   function render(score, opts = {}) {
     const savedLayout = lastLayout, savedFont = fontReady, savedHits = emitHits;
@@ -620,13 +710,37 @@
       return cached.result;
     }
     const L = layout(score, opts);
+    // P9-8: 화면용(cache:true·내보내기 아님) 렌더만 지난번에 그린 시스템 조각을 재사용할 수 있다. 판단의 근거는 세 가지가 모두 맞을 때뿐이다 —
+    //  ① 선택을 뺀 전역 키가 같다 ② core.dirtySince가 "이 마디들만 바뀜"을 보증한다 ③ 그 시스템의 좌표 키·선택 키가 같다.
+    const incremental = opts.cache === true && !opts.export;
+    const { selection: _selection, selectedNoteIdx: _selectedNoteIdx, ...restOpts } = opts;
+    const globalKey = incremental ? JSON.stringify([fontReady, score.meta, score.layout, score.style, score.activeStaff, score.activePartIdx, score.activeStaffIdx, restOpts], replaceSets) : null;
+    const rev = score.__cache?.rev;
+    const prevMemo = incremental && cached?.memo && cached.memo.global === globalKey ? cached.memo : null;
+    let dirty = null;
+    if (prevMemo && Number.isInteger(prevMemo.rev)) {
+      const since = C.dirtySince(score, prevMemo.rev);
+      if (since) dirty = widenDirty(since);
+    }
     let sel = opts.selection || null;
     if (sel && typeof sel === "object" && !(sel instanceof Set) && sel.id) sel = sel.noteIdx == null ? sel.id : `${sel.id}#${sel.noteIdx}`;
     if (sel && !(sel instanceof Set)) sel = new Set([sel]);
     if (sel && Number.isInteger(opts.selectedNoteIdx)) sel = new Set([...sel].map(id => `${id}#${opts.selectedNoteIdx}`));
-    const contents = new Map(L.pages.map(p => [p.index, ""]));
+    const selKeys = incremental ? selectionKeys(sel, L) : null;
+    const memoSys = [];
+    const pageSegments = new Map(L.pages.map(p => [p.index, []]));
 
     for (const S of L.systems) {
+      const geo = incremental ? systemKey(S, L) : null, selKey = incremental ? selKeys.get(S.index) || "" : null;
+      const old = dirty && prevMemo.sys[S.index];
+      if (old && old.geo === geo && old.sel === selKey && !systemTouched(S, dirty)) {
+        stats.systemsReused++;
+        replayEffects(L, old.effects);
+        memoSys[S.index] = old;
+        pageSegments.get(S.page).push({ type: "system", index: S.index, svg: old.svg });
+        continue;
+      }
+      stats.systemsBuilt++;
       let svg = staffLines(S);
       svg += clefAndKey(S, score);
       if (S.first || score.measures[S.measures[0].idx]?.timeSig) svg += timeSig(S, score);
@@ -643,24 +757,36 @@
           svg += renderMeasure(score, SM, SM.staff, beams, sel);
         }
       }
-      contents.set(S.page, contents.get(S.page) + `<g class="system" data-system="${S.index}" data-page="${S.page}">${svg}</g>`);
+      const group = `<g class="system" data-system="${S.index}" data-page="${S.page}">${svg}</g>`;
+      if (incremental) memoSys[S.index] = { geo, sel: selKey, svg: group, effects: systemEffects(S) };
+      pageSegments.get(S.page).push({ type: "system", index: S.index, svg: group });
     }
-    for (const page of L.pages) contents.set(page.index, contents.get(page.index) + renderTies(score, L, page.index) + renderSpanners(score, L, sel, page.index));
+    for (const page of L.pages) pageSegments.get(page.index).push({ type: "tail", page: page.index, svg: renderTies(score, L, page.index) + renderSpanners(score, L, sel, page.index) });
+    const contents = new Map([...pageSegments].map(([index, list]) => [index, list.map(seg => seg.svg).join("")]));
     const pagesMode = L.pageMode === "pages";
-    const build = (page, body) => {
+    const pieces = (page, body) => {
       const index = page?.index ?? 0;
       const height = pagesMode ? page.height : L.height;
       const offset = pagesMode ? page.offsetY : 0;
       const attrs = pagesMode ? `class="page" data-page="${index}" id="score-svg-page-${index}"` : 'id="score-svg"';
       const overlays = opts.export ? "" : ["ghost", "cursor", "speedy"].map(name => `<g ${pagesMode ? `class="overlay-${name}" data-page="${index}"` : `id="overlay-${name}" class="overlay-${name}"`} pointer-events="none"></g>`).join("") +
         `<line ${pagesMode ? 'class="play-cursor"' : 'id="play-cursor" class="play-cursor"'} x1="0" x2="0" y1="0" y2="0" stroke="var(--accent,#e8590c)" stroke-width="2" opacity="0" pointer-events="none"/>`;
-      return `<svg ${attrs} viewBox="0 0 ${L.pageW} ${height}" width="${L.pageW}" height="${height}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${esc(score.meta?.title || "Score")}, ${countMeasures(L)} measures, page ${index + 1}" font-family="Arial,sans-serif" style="color:var(--ink,#161a20);background:var(--paper,#fff)" preserveAspectRatio="xMidYMin meet">` +
-        `<style>${svgStyles(L.style, opts.export)}</style>${renderPageText(score, L, page, opts)}` +
-        `<g ${pagesMode ? 'class="page-content"' : 'id="score-main"'} transform="translate(0,${-offset})">${body}${overlays}</g></svg>`;
+      const rootAttrs = { viewBox: `0 0 ${L.pageW} ${height}`, width: String(L.pageW), height: String(height),
+        "aria-label": `${esc(score.meta?.title || "Score")}, ${countMeasures(L)} measures, page ${index + 1}` };
+      const open = `<svg ${attrs} viewBox="${rootAttrs.viewBox}" width="${rootAttrs.width}" height="${rootAttrs.height}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${rootAttrs["aria-label"]}" font-family="Arial,sans-serif" style="color:var(--ink,#161a20);background:var(--paper,#fff)" preserveAspectRatio="xMidYMin meet">`;
+      const rest = `<style>${svgStyles(L.style, opts.export)}</style>${renderPageText(score, L, page, opts)}` +
+        `<g ${pagesMode ? 'class="page-content"' : 'id="score-main"'} transform="translate(0,${-offset})">`;
+      return { open, rest, body, foot: `${overlays}</g></svg>`, rootAttrs };
     };
+    const build = (page, body) => { const p = pieces(page, body); return p.open + p.rest + p.body + p.foot; };
     const pageSVGs = pagesMode ? L.pages.map(p => build(p, contents.get(p.index))) : [build(null, [...contents.values()].join(""))];
-    const result = { svg: pageSVGs.join(""), pages: pageSVGs, pageSVGs, layout: L };
-    if (opts.cache === true) renderCache.set(score, { key: cacheKey, result });
+    const result = { svg: pageSVGs.join(""), pages: pageSVGs, pageSVGs, layout: L, parts: null };
+    if (!pagesMode) {
+      // 연속 보기: 앱이 바뀐 시스템·꼬리(타이·스패너)만 DOM에서 바꾸도록 조각으로도 돌려준다. open+rest+조각들+foot === svg.
+      const p = pieces(null, "");
+      result.parts = { open: p.open, rest: p.rest, foot: p.foot, rootAttrs: p.rootAttrs, segments: L.pages.flatMap(page => pageSegments.get(page.index)) };
+    }
+    if (opts.cache === true) renderCache.set(score, { key: cacheKey, result, memo: incremental ? { global: globalKey, rev, sys: memoSys } : cached?.memo });
     return result;
     } finally {
       fontReady = savedFont;
@@ -707,7 +833,8 @@
       }
       const label = S.first ? SL.name : SL.shortName;
       if (S.nameW && SL.staffIdx === 0) {
-        s += `<text class="part-name" x="${S.x0 - 12}" y="${SL.middleY + 4}" text-anchor="end">${esc(label)}</text>`;
+        const hasBrace = S.staffLayouts.filter(other => other.partIdx === SL.partIdx).length >= 2;
+        s += `<text class="part-name" x="${S.x0 - nameRightOf(hasBrace)}" y="${SL.middleY + 4}" text-anchor="end">${esc(label)}</text>`;
       }
     }
     for (const partIdx of [...new Set(S.staffLayouts.map(st => st.partIdx))]) {
@@ -1256,6 +1383,19 @@
       }
     }
 
+    // 점의 자리: 가장 오른쪽 머리 열의 오른쪽에 모든 점을 한 줄로 두고, 같은 높이가 겹치면 아래 음의 점을 한 칸 내린다.
+    const dotYs = new Map();
+    const dotOx = Math.max(0, ...offs.values());
+    if (ev.dur.dots) {
+      let lastDotY = -Infinity;
+      for (const n of sorted.slice().reverse()) {          // 높은 음 → 낮은 음(y가 커지는 순서)
+        const y0 = yForStep(S, score, C.absStep(n));
+        let dotY = (C.absStep(n) - bottom) % 2 === 0 ? y0 - SP / 2 : y0; // 줄 위 음표는 점을 위 칸으로
+        if (dotY < lastDotY + SP - 0.01) dotY = lastDotY + SP;
+        dotYs.set(n, dotY); lastDotY = dotY;
+      }
+    }
+
     // 음표머리 + 점
     for (const n of sorted) {
       const y = yForStep(S, score, C.absStep(n));
@@ -1266,10 +1406,9 @@
       const head = noteHeadShape(headX, y, kind, ev.notehead);
       s += `<g class="nh${sel?.has(`${ev.id}#${ni}`) ? " sel-note" : ""}" data-note="${ni}">${scale === 1 ? head : `<g transform="translate(${headX},${y}) scale(${scale}) translate(${-headX},${-y})">${head}</g>`}${noteHit(box)}</g>`;
       if (ev.dur.dots) {
-        const off = C.absStep(n) - bottom;
-        const dotY = off % 2 === 0 ? y - SP / 2 : y; // 줄 위 음표는 점을 위 칸으로
+        const dotY = dotYs.get(n);
         for (let d = 0; d < ev.dur.dots; d++)
-          s += `<circle class="dot" cx="${r2(le.x + 9.5 * headScale + ox + d * 6 + (ev.dur.d === 1 ? 4 : 0))}" cy="${r2(dotY)}" r="2.1" fill="currentColor"/>`;
+          s += `<circle class="dot" cx="${r2(le.x + 9.5 * headScale + dotOx + d * 6 + (ev.dur.d === 1 ? 4 : 0))}" cy="${r2(dotY)}" r="2.1" fill="currentColor"/>`;
       }
     }
 
@@ -1463,6 +1602,16 @@
       if (need < minimum) shift = Math.max(shift, minimum - need);
     });
     y1 += sgn * shift; y2 += sgn * shift;
+
+    // 덧줄 쪽으로 멀리 떨어진 묶음은 낱음표(아래 stem 규칙)처럼 빔이 중앙줄까지 닿게 한다.
+    // 기울기는 그대로 두고 줄 전체를 평행 이동하므로 기둥은 늘기만 한다.
+    if (pitched) {
+      const mid = items[0].staff.middleY;
+      const nearHead = dir === "up" ? Math.min(...headYs) : Math.max(...headYs);
+      const farFromStaff = dir === "up" ? nearHead > mid + 3 * SP : nearHead < mid - 3 * SP;
+      const nearEnd = dir === "up" ? Math.min(y1, y2) : Math.max(y1, y2);
+      if (farFromStaff && (dir === "up" ? nearEnd > mid : nearEnd < mid)) { y1 += mid - nearEnd; y2 += mid - nearEnd; }
+    }
 
     let s = `<g class="beam-group">`;
     // 주 빔(8분)
@@ -1859,5 +2008,6 @@
     drawGhost, drawInputCursor, drawSpeedy, clearOverlays,
     iconNote, iconRest, iconAcc,
     getLayout: () => lastLayout,
+    __stats: stats,
   };
 })(window.SF);

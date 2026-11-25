@@ -49,38 +49,39 @@
     const mm = C.ensureMeasureMeta(score.measures[range?.to ?? found.m] || {});
     const dynOptions = ["", "pp", "p", "mp", "mf", "f", "ff"].map(d => `<option value="${d}" ${ev.dynamic === d ? "selected" : ""}>${d || "없음"}</option>`).join("");
     const stemOptions = ["auto", "up", "down"].map(v => `<option value="${v}" ${(ev.stemDirection || "auto") === v ? "selected" : ""}>${v === "auto" ? "자동" : v === "up" ? "위" : "아래"}</option>`).join("");
-    const headOptions = ["normal", "x", "diamond"].map(v => `<option value="${v}" ${(ev.notehead || "normal") === v ? "selected" : ""}>${v === "normal" ? "일반" : v === "x" ? "X" : "다이아"}</option>`).join("");
+    const headOptions = ["normal", "x", "diamond"].map(v => `<option value="${v}" ${(ev.notehead || "normal") === v ? "selected" : ""}>${v === "normal" ? "일반" : v === "x" ? "X자" : "다이아"}</option>`).join("");
     const breakOptions = ["", "system", "page", "section"].map(v => {
       const label = v === "" ? "없음" : v === "system" ? "시스템" : v === "page" ? "페이지" : "섹션";
       return `<option value="${v}" ${(mm.breakType || "") === v ? "selected" : ""}>${label}</option>`;
     }).join("");
     html += `<section class="prop-sec"><h3>${ids.length > 1 ? `${ids.length}개 선택` : ev.type === "note" ? "음표" : "쉼표"}</h3><div class="prop-grid">
-      <label>위치</label><span>${htmlEsc(found.name)} · V${found.voice || 1} · 마디 ${found.m + 1}</span>
+      <label>위치</label><span>${htmlEsc(found.name)} · 성부 ${found.voice || 1} · 마디 ${found.m + 1}</span>
       <label>보임</label><input type="checkbox" data-prop="visible" ${checked(!ev.hidden)}>
       <label>색상</label><input type="color" data-prop="color" value="${htmlEsc(ev.color || "#14171c")}">
-      <label>X</label><input type="number" data-prop="offsetX" step="1" value="${+ev.offsetX || 0}">
-      <label>Y</label><input type="number" data-prop="offsetY" step="1" value="${+ev.offsetY || 0}">
-      <label>마디 브레이크</label><select data-measure-break>${breakOptions}</select>
+      <label for="prop-offsetX">가로 이동</label><input id="prop-offsetX" type="number" data-prop="offsetX" step="1" value="${+ev.offsetX || 0}">
+      <label for="prop-offsetY">세로 이동</label><input id="prop-offsetY" type="number" data-prop="offsetY" step="1" value="${+ev.offsetY || 0}">
+      <label for="prop-break">마디 브레이크</label><select id="prop-break" data-measure-break>${breakOptions}</select>
     </div><div class="prop-actions">
       <button class="chip" data-prop-action="reset-offset">오프셋 초기화</button>
       <button class="chip" data-prop-action="clear-color">색상 초기화</button>
     </div></section>`;
     if (ev.type === "note") {
       const arts = ["staccato", "tenuto", "accent", "marcato", "fermata"];
-      html += `<section class="prop-sec"><h3>음표 모양</h3><div class="prop-grid">
+      const artLabel = { staccato: "스타카토", tenuto: "테누토", accent: "악센트", marcato: "마르카토", fermata: "페르마타" };
+      html += `<section class="prop-sec" data-prop-section="shape"><h3>음표 모양</h3><div class="prop-grid">
         <label>스템</label><select data-prop="stemDirection">${stemOptions}</select>
         <label>머리</label><select data-prop="notehead">${headOptions}</select>
         <label>작게</label><input type="checkbox" data-prop="small" ${checked(ev.small)}>
-        <label>Velocity</label><input type="number" data-prop="velocityOffset" min="-64" max="64" step="1" value="${+ev.velocityOffset || 0}">
+        <label>세기</label><input type="number" data-prop="velocityOffset" min="-64" max="64" step="1" value="${+ev.velocityOffset || 0}">
       </div><div class="prop-actions">` +
-        arts.map(a => `<button class="chip" data-artic-prop="${a}">${a}</button>`).join("") +
+        arts.map(a => `<button class="chip" data-artic-prop="${a}">${artLabel[a]}</button>`).join("") +
         `</div></section>`;
     }
     html += `<section class="prop-sec"><h3>기호/텍스트</h3><div class="prop-grid">
       <label>셈여림</label><select data-prop="dynamic">${dynOptions}</select>
       <label>템포</label><input type="number" data-prop="tempo" min="30" max="280" value="${SF.html.num(ev.tempo, { min: 30, max: 280 })}" placeholder="없음">
-      <label>리허설</label><input type="text" data-prop="rehearsal" value="${htmlEsc(ev.rehearsal || "")}" maxlength="12">
-      <label>스태프 텍스트</label><input type="text" data-prop="staffText" value="${htmlEsc(ev.staffText || "")}" maxlength="48">
+      <label for="prop-rehearsal">리허설</label><input id="prop-rehearsal" type="text" data-prop="rehearsal" value="${htmlEsc(ev.rehearsal || "")}" maxlength="12">
+      <label for="prop-staffText">스태프 텍스트</label><input id="prop-staffText" type="text" data-prop="staffText" value="${htmlEsc(ev.staffText || "")}" maxlength="48">
       <label>코드</label><input type="text" data-prop="chordSymbol" value="${htmlEsc(ev.chordSymbol ? (ev.chordSymbol.normalized || ev.chordSymbol.raw || "") : "")}" maxlength="24">
     </div></section>`;
     host.innerHTML = html;
@@ -146,16 +147,16 @@
   }
   async function applyMeasureBreak(type, fromPanel) {
     const range = selectedMeasureRange();
-    if (!range) { flashHint("브레이크를 붙일 마디를 먼저 선택하세요"); return; }
+    if (!range) { flashHint(SF.t("hint.selectBreak")); return; }
     let sectionName = "";
     if (type === "section") {
-      sectionName = await SF.ui.promptDialog({ title: "섹션 이름", value: C.ensureMeasureMeta(C.state.score.measures[range.to] || {}).sectionName || "Section", maxLength: 48 });
+      sectionName = await SF.ui.promptDialog({ title: SF.t("dialog.sectionName"), value: C.ensureMeasureMeta(C.state.score.measures[range.to] || {}).sectionName || "Section", maxLength: 48 });
       if (sectionName === null) return;
       if (!sectionName.trim()) type = null;
     }
     C.mutate("마디 브레이크", (score) => C.setMeasureBreak(score, range.to, type || null, sectionName));
     update();
-    if (!fromPanel) toast(type ? "브레이크를 표시했어요" : "브레이크를 지웠어요");
+    if (!fromPanel) toast(type ? SF.t("toast.breakAdded") : SF.t("toast.breakRemoved"));
   }
   function bindProperties() {
     $("#btn-props").addEventListener("click", () => {
@@ -278,7 +279,7 @@
     if (!dlg.open) dlg.showModal();
   }
   async function gotoQuery() {
-    const raw = await SF.ui.promptDialog({ title: "마디·리허설 이동", label: "마디 번호 또는 r:A", value: "", validate: v => /^(?:[1-9]\d*|r\s*:.+)$/i.test(v.trim()) ? "" : "마디 번호 또는 r:A 형식으로 입력하세요." });
+    const raw = await SF.ui.promptDialog({ title: SF.t("keymap.goTo"), label: SF.t("validation.goToLabel"), value: "", validate: v => /^(?:[1-9]\d*|r\s*:.+)$/i.test(v.trim()) ? "" : SF.t("validation.goTo") });
     if (raw === null) return;
     const q = raw.trim();
     if (!q) return;
@@ -300,7 +301,7 @@
       if (!isNaN(n)) mIdx = n - 1;
     }
     if (mIdx === null || mIdx < 0 || mIdx >= C.state.score.measures.length) {
-      flashHint("이동할 위치를 찾지 못했어요");
+      flashHint(SF.t("hint.notFound"));
       return;
     }
     scrollToMeasure(mIdx);
@@ -339,8 +340,8 @@
         <b>${htmlEsc(part.name || "파트 " + (idx + 1))}</b>
         <label><input type="checkbox" data-mix="mute" ${mx.mute ? "checked" : ""}> M</label>
         <label><input type="checkbox" data-mix="solo" ${mx.solo ? "checked" : ""}> S</label>
-        <label>Vol <input type="range" min="0" max="150" value="${Math.round(mx.volume * 100)}" data-mix="volume"></label>
-        <label>Pan <input type="range" min="-100" max="100" value="${Math.round(mx.pan * 100)}" data-mix="pan"></label>
+        <label>음량 <input type="range" min="0" max="150" value="${Math.round(mx.volume * 100)}" data-mix="volume"></label>
+        <label>좌우 <input type="range" min="-100" max="100" value="${Math.round(mx.pan * 100)}" data-mix="pan"></label>
       </div>`;
     }).join("");
   }
@@ -388,6 +389,7 @@
     $("#set-time").value = score.timeSig.num + "/" + score.timeSig.den;
     $("#set-tempo").value = score.tempo;
     $("#set-piano-quality").value = P.getPianoQuality();
+    $("#set-sample-preload").value = P.getPreloadSetting();
     const layout = C.ensureLayout(score);
     $("#set-measures-system").value = layout.measuresPerSystem || "";
     $("#set-page-size").value = layout.pageSize || "A4";
@@ -408,7 +410,7 @@
       e.preventDefault();
       const score = C.state.score;
       const [num, den] = $("#set-time").value.split("/").map(Number);
-      if (!Number.isInteger(num) || num < 1 || num > 32 || ![1,2,4,8,16,32,64].includes(den)) { toast("박자는 1~32 / 1·2·4·8·16·32·64 형식으로 입력하세요."); return; }
+      if (!Number.isInteger(num) || num < 1 || num > 32 || ![1,2,4,8,16,32,64].includes(den)) { toast(SF.t("validation.time")); return; }
       const newKey = +$("#set-key").value;
       const newClef = $("#set-clef").value;
       const newEnsemble = $("#set-ensemble").value;
@@ -451,14 +453,19 @@
     $("#set-piano-quality").addEventListener("change", () => {
       stopPlayback();
       const quality = P.setPianoQuality($("#set-piano-quality").value);
-      toast(quality === "hq" ? "고음질 피아노(약 19MB)를 쓰도록 바꿨어요. 다음 재생부터 적용돼요" : "기본 피아노로 바꿨어요. 다음 재생부터 적용돼요");
+      toast(quality === "hq" ? SF.t("toast.pianoHigh") : SF.t("toast.pianoBasic"));
+    });
+    // 이 기기의 설정이라 '적용'을 기다리지 않고 바로 저장한다. 끄면 예약·진행 중인 미리 받기의 남은 악기를 그만둔다.
+    $("#set-sample-preload").addEventListener("change", () => {
+      const setting = P.setPreloadSetting($("#set-sample-preload").value);
+      toast(setting === "off" ? SF.t("toast.preloadOff") : SF.t("toast.preloadOn"));
     });
     $("#set-add-measures").addEventListener("click", (e) => {
       e.preventDefault();
       C.mutate("마디 추가", (s2) => {
         C.insertMeasures(s2, s2.measures.length, 4);
       });
-      update(); toast("마디 4개를 추가했어요");
+      update(); toast(SF.t("toast.addMeasures"));
     });
     $("#set-del-measure").addEventListener("click", (e) => {
       e.preventDefault();
@@ -466,7 +473,7 @@
         if (s2.measures.length > 1) C.deleteMeasures(s2, s2.measures.length - 1);
       });
       ui.selection = null; ui.cursorId = null;
-      update(); toast("마지막 마디를 삭제했어요");
+      update(); toast(SF.t("toast.deleteMeasure"));
     });
     $$("#dlg-settings [data-transpose]").forEach(btn => {
       btn.addEventListener("click", (e) => {
@@ -476,8 +483,8 @@
         const result = C.mutate("조옮김", (s2) => C.transposeScore(s2, semis, { chords }));
         update();
         const handmade = result?.manualFretboards || 0;                  // 직접 만든 코드 다이어그램은 그대로 둔다 — 알려 준다
-        if (handmade) toast(`직접 만든 코드 다이어그램 ${handmade}개는 그대로 두었어요`, { duration: 4200 });
-        else toast(semis > 0 ? `${semis}반음 올렸어요` : `${-semis}반음 내렸어요`);
+        if (handmade) toast(SF.t("toast.transposeKeptDiagrams", { count: handmade }), { duration: 4200 });
+        else toast(semis > 0 ? SF.t("toast.transposeUp", { count: semis }) : SF.t("toast.transposeDown", { count: -semis }));
         $("#set-key").value = String(C.state.score.keySig);
       });
     });

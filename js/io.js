@@ -115,7 +115,7 @@
   const TYPE_NAMES = { 1: "whole", 2: "half", 4: "quarter", 8: "eighth", 16: "16th", 32: "32nd", 64: "64th", 128: "128th", 256: "256th" };
   const typeName = dur => dur.n === 2 && dur.d === 1 ? "breve" : TYPE_NAMES[dur.d] || "quarter";
   const F = (n, d = 1) => new Fraction(n, d);
-  const timeAt = (score, m) => C.timeSigAt ? C.timeSigAt(score, m) : score.measures.slice(0, m + 1).reduce((ts, mm) => mm.timeSig || ts, score.timeSig);
+  const timeAt = (score, m) => C.timeSigAt(score, m);
   const keyAt = (score, m) => C.keySigAt ? C.keySigAt(score, m) : score.measures.slice(0, m + 1).reduce((key, mm) => mm.keySig ?? key, score.keySig);
   const lenAt = (score, m) => C.measureLenAt ? C.measureLenAt(score, m) : F(timeAt(score, m).num, timeAt(score, m).den);
   const textOf = (el, selector) => (selector ? el?.querySelector(selector) : el)?.textContent.trim() || "";
@@ -133,8 +133,23 @@
     const line = sign === "F" || clef === "tenor" ? 4 : clef === "alto" ? 3 : 2;
     return `<clef number="${number}"><sign>${sign}</sign>${["TAB", "percussion"].includes(sign) ? "" : `<line>${line}</line>`}${/8vb/.test(clef) ? "<clef-octave-change>-1</clef-octave-change>" : ""}</clef>`;
   }
+  /** 글을 XML에 안전하게 넣는다. XML 1.0이 허용하지 않는 문자(탭·줄바꿈을 뺀 제어 문자·U+FFFE·U+FFFF)는 빼고 & < > "를 바꾼다 —
+   *  하나라도 남으면 파일 전체가 올바른 XML이 아니라서 다른 프로그램이 통째로 열지 못한다. */
   function xmlEsc(s) {
-    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    return String(s).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g, "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  /** MusicXML 머리말에 더 쓰는 곡 정보(작사가·저작권·부제). 값이 없거나 공백뿐이면 아무것도 쓰지 않아 출력이 이전과 같다.
+   *  작사가·저작권은 identification(creator lyricist·rights — MuseScore 등이 곡 정보로 읽는다), 부제는 credit-type subtitle(MusicXML의 표준 표현)로 쓴다.
+   *  부제는 movement-title에 넣지 않는다 — 그러면 진짜 제목이 가려진다. 부제가 있을 때는 머리말을 credit만으로 만드는 프로그램에서 제목·작곡가·작사가가 빠지지 않도록 같은 묶음에 함께 쓴다. */
+  function headerMeta(meta) {
+    const text = value => (typeof value === "string" ? value.trim() : "");
+    const lyricist = text(meta.lyricist), copyright = text(meta.copyright), subtitle = text(meta.subtitle);
+    const credit = (type, words) => ` <credit page="1"><credit-type>${type}</credit-type><credit-words>${xmlEsc(words)}</credit-words></credit>\n`;
+    return {
+      creators: (lyricist ? `  <creator type="lyricist">${xmlEsc(lyricist)}</creator>\n` : "") + (copyright ? `  <rights>${xmlEsc(copyright)}</rights>\n` : ""),
+      credits: subtitle ? [["title", text(meta.title)], ["subtitle", subtitle], ["composer", text(meta.composer)], ["lyricist", lyricist]].filter(([, words]) => words).map(([type, words]) => credit(type, words)).join("") : "",
+    };
   }
 
   const DYN_SOUND = { pp: 40, p: 54, mp: 66, mf: 78, f: 91, ff: 105 };
@@ -220,15 +235,16 @@
       }
     });
 
+    const head = headerMeta(score.meta);
     let xml = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
 <score-partwise version="4.0">
  <work><work-title>${xmlEsc(score.meta.title || "")}</work-title></work>
  <identification>
   <creator type="composer">${xmlEsc(score.meta.composer || "")}</creator>
-  <encoding><software>ScoreForge</software></encoding>
+${head.creators}  <encoding><software>ScoreForge</software></encoding>
  </identification>
- <part-list>\n`;
+${head.credits} <part-list>\n`;
     score.parts.forEach((part, pIdx) => {
       const gm = part.midiProgram ?? (SF.playback.INSTRUMENTS[part.instrument] || SF.playback.INSTRUMENTS.piano).gm;
       const channel = part.instrument === "drums" ? 10 : (pIdx % 15 >= 9 ? pIdx % 15 + 2 : pIdx % 15 + 1);
@@ -592,6 +608,23 @@
     if (el.querySelector('type[size="cue"]') || el.querySelector("cue")) ev.small = true;
   }
 
+  /** 곡 정보 중 부제·작사가·저작권을 읽는다(제목·작곡가는 아래 createScore 호출이 읽는다). 없는 값은 키를 만들지 않는다.
+   *  부제는 credit-type subtitle인 credit의 글(credit-words가 여럿이면 공백으로 이음), 작사가는 creator lyricist(없으면 poet), 저작권은 rights(여럿이면 " / "로 이음).
+   *  글자 수는 schema.js의 곡 정보 한도(코드 포인트)로 자른다 — MusicXML 가져오기는 schema 검사를 거치지 않기 때문이다(schema.js가 없으면 자르지 않는다). */
+  function metaFromXML(root) {
+    const max = SF.schema?.LIMITS?.title;   // schema.js 없이 로드되는 시험이 있어(다른 모듈과 같은 약속) 없으면 자르지 않는다
+    const clip = value => { if (!Number.isFinite(max)) return value; const chars = Array.from(value); return chars.length <= max ? value : chars.slice(0, max).join(""); };
+    const creators = type => [...root.querySelectorAll("identification creator")].filter(el => (el.getAttribute("type") || "").trim().toLowerCase() === type).map(el => textOf(el)).filter(Boolean);
+    const subtitles = [...root.querySelectorAll("credit")].filter(el => children(el, "credit-type").some(kind => textOf(kind).toLowerCase() === "subtitle"))
+      .map(el => children(el, "credit-words").map(words => textOf(words)).filter(Boolean).join(" ")).filter(Boolean);
+    const found = {
+      subtitle: subtitles[0],
+      lyricist: creators("lyricist")[0] || creators("poet")[0],
+      copyright: [...root.querySelectorAll("identification rights")].map(el => textOf(el)).filter(Boolean).join(" / "),
+    };
+    return Object.fromEntries(Object.entries(found).filter(([, value]) => value).map(([key, value]) => [key, clip(value)]));
+  }
+
   function parseMusicXML(text) {
     const doc = new DOMParser().parseFromString(text, "application/xml");
     if (doc.querySelector("parsererror")) throw new Error("XML을 읽을 수 없어요 (파싱 오류)");
@@ -812,6 +845,7 @@
       }
     }
     const score = C.createScore({ title: textOf(root, "work > work-title") || textOf(root, "movement-title") || "가져온 악보", composer: textOf(root, 'identification creator[type="composer"]'), keySig: firstKey ?? 0, timeSig: firstTime || { num: 4, den: 4 }, tempo: firstTempo || 100, measureCount: maxMeasures });
+    Object.assign(score.meta, metaFromXML(root));
     score.parts = parts; score.measures = parts[0].staves[0].measures; score.spanners = spans;
     for (const part of parts) for (const staff of part.staves) for (let m = 0; m < maxMeasures; m++) {
       const mm = staff.measures[m] || (staff.measures[m] = { voices: [[], [], [], []] }); Object.assign(mm, globalMeta[m]);

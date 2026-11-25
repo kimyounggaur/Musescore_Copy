@@ -158,30 +158,30 @@
     dialog.close();                                  // 토스트·저장 확인 창이 가려지지 않게 먼저 닫는다
     const outcome = await SF.session.openDoc(id, { reason: "최근 작업 열기" });
     if (outcome === "opened") return;
-    if (outcome === "missing") toast("이 기록을 찾지 못했어요 — 이미 지워졌을 수 있어요");
-    else if (outcome === "unreadable") toast("이 기록을 열 수 없어요 — 파일로 내려받아 확인해 보세요");
+    if (outcome === "missing") toast(SF.t("recent.missing"));
+    else if (outcome === "unreadable") toast(SF.t("recent.unreadable"));
     open();                                          // 취소·실패면 목록으로 돌아간다
   }
 
   async function download(doc) {
     // 지금 열려 있는 악보는 화면의 내용 그대로(= 일반 저장), 나머지는 보관된 기록을 그대로 내려받는다. 어느 쪽도 현재 악보를 바꾸지 않는다.
-    if (doc.id === (SF.session?.activeId?.() || "")) { SF.io.saveJSON(SF.core.state.score); toast("악보 파일을 내려받았어요"); return; }
+    if (doc.id === (SF.session?.activeId?.() || "")) { SF.io.saveJSON(SF.core.state.score); toast(SF.t("toast.saved")); return; }
     let record = null;
     try { record = await SF.store.loadDoc(doc.id); } catch { /* 아래에서 처리 */ }
-    if (!record?.data) { toast("이 기록을 찾지 못했어요 — 이미 지워졌을 수 있어요"); render(); return; }
+    if (!record?.data) { toast(SF.t("recent.missing")); render(); return; }
     SF.io.download(`${SF.io.safeName(record.title)}.scoreforge.json`, SF.io.jsonFileText(record.data), "application/json");
-    toast("악보 파일을 내려받았어요");
+    toast(SF.t("toast.saved"));
   }
 
   async function remove(doc) {
     const sure = await SF.ui.confirmDialog({
-      title: "이 악보 기록을 지울까요?",
-      message: `‘${doc.title || tr("제목 없음")}’ 기록을 이 브라우저에서 지워요. 파일로 저장해 둔 적이 없다면 되돌릴 수 없어요.`,
-      confirmText: "삭제", danger: true,
+      title: SF.t("recent.confirmTitle"),
+      message: SF.t("recent.confirmMessage", { title: doc.title || SF.t("recent.untitled") }),
+      confirmText: SF.t("common.delete"), danger: true,
     });
     if (!sure) return;
     if (doc.id === (SF.session?.activeId?.() || "")) return;    // 묻는 사이 이 악보로 바뀌었다면 지우지 않는다
-    try { await SF.store.deleteDoc(doc.id); SF.lock?.notify?.("docs-changed", { docId: doc.id }); } catch { toast("기록을 지우지 못했어요"); }
+    try { await SF.store.deleteDoc(doc.id); SF.lock?.notify?.("docs-changed", { docId: doc.id }); } catch { toast(SF.t("recent.deleteFailed")); }
     await render();
     ($("#rc-list button:not([disabled])") || $("#dlg-recent .dlg-close"))?.focus();
   }

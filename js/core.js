@@ -48,26 +48,62 @@ window.SF = window.SF || {};
   // 테스트 전용 계수기(이름이 __). 복잡도를 시간 대신 횟수로 단언한다 — 모두 "악보 전체를 한 번 훑는" 일의 횟수라서, 음마다 일어나면 가져오기가 O(N²)이 된다.
   //  indexBuilds: eventIndex가 악보 전체 색인을 새로 만든 횟수 · tieSweeps: normalizeTies가 악보 전체 타이를 훑은 횟수 · timingBuilds: timingOf가 마디 길이·조표 표를 새로 계산한 횟수
   const stats = { indexBuilds: 0, tieSweeps: 0, timingBuilds: 0 };
+  /* P9-8 증분 조판용 "바뀐 마디" 이력. 악보마다 최근 64번의 캐시 교체(rev)를 한 줄씩 적는다.
+   *  measures === null  → 어디가 바뀌었는지 모른다(= 전부 바뀐 것으로 본다). 기본값이다.
+   *  measures === Set   → 호출한 쪽이 "이 마디들만 바뀌었다"고 약속한 것(replaceRange, mutate의 장부용 갱신).
+   * 조판기는 자기가 마지막으로 그린 rev 뒤의 기록만 읽는다(읽어도 지우지 않는다 — 그리는 쪽이 여럿이어도 서로 간섭하지 않는다). */
+  const dirtyLogs = new WeakMap();
+  const DIRTY_LOG_MAX = 64;
+  function logDirty(score, rev, measures) {
+    let log = dirtyLogs.get(score);
+    if (!log) dirtyLogs.set(score, log = []);
+    log.push({ rev, measures });
+    if (log.length > DIRTY_LOG_MAX) log.splice(0, log.length - DIRTY_LOG_MAX);
+  }
+  /** rev 뒤에 바뀐 마디 번호의 Set. 모르면(이력이 밀려났거나 rev가 이 악보의 것이 아니거나 전부 바뀜) null. 바뀐 게 없으면 빈 Set. */
+  function dirtySince(score, rev) {
+    const now = score?.__cache?.rev;
+    if (!Number.isInteger(rev) || !Number.isInteger(now)) return null;
+    if (rev === now) return new Set();
+    const log = dirtyLogs.get(score);
+    const at = log ? log.findIndex(entry => entry.rev === rev) : -1;
+    if (at < 0 || log[log.length - 1].rev !== now) return null;
+    const out = new Set();
+    for (let i = at + 1; i < log.length; i++) {
+      if (log[i].measures === null) return null;
+      for (const m of log[i].measures) out.add(m);
+    }
+    return out;
+  }
   function cacheOf(score) {
-    if (!score.__cache) Object.defineProperty(score, "__cache", {
-      configurable: true, writable: true, enumerable: false,
-      value: { rev: ++cacheRevision, normalized: false },
-    });
+    if (!score.__cache) {
+      const rev = ++cacheRevision;
+      Object.defineProperty(score, "__cache", {
+        configurable: true, writable: true, enumerable: false,
+        value: { rev, normalized: false, dirtyMeasures: null },
+      });
+      logDirty(score, rev, null);
+    }
     return score.__cache;
   }
+  /* opt.dirty: 바뀐 마디 번호 배열(replaceRange) · opt.clean: 바뀐 곳 없음(mutate가 local일 때의 장부용 갱신).
+   * 둘 다 없으면 "모름"이다 — 구조 편집·가져오기·직접 수정은 기본값 그대로 전부 다시 그리게 된다. */
   function invalidate(score, opt = {}) {
     const normalized = !!(opt.keepNormalized && score.__cache?.normalized);
+    const rev = ++cacheRevision;
+    const dirtyMeasures = opt.clean ? new Set() : Array.isArray(opt.dirty) ? new Set(opt.dirty) : null;
     Object.defineProperty(score, "__cache", {
       configurable: true, writable: true, enumerable: false,
-      value: { rev: ++cacheRevision, normalized },
+      value: { rev, normalized, dirtyMeasures },
     });
+    logDirty(score, rev, dirtyMeasures);
   }
-  function edited(score) { invalidate(score, { keepNormalized: true }); }
+  function edited(score, dirty) { invalidate(score, { keepNormalized: true, dirty }); }
   /* 일괄 입력(ctx.batch) 전용: 이벤트 내용만 바뀌는 편집이라 마디 길이·조표(timing)는 그대로이니 그 캐시는 살린다.
    * 일반 편집으로 넓히지 않는다 — 박자·조표·마디 길이를 바꾸는 함수가 모두 스스로 캐시를 버리는지 확인되기 전에는 묵은 timing이 남을 수 있다. */
-  function editedContent(score) {
+  function editedContent(score, dirty) {
     const timing = score.__cache?.timing;
-    invalidate(score, { keepNormalized: true });
+    invalidate(score, { keepNormalized: true, dirty });
     if (timing) score.__cache.timing = timing;
   }
 
@@ -1226,7 +1262,8 @@ window.SF = window.SF || {};
     if (!inserted) out.push(...replacement); // 빈 마디 안전망
     measure.voices[voice - 1] = out;
     syncMeasureEvents(measure);
-    if (ctx?.batch) editedContent(score); else edited(score);
+    // P9-8: 어느 마디를 고쳤는지 알리고 있는 곳은 여기뿐이다 — 조판기가 나머지 줄을 다시 그리지 않아도 되는 근거
+    if (ctx?.batch) editedContent(score, [mIdx]); else edited(score, [mIdx]);
   }
 
   /* 음표/쉼표 입력. 마디를 넘으면 다음 마디로 타이 분할. 입력된 첫 이벤트의 { id, ev }를 돌려준다(ev는 악보 안의 그 객체).
@@ -1996,11 +2033,14 @@ window.SF = window.SF || {};
     const at = Date.now(), last = history.undo[history.undo.length - 1];
     const coalesced = opt.coalesce && last?.coalesce === opt.coalesce && !history.redo.length && at - last.at <= 1000;
     let result;
-    invalidate(state.score);
+    // opt.local: 콜백이 악보를 replaceRange 계열(입력·삭제)로만 고친다는 호출한 쪽의 약속. 앞뒤 장부용 갱신을 "바뀐 곳 없음"으로 적어서,
+    // 안에서 replaceRange가 적은 마디만 남게 한다. 약속하지 않은 호출은 지금처럼 "모름(전부)"이고 조판기는 전체를 다시 그린다.
+    const bookkeeping = opt.local === true ? { clean: true } : undefined;
+    invalidate(state.score, bookkeeping);
     mutationDepth++;
     try {
       result = fn(state.score);
-      invalidate(state.score);
+      invalidate(state.score, bookkeeping);
       ensureParts(state.score);
       normalizeSpanners(state.score);
     } catch (error) {
@@ -2075,7 +2115,7 @@ window.SF = window.SF || {};
     replaceRange, inputAt, inputAtEvent, addDrumNote, deleteEvent, makeTupletAt, consolidateRests, normalizeTies, isTiedFrom,
     removeNoteFromChord, transposeNote, setNoteAccidental, toggleNoteTie,
     addGraceBefore, findGrace, cloneGraceList,
-    invalidate, eventIndex, eventOrderMap, normalizeSpanners, slurCoverMap, addOttava, ottavaShiftAt,
+    invalidate, dirtySince, eventIndex, eventOrderMap, normalizeSpanners, slurCoverMap, addOttava, ottavaShiftAt,
     rebar, transposeScore, transposeChordSymbol, toJSON, fromJSON,
     state, mutate, undo, redo, canUndo, canRedo, undoLabel, redoLabel, resetHistory, setScore, onChange,
     markSaved, markAutosaved, isAutosaved,

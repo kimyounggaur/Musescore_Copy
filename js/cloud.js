@@ -140,7 +140,7 @@
       : `클라우드 저장 대기 · ${err.message || "연결을 확인해 주세요."}`);
     if (!quiet) {
       if (code === "AUTH_REQUIRED" || code === "SESSION_CHANGED" || code === "session_not_found" || /session missing/i.test(err.message || "")) SF.auth.openDialog("member");
-      else toast(err.message || "클라우드 작업을 마치지 못했어요.");
+      else toast(err.message || SF.t("cloud.failed"));
     }
   }
   function uiMethod(name) {
@@ -188,14 +188,14 @@
     return row;
   }
   async function resolveConflict(job, actor) {
-    const overwrite = await confirm("다른 기기에서 수정되었거나 삭제된 악보예요. 현재 내용으로 덮어쓸까요? 취소하면 다른 이름으로 저장할 수 있어요.",
-      { title: "클라우드 저장 충돌", confirmLabel: "덮어쓰기", cancelLabel: "다른 이름으로 저장" });
+    const overwrite = await confirm(SF.t("cloud.conflictMessage"),
+      { title: SF.t("cloud.conflictTitle"), confirmLabel: SF.t("cloud.overwrite"), cancelLabel: SF.t("cloud.saveAs") });
     assertActor(actor);
     if (active && active.key === job.key) {
       job.data = snapshot(C.state.score); job.revision = active.revision;
     }
     if (overwrite && job.id) return send(job, await requireUser(job.owner, job.project), true);
-    const name = await prompt("사본 이름을 입력해 주세요. 취소하면 현재 악보를 그대로 유지해요.", `${titleOf(job.data.meta.title)} 사본`);
+    const name = await prompt(SF.t("cloud.copyName"), `${titleOf(job.data.meta.title)} 사본`);
     assertActor(actor);
     if (name === null || name === undefined) throw error("CANCELLED", "저장을 취소했어요. 현재 악보는 그대로 있어요.");
     if (active && active.key === job.key) {
@@ -366,7 +366,7 @@
     if (!await installScore(score, false, { reason: "로컬 사본 만들기", origin: "copy", confirmed: true })) return null;
     clearShareURL();
     if (SF.io && SF.io.autosave) SF.io.autosave(C.state.score);
-    toast("로컬 사본을 만들었어요. 이제 편집할 수 있어요.");
+    toast(SF.t("cloud.copyDone"));
     return score;
   }
   function versionFor(id, supplied) {
@@ -484,8 +484,8 @@
       shareInput = element("input"); shareInput.type = "url"; shareInput.readOnly = true;
       shareInput.setAttribute("aria-label", "공유 링크"); shareInput.style.width = "100%";
       shareDialog.append(shareInput, button("링크 복사", async () => {
-        try { await window.navigator.clipboard.writeText(shareInput.value); toast("공유 링크를 복사했어요."); }
-        catch { shareInput.focus(); shareInput.select(); toast("링크를 선택했어요. 복사해 주세요."); }
+        try { await window.navigator.clipboard.writeText(shareInput.value); toast(SF.t("cloud.linkCopied")); }
+        catch { shareInput.focus(); shareInput.select(); toast(SF.t("cloud.manualCopy")); }
       }));
     }
     shareInput.value = url;
@@ -494,8 +494,8 @@
   }
   async function shareCurrent() {
     const row = await saveCurrent();
-    if (!row || row.queued) { toast("온라인에서 저장을 마친 뒤 공유할 수 있어요."); return; }
-    if (!await confirm("링크를 가진 누구나 이 악보를 볼 수 있도록 공유할까요?", { title: "공유 링크 만들기", confirmLabel: "공유" })) return;
+    if (!row || row.queued) { toast(SF.t("cloud.saveBeforeShare")); return; }
+    if (!await confirm(SF.t("cloud.shareConfirm"), { title: SF.t("menu.file.share"), confirmLabel: SF.t("cloud.share") })) return;
     showLink(await setPublic(row.id, true, row.updated_at));
   }
   async function refreshList() {
@@ -514,12 +514,12 @@
         item.append(element("strong", row.title), element("p", `${row.measures}마디 · ${new Date(row.updated_at).toLocaleString(locale())} · ${row.is_public ? "공유 중" : "비공개"}`));
         const controls = element("div"); controls.style.display = "flex"; controls.style.flexWrap = "wrap"; controls.style.gap = "8px";
         controls.append(button("열기", async () => { if (await openScore(row.id)) listDialog.close(); }),
-          button("이름 바꾸기", async () => { const name = await prompt("악보 이름을 입력해 주세요.", row.title); if (name == null) return; await rename(row.id, name, row.updated_at); await refreshList(); }),
+          button("이름 바꾸기", async () => { const name = await prompt(SF.t("cloud.namePrompt"), row.title); if (name == null) return; await rename(row.id, name, row.updated_at); await refreshList(); }),
           button(row.is_public ? "공유 끄기" : "공유 켜기", async () => {
-            if (!await confirm(row.is_public ? "기존 공유 링크를 중지할까요?" : "링크를 가진 누구나 악보를 볼 수 있도록 공유할까요?", { title: "악보 공유" })) return;
+            if (!await confirm(row.is_public ? SF.t("cloud.stopSharing") : SF.t("cloud.shareConfirmGeneric"), { title: SF.t("cloud.shareTitle") })) return;
             const url = await setPublic(row.id, !row.is_public, row.updated_at); await refreshList(); if (url) showLink(url);
           }), button("삭제", async () => {
-            if (!await confirm(`“${row.title}” 악보를 클라우드에서 삭제할까요?`, { title: "악보 삭제", confirmLabel: "삭제" })) return;
+            if (!await confirm(SF.t("cloud.deleteConfirm", { title: row.title }), { title: SF.t("cloud.deleteTitle"), confirmLabel: SF.t("common.delete") })) return;
             await remove(row.id, row.updated_at); await refreshList();
           }));
         if (row.is_public && SLUG.test(row.share_slug)) controls.append(button("공유 링크", () => showLink(shareURL(row.share_slug))));

@@ -25,6 +25,9 @@
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
+/* 기본 보기(P9-1): js/view-level.js의 분류표가 data-tier를 붙인 고급·드묾 요소를 뺀다. display:none이라 탭 순서·스크린리더에서도 빠진다.
+   고급 보기(기본값)에서는 이 규칙이 아무것도 건드리지 않는다. 아이디 선택자의 display 규칙에 지지 않도록 !important를 쓴다. */
+html[data-view="basic"] [data-tier="advanced"], html[data-view="basic"] [data-tier="rare"] { display: none !important; }
 html, body { height: 100%; }
 body {
   margin: 0;
@@ -515,6 +518,23 @@ select.tsel {
   background: transparent; border: 1px solid currentColor; border-radius: 999px; padding: 3px 12px;
 }
 #toast .toast-action:hover, #toast .toast-action:focus-visible { background: rgba(128, 128, 128, .3); }
+
+/* ---------------- 음원 준비 중 선택 안내(P9-4) ----------------
+ * 재생을 눌렀는데 음원이 아직 준비 중일 때만 뜬다. 배경·글자색은 테마 변수를 써서 어느 테마에서도 대비가 맞는다.
+ * 숨김(hidden)은 파일 맨 위의 전역 [hidden] 규칙이 맡으므로 여기서 따로 정하지 않는다. */
+.sample-wait {
+  position: fixed; left: 50%; bottom: 196px; transform: translateX(-50%); z-index: 99;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 10px;
+  width: max-content; max-width: min(94vw, 560px); box-sizing: border-box;
+  padding: 10px 14px; border: 1px solid var(--line); border-radius: 14px;
+  background: var(--panel); color: var(--text); box-shadow: var(--shadow); font-size: 13.5px;
+}
+.sample-wait-msg { flex: 1 1 100%; text-align: center; }
+.sample-wait-btn {
+  font: inherit; font-weight: 700; color: var(--text); background: transparent; cursor: pointer;
+  border: 1px solid var(--text); border-radius: 999px; padding: 8px 14px; min-height: 40px;
+}
+.sample-wait-btn:hover, .sample-wait-btn:focus-visible { background: rgba(128, 128, 128, .25); }
 
 /* ---------------- 단축키 확인 팝업 ---------------- */
 .shortcut-overlay {
@@ -1688,6 +1708,10 @@ button { font:inherit; }
 .shortcut-list { display:grid; grid-template-columns:1fr 1fr; gap:2px 18px; padding:12px; max-height:62vh; overflow:auto; }
 .shortcut-row { display:flex; align-items:center; justify-content:space-between; gap:12px; border-bottom:1px solid var(--line); padding:8px; font-size:12px; }
 .shortcut-row kbd { white-space:nowrap; }
+.about { margin:10px 12px 2px; padding-top:8px; border-top:1px solid var(--line); font-size:12.5px; color:var(--text-dim); }
+.about h3 { margin:0 0 4px; font-size:13px; color:var(--text); }
+.about p { margin:2px 0; }
+.about a { color:var(--text); text-decoration:underline; text-underline-offset:2px; }   /* --select는 어두운·분홍 테마에서 글자 대비가 모자라 밑줄로 링크임을 보인다 */
 .shortcut-row.pulse { background:var(--select); color:#fff; animation:key-pulse .55s ease-out; }
 @keyframes key-pulse { from { box-shadow:inset 0 0 0 3px var(--accent); } to { box-shadow:inset 0 0 0 0 transparent; } }
 #dlg-command { max-width:calc(100vw - 24px); }

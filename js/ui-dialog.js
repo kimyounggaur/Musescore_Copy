@@ -40,9 +40,9 @@
       const form = document.createElement("form");
       form.className = "dlg-body";
       form.noValidate = true;
-      const title = document.createElement("h2"); title.textContent = options.title || "입력";
+      const title = document.createElement("h2"); title.textContent = options.title || SF.t("common.input");
       const message = document.createElement("p"); message.textContent = options.message || "";
-      const label = document.createElement("label"); label.textContent = options.label || options.title || "내용";
+      const label = document.createElement("label"); label.textContent = options.label || options.title || SF.t("common.content");
       const input = document.createElement(options.multiline ? "textarea" : "input");
       input.id = "prompt-value"; input.value = String(options.value ?? ""); input.autofocus = true;
       if (!options.multiline) input.type = options.type || "text";
@@ -51,8 +51,8 @@
       const error = document.createElement("p"); error.id = "prompt-error"; error.className = "dialog-error"; error.setAttribute("role", "alert");
       input.setAttribute("aria-describedby", error.id);
       const actions = document.createElement("div"); actions.className = "dlg-actions";
-      const cancel = document.createElement("button"); cancel.type = "button"; cancel.className = "tbtn"; cancel.textContent = options.cancelText || "취소";
-      const ok = document.createElement("button"); ok.type = "submit"; ok.className = `tbtn ${options.danger ? "danger" : "primary"}`; ok.textContent = options.confirmText || "확인";
+      const cancel = document.createElement("button"); cancel.type = "button"; cancel.className = "tbtn"; cancel.textContent = options.cancelText || SF.t("common.cancel");
+      const ok = document.createElement("button"); ok.type = "submit"; ok.className = `tbtn ${options.danger ? "danger" : "primary"}`; ok.textContent = options.confirmText || SF.t("common.ok");
       let value = null;
       actions.append(cancel, ok); form.append(title, message);
       if (!options.confirm) form.append(label, input);
@@ -78,7 +78,7 @@
       const dialog = document.getElementById("dlg-choice");
       if (!dialog) { resolve("cancel"); return; }
       const actions = dialog.querySelector(".dlg-actions");
-      dialog.querySelector("h2").textContent = options.title || "선택";
+      dialog.querySelector("h2").textContent = options.title || SF.t("common.choose");
       dialog.querySelector("p").textContent = options.message || "";
       actions.replaceChildren();
       let value = "cancel";

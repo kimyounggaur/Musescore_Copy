@@ -37,18 +37,32 @@
     while(offset+12<=data.length){const end=offset+view.getUint32(offset)+12;const type=String.fromCharCode(...data.slice(offset+4,offset+8));if(type!=="pHYs")parts.push(data.slice(offset,end));if(type==="IHDR")parts.push(chunk);offset=end;}
     return new Blob(parts,{type:"image/png"});
   }
+  /** 내보낼 파일 이름 계획(순수 함수). 한 쪽이면 지금처럼 파일 하나, 여러 쪽이면 쪽마다 번호를 붙여 ZIP 하나(`이름-svg.zip`)로 묶는다.
+   *  쪽 번호는 쪽 수의 자릿수만큼 0을 채워(10쪽 이상이면 -01) 이름순이 쪽 순서가 되게 한다. 9쪽까지는 기존 이름(-1)과 같다.
+   *  safeName이 못 거르는 제어 문자는 밑줄로 바꾼다(ZIP 이름 검사가 거절하므로). */
+  function planFiles(format,title,count) {
+    const base=SF.io.safeName(title).replace(/[\u0000-\u001f\u007f]/g,"_");
+    if(count<2)return {zip:false,filename:`${base}.${format}`,entries:[`${base}.${format}`]};
+    const width=String(count).length;
+    return {zip:true,filename:`${base}-${format}.zip`,entries:Array.from({length:count},(_,i)=>`${base}-${String(i+1).padStart(width,"0")}.${format}`)};
+  }
   async function download(format) {
     try {
-      const result=await exportPages(),name=A.IO.safeName(A.C.state.score.meta.title);
-      for(let i=0;i<result.pages.length;i++) {
-        const data=format==="png"?await png(result.pages[i],result.layout.pages[i]):result.pages[i];
-        A.IO.download(`${name}${result.pages.length>1?`-${i+1}`:""}.${format}`,data,format==="png"?"image/png":"image/svg+xml");
+      const result=await exportPages(),plan=planFiles(format,A.C.state.score.meta.title,result.pages.length),mime=format==="png"?"image/png":"image/svg+xml";
+      const pages=[];   // 쪽마다 내용(SVG는 글, PNG는 Blob). PNG는 캔버스를 한 장씩 차례로 만든다(동시에 여러 장을 그리지 않는다)
+      for(let i=0;i<result.pages.length;i++)pages.push(format==="png"?await png(result.pages[i],result.layout.pages[i]):result.pages[i]);
+      if(!plan.zip) {
+        for(const data of pages)A.IO.download(plan.filename,data,mime);
+        A.toast(format==="png"?SF.t("export.pngDone"):SF.t("export.svgDone"));
+        return;
       }
-      A.toast(format==="png"?"300dpi PNG를 내보냈어요.":"글꼴을 포함한 SVG를 내보냈어요.");
+      const entries=await Promise.all(pages.map(async(page,i)=>({name:plan.entries[i],data:format==="png"?new Uint8Array(await page.arrayBuffer()):page})));
+      A.IO.download(plan.filename,SF.zip.create(entries),"application/zip");
+      A.toast(format==="png"?SF.t("export.pngZipDone"):SF.t("export.svgZipDone"));
     } catch(error){A.toast(error.message);}
   }
   async function print() {
-    const ok=await SF.ui.confirmDialog({title:"인쇄/PDF",message:"인쇄 설정에서 배율 100%, 여백 없음, 머리글·바닥글 끄기를 선택하세요. PDF로 저장하면 벡터 품질로 보관할 수 있어요.",confirmText:"인쇄 열기"});
+    const ok=await SF.ui.confirmDialog({title:SF.t("help.print"),message:SF.t("export.printHelp"),confirmText:SF.t("export.printOpen")});
     if(!ok)return;
     try {
       const result=await exportPages();const host=document.createElement("div");host.id="print-pages";host.innerHTML=result.pages.join("");
@@ -85,11 +99,12 @@
       const host=document.createElement("div");host.id="print-pages";host.innerHTML=result.pages.join("");document.body.append(host);
     });
     window.addEventListener("afterprint",()=>document.getElementById("print-pages")?.remove());
-    const menu=A.$("#file-menu");for(const [format,label]of [["svg","SVG 내보내기 (글꼴 포함)"],["png","PNG 내보내기 (300dpi)"]]){
-      const b=document.createElement("button");b.className="mi";b.dataset.act=format;b.type="button";b.setAttribute("role","menuitem");b.textContent=label;menu.append(b);
+    let anchor=A.$('#file-menu [data-act="midi"]');   // 내보내기 묶음 안, MIDI 바로 뒤에 SVG·PNG를 차례로 끼운다
+    for(const [format,label]of [["svg","SVG 내보내기 (글꼴 포함)"],["png","PNG 내보내기 (300dpi)"]]){
+      const b=document.createElement("button");b.className="mi";b.dataset.act=format;b.type="button";b.setAttribute("role","menuitem");b.textContent=label;anchor.after(b);anchor=b;
       SF.keymap.registerCommand({id:`export-${format}`,label,run:()=>download(format)});
     }
     SF.keymap.registerCommand({id:"print",label:"인쇄/PDF",run:print});
   }
-  SF.exportUI={init,download,print,exportPages,midiOptions};
+  SF.exportUI={init,download,print,exportPages,midiOptions,planFiles};
 })(window.SF);
