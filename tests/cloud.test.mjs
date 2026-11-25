@@ -128,6 +128,7 @@ async function harness(options = {}) {
     addEventListener: (type, fn) => events.set(type, fn),
   };
   scope.window = scope;
+  vm.runInNewContext(readFileSync(new URL('../js/i18n.js', import.meta.url), 'utf8'), scope, { filename: 'i18n.js' });   // P9-6: cloud.js가 SF.t로 문구를 낸다
   vm.runInNewContext(source, scope, { filename: 'cloud.js' });
   await SF.cloud.init();
   function seed(id = ID, extra = {}) {

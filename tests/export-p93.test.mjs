@@ -226,7 +226,9 @@ test('P9-3 i18n: 새 알림·구역 제목·인쇄 안내가 영어로 번역되
       'In the print window, set the destination to "Save as PDF" to keep a vector-quality PDF. Use 100% scale, no margins, and turn off headers and footers.', exportUi],
   ];
   for (const [ko, en, source] of cases) {
-    assert.ok(source.includes(ko), `소스에 있는 글과 같다: ${ko}`);
+    // P9-6: 토스트 문구는 SF.t(키)로 옮겨 갔다 — 소스에는 키가, 같은 문장은 i18n.js 사전에 있다
+    const key = i18n().i18n.lookup(ko)?.key;
+    assert.ok(source.includes(ko) || (key && source.includes(`SF.t("${key}")`) && i18nSource.includes(ko)), `소스에 있는 글(또는 SF.t 키)과 같다: ${ko}`);
     const SFi = i18n();
     assert.equal(SFi.i18n.translate(ko), ko, '한국어 모드는 그대로');
     SFi.i18n.setLanguage('en');

@@ -53,16 +53,16 @@
       for(let i=0;i<result.pages.length;i++)pages.push(format==="png"?await png(result.pages[i],result.layout.pages[i]):result.pages[i]);
       if(!plan.zip) {
         for(const data of pages)A.IO.download(plan.filename,data,mime);
-        A.toast(format==="png"?"300dpi PNG를 내보냈어요.":"글꼴을 포함한 SVG를 내보냈어요.");
+        A.toast(format==="png"?SF.t("export.pngDone"):SF.t("export.svgDone"));
         return;
       }
       const entries=await Promise.all(pages.map(async(page,i)=>({name:plan.entries[i],data:format==="png"?new Uint8Array(await page.arrayBuffer()):page})));
       A.IO.download(plan.filename,SF.zip.create(entries),"application/zip");
-      A.toast(format==="png"?"300dpi PNG를 ZIP 파일 하나로 묶어 내보냈어요.":"글꼴을 포함한 SVG를 ZIP 파일 하나로 묶어 내보냈어요.");
+      A.toast(format==="png"?SF.t("export.pngZipDone"):SF.t("export.svgZipDone"));
     } catch(error){A.toast(error.message);}
   }
   async function print() {
-    const ok=await SF.ui.confirmDialog({title:"인쇄/PDF",message:"인쇄 창에서 '대상'을 'PDF로 저장'으로 고르면 PDF 파일로 보관할 수 있어요(악보가 벡터 품질로 저장돼요). 배율은 100%, 여백은 없음, 머리글·바닥글은 끄기로 설정하세요.",confirmText:"인쇄 열기"});
+    const ok=await SF.ui.confirmDialog({title:SF.t("help.print"),message:SF.t("export.printHelp"),confirmText:SF.t("export.printOpen")});
     if(!ok)return;
     try {
       const result=await exportPages();const host=document.createElement("div");host.id="print-pages";host.innerHTML=result.pages.join("");

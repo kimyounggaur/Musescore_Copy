@@ -31,7 +31,7 @@
     return fallback;
   }
   const keyAt = (score, m) => C.keySigAt ? C.keySigAt(score, m) : inherited(score.measures, m, "keySig", score.keySig);
-  const timeAt = (score, m) => C.timeSigAt ? C.timeSigAt(score, m) : inherited(score.measures, m, "timeSig", score.timeSig);
+  const timeAt = (score, m) => C.timeSigAt(score, m);
   const clefAt = (ref, m) => C.clefAt ? C.clefAt(ref, m) : inherited(ref.measures || ref.staff?.measures, m, "clef", ref.staff?.clef || ref.clef || "treble");
   const lengthAt = (score, m) => C.measureLenAt ? C.measureLenAt(score, m) : score.measures[m]?.pickup ? Fraction.from(score.measures[m].pickup) : F(timeAt(score, m).num, timeAt(score, m).den);
   function clefInfo(name) {

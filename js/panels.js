@@ -147,16 +147,16 @@
   }
   async function applyMeasureBreak(type, fromPanel) {
     const range = selectedMeasureRange();
-    if (!range) { flashHint("브레이크를 붙일 마디를 먼저 선택하세요"); return; }
+    if (!range) { flashHint(SF.t("hint.selectBreak")); return; }
     let sectionName = "";
     if (type === "section") {
-      sectionName = await SF.ui.promptDialog({ title: "섹션 이름", value: C.ensureMeasureMeta(C.state.score.measures[range.to] || {}).sectionName || "Section", maxLength: 48 });
+      sectionName = await SF.ui.promptDialog({ title: SF.t("dialog.sectionName"), value: C.ensureMeasureMeta(C.state.score.measures[range.to] || {}).sectionName || "Section", maxLength: 48 });
       if (sectionName === null) return;
       if (!sectionName.trim()) type = null;
     }
     C.mutate("마디 브레이크", (score) => C.setMeasureBreak(score, range.to, type || null, sectionName));
     update();
-    if (!fromPanel) toast(type ? "브레이크를 표시했어요" : "브레이크를 지웠어요");
+    if (!fromPanel) toast(type ? SF.t("toast.breakAdded") : SF.t("toast.breakRemoved"));
   }
   function bindProperties() {
     $("#btn-props").addEventListener("click", () => {
@@ -279,7 +279,7 @@
     if (!dlg.open) dlg.showModal();
   }
   async function gotoQuery() {
-    const raw = await SF.ui.promptDialog({ title: "마디·리허설 이동", label: "마디 번호 또는 r:A", value: "", validate: v => /^(?:[1-9]\d*|r\s*:.+)$/i.test(v.trim()) ? "" : "마디 번호 또는 r:A 형식으로 입력하세요." });
+    const raw = await SF.ui.promptDialog({ title: SF.t("keymap.goTo"), label: SF.t("validation.goToLabel"), value: "", validate: v => /^(?:[1-9]\d*|r\s*:.+)$/i.test(v.trim()) ? "" : SF.t("validation.goTo") });
     if (raw === null) return;
     const q = raw.trim();
     if (!q) return;
@@ -301,7 +301,7 @@
       if (!isNaN(n)) mIdx = n - 1;
     }
     if (mIdx === null || mIdx < 0 || mIdx >= C.state.score.measures.length) {
-      flashHint("이동할 위치를 찾지 못했어요");
+      flashHint(SF.t("hint.notFound"));
       return;
     }
     scrollToMeasure(mIdx);
@@ -410,7 +410,7 @@
       e.preventDefault();
       const score = C.state.score;
       const [num, den] = $("#set-time").value.split("/").map(Number);
-      if (!Number.isInteger(num) || num < 1 || num > 32 || ![1,2,4,8,16,32,64].includes(den)) { toast("박자는 1~32 / 1·2·4·8·16·32·64 형식으로 입력하세요."); return; }
+      if (!Number.isInteger(num) || num < 1 || num > 32 || ![1,2,4,8,16,32,64].includes(den)) { toast(SF.t("validation.time")); return; }
       const newKey = +$("#set-key").value;
       const newClef = $("#set-clef").value;
       const newEnsemble = $("#set-ensemble").value;
@@ -453,19 +453,19 @@
     $("#set-piano-quality").addEventListener("change", () => {
       stopPlayback();
       const quality = P.setPianoQuality($("#set-piano-quality").value);
-      toast(quality === "hq" ? "고음질 피아노(약 19MB)를 쓰도록 바꿨어요. 다음 재생부터 적용돼요" : "기본 피아노로 바꿨어요. 다음 재생부터 적용돼요");
+      toast(quality === "hq" ? SF.t("toast.pianoHigh") : SF.t("toast.pianoBasic"));
     });
     // 이 기기의 설정이라 '적용'을 기다리지 않고 바로 저장한다. 끄면 예약·진행 중인 미리 받기의 남은 악기를 그만둔다.
     $("#set-sample-preload").addEventListener("change", () => {
       const setting = P.setPreloadSetting($("#set-sample-preload").value);
-      toast(setting === "off" ? "음원은 재생할 때만 받을게요" : "쉴 때 음원을 미리 받아 둘게요");
+      toast(setting === "off" ? SF.t("toast.preloadOff") : SF.t("toast.preloadOn"));
     });
     $("#set-add-measures").addEventListener("click", (e) => {
       e.preventDefault();
       C.mutate("마디 추가", (s2) => {
         C.insertMeasures(s2, s2.measures.length, 4);
       });
-      update(); toast("마디 4개를 추가했어요");
+      update(); toast(SF.t("toast.addMeasures"));
     });
     $("#set-del-measure").addEventListener("click", (e) => {
       e.preventDefault();
@@ -473,7 +473,7 @@
         if (s2.measures.length > 1) C.deleteMeasures(s2, s2.measures.length - 1);
       });
       ui.selection = null; ui.cursorId = null;
-      update(); toast("마지막 마디를 삭제했어요");
+      update(); toast(SF.t("toast.deleteMeasure"));
     });
     $$("#dlg-settings [data-transpose]").forEach(btn => {
       btn.addEventListener("click", (e) => {
@@ -483,8 +483,8 @@
         const result = C.mutate("조옮김", (s2) => C.transposeScore(s2, semis, { chords }));
         update();
         const handmade = result?.manualFretboards || 0;                  // 직접 만든 코드 다이어그램은 그대로 둔다 — 알려 준다
-        if (handmade) toast(`직접 만든 코드 다이어그램 ${handmade}개는 그대로 두었어요`, { duration: 4200 });
-        else toast(semis > 0 ? `${semis}반음 올렸어요` : `${-semis}반음 내렸어요`);
+        if (handmade) toast(SF.t("toast.transposeKeptDiagrams", { count: handmade }), { duration: 4200 });
+        else toast(semis > 0 ? SF.t("toast.transposeUp", { count: semis }) : SF.t("toast.transposeDown", { count: -semis }));
         $("#set-key").value = String(C.state.score.keySig);
       });
     });

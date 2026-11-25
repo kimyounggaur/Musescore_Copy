@@ -416,12 +416,12 @@
     if (C.state.readOnly || !C.state.dirty) return { ok: true, kept: false };
     if (await flushActive()) return { ok: true, kept: true };
     const choice = await SF.ui.choiceDialog({
-      title: "저장하지 않은 변경 사항",
-      message: `${reason} 전에 현재 악보를 어떻게 할까요?`,
+      title: SF.t("session.unsavedTitle"),
+      message: SF.t("session.beforeReplace", { reason: SF.i18n?.translate?.(reason) ?? reason }),
       choices: [
-        { id: "save", label: "파일로 저장하고 계속", primary: true },
-        { id: "discard", label: "저장하지 않고 계속", danger: true },
-        { id: "cancel", label: "취소" },
+        { id: "save", label: SF.t("session.saveAndContinue"), primary: true },
+        { id: "discard", label: SF.t("session.discardAndContinue"), danger: true },
+        { id: "cancel", label: SF.t("common.cancel") },
       ],
     });
     if (choice === "save") {
@@ -448,12 +448,12 @@
         if (existing?.data) {
           if (sameContent(existing.data, next)) return { score: next, info: { origin, docId: existing.id, record: existing } };
           const choice = await SF.ui.choiceDialog({
-            title: "같은 악보의 자동 저장본이 있어요",
-            message: "이 파일과 같은 악보가 이 기기에 자동 저장돼 있는데 내용이 달라요. 어느 쪽을 열까요?",
+            title: SF.t("session.conflictTitle"),
+            message: SF.t("session.conflictMessage"),
             choices: [
-              { id: "autosave", label: "자동 저장본 열기", primary: true },
-              { id: "file", label: "파일 그대로 열기(새 문서로)" },
-              { id: "cancel", label: "취소" },
+              { id: "autosave", label: SF.t("session.openAutosave"), primary: true },
+              { id: "file", label: SF.t("session.openFileAsNew") },
+              { id: "cancel", label: SF.t("common.cancel") },
             ],
           });
           if (choice === "autosave") { const read = readRecord(existing.data); return { score: read.score, report: read.lines, info: { origin, docId: existing.id, record: existing } }; }

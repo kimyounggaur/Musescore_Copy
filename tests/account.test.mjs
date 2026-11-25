@@ -22,6 +22,7 @@ const section = (text, openTag) => {
 function loadAuth(extra = {}) {
   const context = { window: { SF: { core: {} } }, atob, URLSearchParams, URL, ...extra };
   vm.runInNewContext(read('js/safe-html.js'), context);
+  vm.runInNewContext(read('js/i18n.js'), context);   // P9-6: auth.js가 SF.t로 문구를 낸다
   vm.runInNewContext(read('js/auth.js'), context);
   return context.window.SF.auth;
 }
@@ -199,6 +200,7 @@ function appHarness({ features = { deleteAccount: true }, user = { id: USER_ID, 
     location: location || { search: '', href: 'https://app.example/', origin: 'https://app.example', protocol: 'https:' },
   };
   vm.runInNewContext(read('js/safe-html.js'), context);
+  vm.runInNewContext(read('js/i18n.js'), context);   // P9-6: auth.js가 SF.t로 문구를 낸다
   vm.runInNewContext(read('js/auth.js'), context);
   const auth = window.SF.auth;
   auth.getClient();
@@ -501,6 +503,12 @@ function englishTranslator() {
   return text => context.SF.i18n.translate(text);
 }
 const hangul = /[가-힣]/;
+/** P9-6: 문구가 SF.t(키)로 옮겨 갔는지 알아볼 때 쓰는 사전 조회 */
+function keyOf(text) {
+  const context = vm.createContext({ console: { warn() {} }, navigator: { language: 'ko-KR' }, localStorage: { getItem: () => null, setItem() {} } });
+  vm.runInContext(read('js/i18n.js'), context);
+  return context.SF.i18n.lookup(text)?.key;
+}
 
 test('P8-4 i18n: 회원 창(#dlg-auth)·회원 메뉴·관리자 창 마크업의 한국어 문구는 모두 영어로 번역된다', () => {
   const en = englishTranslator();
@@ -528,6 +536,6 @@ test('P8-4 i18n: js/auth.js가 화면에 내는 한국어 문구(토스트·안�
   assert.deepEqual(missing, [], '영어 문구가 없는 한국어 문구 — js/i18n.js의 auth 그룹에 추가(화면 문구가 아니면 이 시험의 notUi에)');
   assert.ok(literals.size >= 50, `문구 ${literals.size}개`);
   for (const sentence of ['요청이 너무 잦아요. 잠시 뒤에 다시 시도하세요.', '기본 연결로 돌아왔어요.', '새 비밀번호 설정', '비밀번호를 바꿨어요']) {
-    assert.ok(literals.has(sentence), `${sentence} 는 auth.js에 있어야 한다`);
+    assert.ok(literals.has(sentence) || source.includes(`SF.t("${keyOf(sentence)}")`), `${sentence} 는 auth.js에 글(또는 SF.t 키)로 있어야 한다`);
   }
 });

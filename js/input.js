@@ -146,14 +146,14 @@
 
   function copySelection(opts = {}) {
     const pack = selectionItems();
-    if (!pack) { flashHint("복사할 음표나 쉼표를 먼저 선택하세요"); return false; }
-    if (pack.mixed) { flashHint("복사는 한 보표 안의 범위에서만 할 수 있어요"); return false; }
+    if (!pack) { flashHint(SF.t("hint.selectCopy")); return false; }
+    if (pack.mixed) { flashHint(SF.t("hint.sameStaff")); return false; }
     clip = {
       items: pack.items,
       total: pack.items.reduce((a, ev) => a.add(C.durValue(ev.dur)), Fraction.ZERO),
       label: pack.name,
     };
-    if (!opts.quiet) toast(`${clip.items.length}개를 복사했어요`);
+    if (!opts.quiet) toast(SF.t("toast.copied", { count: clip.items.length }));
     return true;
   }
 
@@ -165,7 +165,7 @@
   }
 
   function pasteClipboard() {
-    if (!clip || !clip.items.length) { flashHint("붙여넣을 악보 조각이 없어요"); return; }
+    if (!clip || !clip.items.length) { flashHint(SF.t("hint.emptyClipboard")); return; }
     const score = C.state.score;
     let target = null;
     if (ui.inputMode) target = cursorPos().found;
@@ -209,7 +209,7 @@
       ui.lastInsertedId = ui.cursorId;
     }
     update();
-    toast(`${clip.items.length}개를 붙여넣었어요`);
+    toast(SF.t("toast.pasted", { count: clip.items.length }));
   }
 
   /* 입력 실행 (커서/세그먼트 위치에) */
@@ -232,7 +232,7 @@
     ui.cursorId = nid || inserted;
     ui.selection = null;
     update();
-    flashHint(pitches ? null : "쉼표를 입력했어요");
+    flashHint(pitches ? null : SF.t("hint.restAdded"));
   }
 
   function mirrorLinkedTab(score, ctx, mIdx, tick, dur, pitches, insertedId) {
@@ -251,7 +251,7 @@
   function inputDrum(drumId) {
     const ref = activeRef();
     if (!C.isPercussionRef(ref)) {
-      flashHint("드럼 키트 보표를 선택하면 드럼 패드를 사용할 수 있어요");
+      flashHint(SF.t("hint.chooseDrums"));
       return false;
     }
     if (!ui.inputMode) setInputMode(true);
@@ -367,7 +367,7 @@
       ui.lastPitch = pitches[pitches.length - 1];
       P.previewNote(pitches.map(C.midiOf), 0.35);
     } else {
-      flashHint("쉼표를 입력했어요");
+      flashHint(SF.t("hint.restAdded"));
     }
     const nextTick = pos.tick.add(C.durValue(dur));
     ui.cursorId = findEventAtTick(C.state.score, pos.mIdx, nextTick, ctx) || inserted;
@@ -477,7 +477,7 @@
       }
       if (count && !speedyMidiToastShown) {
         speedyMidiToastShown = true;
-        toast("MIDI 건반 연결됨 — 건반 누른 채 숫자 키");
+        toast(SF.t("toast.midiConnected"));
       }
     }
 

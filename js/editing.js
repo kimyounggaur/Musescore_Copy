@@ -45,7 +45,7 @@
 
   function applyAccidental(alter) {
     const found = targetEvent();
-    if (!found || found.ev.type !== "note") { flashHint("먼저 음표를 선택하세요"); return; }
+    if (!found || found.ev.type !== "note") { flashHint(SF.t("hint.selectNote")); return; }
     C.mutate("임시표", (score) => {
       const f = C.findEvent(score, found.ev.id);
       if (!f) return;
@@ -126,7 +126,7 @@
 
   function toggleTie() {
     const found = targetEvent();
-    if (!found || found.ev.type !== "note") { flashHint("타이를 걸 음표를 선택하세요"); return; }
+    if (!found || found.ev.type !== "note") { flashHint(SF.t("hint.selectTie")); return; }
     if (ui.selectedNoteIdx !== null) {
       C.mutate("개별 음 타이", score => C.toggleNoteTie(score, found.ev.id, ui.selectedNoteIdx));
       update(); return;
@@ -153,7 +153,7 @@
         C.normalizeTies(s2);
       });
     } else {
-      flashHint("다음 음이 같은 높이일 때만 타이를 걸 수 있어요");
+      flashHint(SF.t("hint.tiePitch"));
       return;
     }
     update();
@@ -164,12 +164,12 @@
   function applyArticulation(name) {
     let ids = selectedIds();
     if (!ids && targetEvent()) ids = new Set([targetEvent().ev.id]);
-    if (!ids) { flashHint("기호를 붙일 음표를 먼저 선택하세요"); return; }
+    if (!ids) { flashHint(SF.t("hint.selectSymbol")); return; }
     const noteIds = [...ids].filter(id => {
       const f = C.findEvent(C.state.score, id);
       return f && f.ev.type === "note";
     });
-    if (!noteIds.length) { flashHint("음표를 선택하세요"); return; }
+    if (!noteIds.length) { flashHint(SF.t("hint.selectNotes")); return; }
     const allHave = noteIds.every(id => (C.findEvent(C.state.score, id).ev.artics || []).includes(name));
     C.mutate("아티큘레이션", (score) => {
       for (const id of noteIds) {
@@ -193,7 +193,7 @@
     } else if (targetEvent()) {
       id = targetEvent().ev.id;
     }
-    if (!id) { flashHint("셈여림을 붙일 음표를 먼저 선택하세요"); return; }
+    if (!id) { flashHint(SF.t("hint.selectDynamic")); return; }
     C.mutate("셈여림", (score) => {
       const f = C.findEvent(score, id);
       if (!f) return;
@@ -210,12 +210,12 @@
     if (!ends && targetEvent() && targetEvent().ev.type === "note") {
       ends = { firstId: targetEvent().ev.id, lastId: targetEvent().ev.id, count: 1 };
     }
-    if (!ends) { flashHint("이음줄을 걸 음표를 먼저 선택하세요"); return; }
+    if (!ends) { flashHint(SF.t("hint.selectSlur")); return; }
     if (ends.count === 1 || ends.firstId === ends.lastId) {
       const f = C.findEvent(score, ends.firstId);
       let nx = C.nextEvent(score, f.m, f.e, f);
       while (nx && nx.ev.type !== "note") nx = C.nextEvent(score, nx.m, nx.e, nx);
-      if (!nx) { flashHint("이음줄을 이을 다음 음표가 없어요"); return; }
+      if (!nx) { flashHint(SF.t("hint.noNextSlur")); return; }
       ends = { firstId: ends.firstId, lastId: nx.ev.id };
     }
     let removed = false;
@@ -226,13 +226,13 @@
       else s2.spanners.push({ id: C.newId(), type: "slur", startId: ends.firstId, endId: ends.lastId });
     });
     update();
-    toast(removed ? "이음줄을 지웠어요" : "이음줄을 걸었어요 (다시 S = 삭제)");
+    toast(removed ? SF.t("toast.slurRemoved") : SF.t("toast.slurAdded"));
   }
 
   /* 헤어핀(crescendo/diminuendo): 범위 양 끝 이벤트 사이 */
   function toggleHairpin(type) {
     const ids = selectedIds();
-    if (!ids) { flashHint("범위를 선택한 뒤 누르면 쐐기가 걸려요 (Shift+클릭으로 범위)"); return; }
+    if (!ids) { flashHint(SF.t("hint.selectHairpin")); return; }
     const order = C.eventOrderMap(C.state.score);
     const sorted = [...ids].sort((x, y) => order.get(x) - order.get(y));
     const firstId = sorted[0], lastId = sorted[sorted.length - 1];
@@ -244,14 +244,14 @@
       else s2.spanners.push({ id: C.newId(), type, startId: firstId, endId: lastId });
     });
     update();
-    toast(removed ? "쐐기를 지웠어요" : (type === "cresc" ? "크레셴도(점점 세게)를 걸었어요" : "디미누엔도(점점 여리게)를 걸었어요"));
+    toast(removed ? SF.t("toast.hairpinRemoved") : (type === "cresc" ? SF.t("toast.crescendo") : SF.t("toast.diminuendo")));
   }
 
   function applyTuplet(actual) {
     const found = selectedEvent() || targetEvent();
-    if (!found) { flashHint("잇단음표로 바꿀 음표나 쉼표를 선택하세요"); return; }
-    if (found.ev.full) { flashHint("온마디 쉼표는 먼저 음길이를 바꾼 뒤 잇단음표로 만들 수 있어요"); return; }
-    if (found.ev.dur.tuplet) { flashHint("이미 잇단음표 안에 있어요"); return; }
+    if (!found) { flashHint(SF.t("hint.selectTuplet")); return; }
+    if (found.ev.full) { flashHint(SF.t("hint.fullRestTuplet")); return; }
+    if (found.ev.dur.tuplet) { flashHint(SF.t("hint.alreadyTuplet")); return; }
     let ids = null;
     C.mutate(`${actual}잇단음표`, (score) => {
       const f = C.findEvent(score, found.ev.id);
@@ -266,7 +266,7 @@
       const f = C.findEvent(C.state.score, ids[0]);
       if (f && f.ev.type === "note") P.previewNote(f.ev.notes.map(C.midiOf), 0.25);
       update();
-      toast(`${actual}잇단음표로 나눴어요`);
+      toast(SF.t("toast.tuplet", { count: actual }));
     } else {
       update();
     }
@@ -275,7 +275,7 @@
   function applyGraceBefore() {
     const found = selectedEvent() || targetEvent();
     if (!found || found.ev.type !== "note" || !found.ev.notes.length) {
-      flashHint("꾸밈음을 붙일 음표를 먼저 선택하세요");
+      flashHint(SF.t("hint.selectGrace"));
       return;
     }
     const pitch = found.ev.notes[0];
@@ -285,12 +285,12 @@
     ui.selection = found.ev.id;
     update();
     P.previewNote([C.midiOf(pitch)], 0.18);
-    toast("꾸밈음을 추가했어요");
+    toast(SF.t("toast.grace"));
   }
 
   function toggleNotation(kind) {
     const found = selectedEvent() || targetEvent();
-    if (!found || found.ev.type !== "note") { flashHint("기보를 붙일 음표를 먼저 선택하세요"); return; }
+    if (!found || found.ev.type !== "note") { flashHint(SF.t("hint.selectNotation")); return; }
     C.mutate("고급 기보", (score) => {
       const f = C.findEvent(score, found.ev.id);
       if (!f) return;
@@ -324,39 +324,39 @@
 
   function applyStartRepeat() {
     const range = selectedMeasureRange();
-    if (!range) { flashHint("반복 기호를 붙일 마디를 먼저 선택하세요"); return; }
+    if (!range) { flashHint(SF.t("hint.selectRepeat")); return; }
     C.mutate("시작 반복", score => C.toggleStartRepeat(score, range.from));
     update();
   }
 
   function applyEndRepeat() {
     const range = selectedMeasureRange();
-    if (!range) { flashHint("반복 기호를 붙일 마디를 먼저 선택하세요"); return; }
+    if (!range) { flashHint(SF.t("hint.selectRepeat")); return; }
     C.mutate("끝 반복", score => C.toggleEndRepeat(score, range.to));
     update();
   }
 
   async function applyRepeatCount() {
     const range = selectedMeasureRange();
-    if (!range) { flashHint("끝 반복 마디를 먼저 선택하세요"); return; }
+    if (!range) { flashHint(SF.t("hint.selectRepeatEnd")); return; }
     const mm = C.ensureMeasureMeta(C.state.score.measures[range.to] || {});
-    const raw = await SF.ui.promptDialog({ title: "반복 횟수", value: mm.repeatCount || 2, type: "number", min: 2, max: 8, step: 1, validate: v => Number.isInteger(+v) && +v >= 2 && +v <= 8 ? "" : "2~8 사이 정수를 입력하세요." });
+    const raw = await SF.ui.promptDialog({ title: SF.t("history.repeatCount"), value: mm.repeatCount || 2, type: "number", min: 2, max: 8, step: 1, validate: v => Number.isInteger(+v) && +v >= 2 && +v <= 8 ? "" : SF.t("validation.repeat") });
     if (raw === null) return;
     const count = Math.max(2, Math.min(8, Math.round(+raw || 2)));
     C.mutate("반복 횟수", score => C.setRepeatCount(score, range.to, count));
-    update(); toast(`${count}번 반복으로 설정했어요`);
+    update(); toast(SF.t("toast.repeat", { count }));
   }
 
   function applyVolta(label) {
     const range = selectedMeasureRange();
-    if (!range) { flashHint("볼타를 붙일 마디 범위를 선택하세요"); return; }
+    if (!range) { flashHint(SF.t("hint.selectEnding")); return; }
     C.mutate(`${label}번 엔딩`, score => C.setEnding(score, range.from, range.to, label));
-    update(); toast(`${label}번 엔딩을 표시했어요`);
+    update(); toast(SF.t("toast.ending", { count: label }));
   }
 
   function applyChordSymbol() {
     const found = markerTarget();
-    if (!found) { flashHint("코드 기호를 붙일 위치를 먼저 선택하세요"); return; }
+    if (!found) { flashHint(SF.t("hint.selectChord")); return; }
     ui.selection = found.ev.id;
     update();
     editChordSymbol(found.ev.id);
@@ -364,9 +364,9 @@
 
   async function applyTempoMark() {
     const found = markerTarget();
-    if (!found) { flashHint("템포를 붙일 위치를 먼저 선택하세요"); return; }
+    if (!found) { flashHint(SF.t("hint.selectTempo")); return; }
     const cur = found.ev.tempo || C.state.score.tempo || 100;
-    const raw = await SF.ui.promptDialog({ title: "템포 표시 ♩ =", value: cur, type: "number", min: 30, max: 280, validate: v => Number.isInteger(+v) && +v >= 30 && +v <= 280 ? "" : "30~280 사이 정수를 입력하세요." });
+    const raw = await SF.ui.promptDialog({ title: SF.t("dialog.tempo"), value: cur, type: "number", min: 30, max: 280, validate: v => Number.isInteger(+v) && +v >= 30 && +v <= 280 ? "" : SF.t("validation.tempo") });
     if (raw === null) return;
     const v = Math.max(30, Math.min(280, Math.round(+raw || cur)));
     C.mutate("템포 표시", (score) => {
@@ -375,7 +375,7 @@
       f.ev.tempo = v;
       if (f.m === 0 && C.eventStartTick(f.measures[f.m], f.e, f).isZero()) score.tempo = v;
     });
-    stopPlayback(); update(); toast(`템포 ♩=${v}`);
+    stopPlayback(); update(); toast(SF.t("toast.tempo", { tempo: v }));
   }
 
   function nextRehearsalMark() {
@@ -390,8 +390,8 @@
 
   async function applyRehearsalMark() {
     const found = markerTarget();
-    if (!found) { flashHint("리허설 마크를 붙일 위치를 먼저 선택하세요"); return; }
-    const raw = await SF.ui.promptDialog({ title: "리허설 마크", value: found.ev.rehearsal || nextRehearsalMark(), maxLength: 12 });
+    if (!found) { flashHint(SF.t("hint.selectRehearsal")); return; }
+    const raw = await SF.ui.promptDialog({ title: SF.t("toolbar.rehearsal"), value: found.ev.rehearsal || nextRehearsalMark(), maxLength: 12 });
     if (raw === null) return;
     const text = raw.trim().slice(0, 12);
     C.mutate("리허설 마크", (score) => {
@@ -399,13 +399,13 @@
       if (!f) return;
       if (text) f.ev.rehearsal = text; else delete f.ev.rehearsal;
     });
-    update(); toast(text ? `리허설 ${text}` : "리허설 마크를 지웠어요");
+    update(); toast(text ? SF.t("toast.rehearsal", { text }) : SF.t("toast.rehearsalRemoved"));
   }
 
   async function applyStaffText() {
     const found = markerTarget();
-    if (!found) { flashHint("텍스트를 붙일 위치를 먼저 선택하세요"); return; }
-    const raw = await SF.ui.promptDialog({ title: "스태프 텍스트", value: found.ev.staffText || "", maxLength: 48, multiline: true });
+    if (!found) { flashHint(SF.t("hint.selectText")); return; }
+    const raw = await SF.ui.promptDialog({ title: SF.t("toolbar.staffText"), value: found.ev.staffText || "", maxLength: 48, multiline: true });
     if (raw === null) return;
     const text = raw.trim().slice(0, 48);
     C.mutate("스태프 텍스트", (score) => {
@@ -420,7 +420,7 @@
         delete f.ev.soundFlag;
       }
     });
-    update(); toast(text ? "스태프 텍스트를 붙였어요" : "스태프 텍스트를 지웠어요");
+    update(); toast(text ? SF.t("toast.textAdded") : SF.t("toast.textRemoved"));
   }
 
 
